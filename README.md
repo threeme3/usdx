@@ -145,7 +145,7 @@ LPF-bank/matching-network may be placed instead of the existing LPF C25-C28, L1-
 
 [QCX-SSB]: https://github.com/threeme3/QCX-SSB
 
-[QCX-SSB Sketch]: https://raw.githubusercontent.com/threeme3/QCX-SSB/master/qcx-ssb.ino
+[QCX-SSB Sketch]: https://raw.githubusercontent.com/threeme3/QCX-SSB/master/QCX-SSB.ino
 
 [X1M-mic]: https://vignette.wikia.nocookie.net/x1m/images/f/f1/X1M_mic_pinout_diagram.jpg/revision/latest?cb=20131028014710
 
