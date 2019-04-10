@@ -105,7 +105,7 @@ Several OMs reported a successful QCX-SSB modification and were able to make SSB
 
 Known issues:
 - R1.00: Audio quality especially in a local QSO setup with this release was a bit of a challenge due to analog operation of Q6, resulting in degraded IMD and thermal instability; this issue has been resolved by changing C31/C32 and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably. **(RESOLVED)**
-- R1.01: When transmitting, some distorted audio can be heard from the headphones. This is because the audio op-amps do share same 12V supply as the PA, resulting in serious amplitude RFI. Adding a (>>100uF/16V) capacitor from the Emitter of Q6 to GND alleviate the issue but does not completely resolve. There is also a possibility that RFI causes leakage into the microphone input, in this case it is recommended to increase MIC_ATTEN value in the code which attenuates the ADC input-gain with 6dB attenuation per increment. 
+- R1.01: When transmitting, some distorted audio can be heard from the headphones. This is because the audio op-amps do share same 12V supply as the PA, resulting in serious amplitude RFI. Adding a (>>100uF/16V) capacitor from the Emitter of Q6 to GND alleviate the issue but does not completely resolve. There is also a possibility that RFI causes leakage into the microphone input, in this case it is recommended to increase MIC_ATTEN value in the code which attenuates the ADC input-gain with 6dB per increment.
 
 Measurements:
 The following performance measurements were made with QCX-SSB R1.01, a modified RTL-SDR, Spektrum-SVmod-v0.19, Sweex 5.0 USB Audio device and Audicity player. It is recognized that this measurement setup has its own limitations, hence the dynamic range of the measurements is somewhat limited by the RTL-SDR as this device goes easily into overload. Measurements were made with the following setttings: USB modulation, no pre-distortion, two-tone input 1000Hz/1200Hz where audio level is set just before the point where compression starts. Results:
@@ -167,7 +167,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 [Intelligibility]: https://g8jnj.webs.com/speechintelligibility.htm
 
-[commit phase-measurement-experiment]: https://github.com/threeme3/QCX-SSB/tree/aaa0df404e1566cf2bb30badd9ea57e7e1ac0e98
+[commit phase-measurement-experiment]: https://github.com/threeme3/QCX-SSB/blob/aaa0df404e1566cf2bb30badd9ea57e7e1ac0e98/QCX-SSB.ino
 
 [SI5351]: https://www.silabs.com/documents/public/application-notes/AN619.pdf
 
