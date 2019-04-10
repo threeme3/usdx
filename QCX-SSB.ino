@@ -659,7 +659,6 @@ void test_calibrate()
   }
   OCR1BL = 0xFF; // Max power to determine scale
   delay(200);
-  
   for(j = 0; j != 256; j++){
     for(i = 0; i != 255 && amp[i] < j; i++) ; //lookup pwm i for amp[i] >= j
     if(j == 255) i = 255; // do not use PWM for peak RF
@@ -711,22 +710,29 @@ void setup()
   //interrupts();
 
   // initialize LUT
+  //#define C31_IS_INSTALLED  1   // Uncomment this line when C31 is installed (shaping circuit will be driven with analog signal instead of being switched digitally with PWM signal)
+  #ifdef C31_IS_INSTALLED // In case of analog driven shaping circuit:
+    #define PWM_MIN  29   // The PWM value where the voltage over L4 is approaching its minimum (~0.6V)
+    #define PWM_MAX  96   // The PWM value where the voltage over L4 is approaching its maximum (~11V)
+  #else                   // In case of digital driven shaping circuit:
+    #define PWM_MIN  0    // The PWM value where the voltage over L4 is its minimum (0V)
+    #define PWM_MAX  255  // The PWM value where the voltage over L4 is its maximum (12V)
+  #endif
   uint16_t i;
   for(i=0; i!=256; i++)
-    lut[i] = i;   // WITHOUT C31 deployed
+    lut[i] = (float)i / ((float)255/((float)PWM_MAX - (float)PWM_MIN)) + PWM_MIN;
 
-  // Benchmark ADC_vect ISR
+  // Benchmark ADC_vect() ISR
   uint32_t t0, t1;
   t0 = micros();
   TIMER0_COMPB_vect();
   ADC_vect();
   t1 = micros();
   float load = (t1-t0) * F_SAMP * 100.0 / 1000000.0;
-  lcd.setCursor(0,1); lcd.print("CPU_tx="); lcd.print(load); lcd.print("%");
+  if(load > 99.9){ lcd.setCursor(0,1); lcd.print("CPU_tx="); lcd.print(load); lcd.print("%"); delay(3000); return; }  // CPU overload in ADC_vect() ISR
 
-  // Ready
   delay(1000);
-  lcd.setCursor(7,0); lcd.print("\001"); lcd.print(blanks); // display initialization complete
+  lcd.setCursor(7,0); lcd.print("\001"); lcd.print(blanks); // Ready: display initialization complete
   lcd.setCursor(15,1); lcd.print("R");
 }
 
