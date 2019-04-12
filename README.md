@@ -103,10 +103,6 @@ The IMD performance is related dependent on the quality of the system: the linea
 ## Results
 Several OMs reported a successful QCX-SSB modification and were able to make SSB QRP DX contacts over thousands of kilometers on the 20m and 40m bands. During CQ WW contest I was able to make 34 random QSOs on 40m with 5W and an inverted-V over the house in just a few hours with CN3A as my furthest contact, I could observe the benefits of using SSB with constant-envelope in cases where my signal was weak; for FT8 a Raspberry Pi 3B+ with JTDX was used to make FT8 contacts all the way up to NA.
 
-Known issues:
-- R1.00: Audio quality especially in a local QSO setup with this release was a bit of a challenge due to analog operation of Q6, resulting in degraded IMD and thermal instability; this issue has been resolved by changing C31/C32 and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably. **(RESOLVED)**
-- R1.01: When transmitting, some distorted audio can be heard from the headphones. This is because the audio op-amps do share same 12V supply as the PA, resulting in serious amplitude RFI. Adding a (>>100uF/16V) capacitor from the Emitter of Q6 to GND alleviate the issue but does not completely resolve. There is also a possibility that RFI causes leakage into the microphone input, in this case it is recommended to increase MIC_ATTEN value in the code which attenuates the ADC input-gain with 6dB per increment.
-
 Measurements:
 The following performance measurements were made with QCX-SSB R1.01, a modified RTL-SDR, Spektrum-SVmod-v0.19, Sweex 5.0 USB Audio device and Audicity player. It is recognized that this measurement setup has its own limitations, hence the dynamic range of the measurements is somewhat limited by the RTL-SDR as this device goes easily into overload. Measurements were made with the following setttings: USB modulation, no pre-distortion, two-tone input 1000Hz/1200Hz where audio level is set just before the point where compression starts. Results:
 - Intermodulation distortion products (two-tone; SSB with varying  envelope) IMD3, IMD5, IMD7: respectively -30dBc; -33dBc; -36dBc
@@ -116,6 +112,16 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - Wide-band spurious (two-tone): better than -45dBc
 - 3dB bandwidth (sweep): 400..2130Hz
 ![twotone](https://raw.githubusercontent.com/threeme3/QCX-SSB/master/twotone.png)
+
+Known issues:
+
+| Rev.  | Issue | Cause | Resolution |
+| ----- | ----- | ----- | ---------- |
+| R1.00 | in some cases degraded audio quality especially in local QSOs  |  analog operation of Q6 causes challenges with biasing, dynamic range, linearity and thermal-drift |  (fixed in R1.01) change C31/C32 so that Q6 operates in digital mode and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably |
+| R1.00 | crackling sounds and noise on TX  |  ATMEGA ADC is sensitive for noise and in some cases RF feedback worsen this |  (not fixed yet) dynamic noise gating algorithm could be an effective way of mitigating the issue, adding additional inductor in series with mic in could help preventig RF feedback, increasing MIC_ATTEN value in code attentuates the audio input can put the noise below a threshold at the cost of audio sensitivity |
+| R1.00 | in VOX mode TX constantly on when soundcard is connected to mic input |  VOX is too sensitive and hence responds to the noise of the external device |  (not fixed yet) reduce gain on audio input, e.g. by reducing the output level of the external device, adding a resistive divider in the audio line, increase the MIC_ATTEN value in code to attenuate the signal in software or increase VOX_THRESHOLD to make the VOX algorithm less sensitive, dynamic noise gating algorithm could be an effective way of mitigating the issue |
+| R1.01 | RFI on the headphones during TX  |  audio opamp share the same 12V supply as the PA |  (not fixed yet) adding 100uF capacitor from emitter of Q6 to GND alleviates the issue, issue does not occur with constant amplitude SSB |
+| R1.01 | after pressing PTT or while tuning RX stops working, audio quality on TX alsoimpacted  |  unknown, likely caused by overclocking I2C signalling of si5351 |  (not fixed yet) probably adding a few asm("nop"); statements could reduce the speed to an acceptable level (while tweaking this make sure CPU_tx < 100%) |
 
 
 ### Notes:
