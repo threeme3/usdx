@@ -18,7 +18,8 @@ pe1nnz@amsat.org
 ## List of features:
 - **[EER]/[Polar-transmitter] Class-E** driven SSB transmit-stage
 - Approximately **5W PEP SSB output** (depending on supply voltage, PA voltage regulated through PWM with **48dB dynamic range**)
-- supports **USB and LSB** modes up to **2200 Hz bandwidth** (receiver and transmitter)
+- Supports **USB and LSB** modes up to **2200 Hz bandwidth** (receiver and transmitter)
+- Two-tone third-order intermodulation distortion **(IMD3) of -33dBc** and **carrier/side-band rejection better than -45dBc** (two-tone)
 - Receiver unwanted side-band **rejection up to -20dB**
 - Continuously tunable through bands **80m-10m** (anything between 20kHz-99MHz is tunable but with degraded or loss in performance)
 - **Multiband** support <sup>[3](#note3)</sup>
@@ -33,10 +34,10 @@ pe1nnz@amsat.org
 
 
 ## Revision History:
-| Rev.  | Author           | Description                                                         |
-| ----- | ---------------- | ------------------------------------------------------------------- |
-| R1.00 | pe1nnz@amsat.org | Initial release of prototype                                        |
-| R1.01 | pe1nnz@amsat.org | Improved audio quality and IMD3 performance and experimental (amplitude) pre-distortion and calibration. Fixed an issue with spurious transmission for RX-TX-RX transitions. <span style="color:red">**NOTE: When upgrading from R1.00 you need to execute installation step 6 (see below).**</span> |
+| Rev.  | Date       | Features                                                            |
+| ----- | ---------- | ------------------------------------------------------------------- |
+| R1.01 | 2019-04-09 | Improved audio quality and IMD3 performance and experimental (amplitude) pre-distortion and calibration. Fixed an issue with spurious transmission for RX-TX-RX transitions. <span style="color:red">**Upgrade requires installation step 6 (see below).**</span> |
+| R1.00 | 2019-01-29 | Initial release of prototype                                        |
 
 
 ## Schematic:
@@ -66,7 +67,7 @@ Currently, the following functions have been assigned to the buttons:
 | Button              | Function                                                |
 | ------------------- | ------------------------------------------------------- |
 | LEFT single-press   | LSB/USB-mode                                            | 
-| LEFT double-press   | reserved                                                |
+| LEFT double-press   | RX I/Q calibration                                      |
 | LEFT long-press     | VOX mode (for full-break-in or digital modes)           |
 | CENTER single-press | Select (smaller) frequency step                         |
 | CENTER double-press | Select Band                                             |
@@ -87,6 +88,20 @@ For FT8 (and any other digital) operation, select one of the pre-programmed FT8 
 
 To experiment with amplitude pre-distortion algorithm, double-press right button to train the PA amplitude characteristic. This sweeps the amplitude from maximum PWM to minimum PWM and measures the PA response through an internal receiver loopback and stores the values into volatile memory. Once trained, set the appropriate amplitude drive level for voice input. Pre-distorted amplitude response can be measured with a storage spectrum-analyser and a long-press of right button; it will sweep the pre-distorted amplitude from 0 to 100% in 255 steps, where each step has a 10Hz frequency offset.
 
+The receiver side-band rejection an be measured and adjusted through a left double press button. To do so, turn down the volume, connect a dummy-load and enable the original CW-filter. After pressing the button, the I-Q balance, Lo Phase and High phase is measured; adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB.
+
+On startup, the transceiver is performing a self-test. It is checking the voltages, I2C communications and algorithmic performance. In case of deviations, the display will report an error during startup:
+
+| Error            | Description                                             |
+| ---------------- | ------------------------------------------------------- |
+| E01 CPU overload | The interrupt routine ADC_vect() is taking too long, more than there is CPU resources available; try to reduce I2C_DELAY or disable functionality in this routine |
+| E02 +5V not OK   | The supply that is fed to pin 7 of IC2 is not the expected 5V; this might be an indication that there is an issue with L6 |
+| E03 +3.3V not OK | The supply that is fed to pin 1 of IC1 is not the expected 3.3V |
+| E04 AVCC not OK  | The supply that is fed to pin 20 of IC2 is not the expected 5V; this might be an indication that there is an issue with L5 |
+| E05 DVM bias err | The bias that is fed to pin 25 of IC2 is not the expected 2.5V; this might be an indication that there is an issue with R56/R57 |
+| E06 I2C tx error | The I2C communications with SI5351 fails; this might be caused by a bus speed that is too fast; try to increase I2C_DELAY to slow down the bus speed |
+| E07 I2C timeout  | The I2C communications with SI5351 fails; the SI5351 is holding the SCL too long |
+
 
 ## Technical Description:
 For SSB reception the QCX CW filter is too small, therefore the first modification step 1 is to bypass the CW filter, providing a 3dB wideband passthrough of about 2kHz, this has side-effect that we loose 18dB audio-gain of the CW filter. Another way is to modify the CW-filter <sup>[2](#note2)</sup>, but this creates a steep filter-transition band. Insertion of a SPDT switch between the CW filter output, unfiltered output and the audio amplifier input may support CW and SSB mode selection. The phase-network is less efficient for the full SSB bandwidth in attenuating the unwanted side band, but overall a rejection of ~20 dB can still be achieved. LSB/USB mode switching is done by changing the 90 degree phase shift on the CLK1/CLK2 signals of the SI5351 PLL.
@@ -101,12 +116,14 @@ The IMD performance is related dependent on the quality of the system: the linea
 
 
 ## Results
+Here is a [sample1] and [sample2] me calling CQ on 40m with my QCX-SSB at 5W and received back by the Hack Green websdr about 400km away.
+
 Several OMs reported a successful QCX-SSB modification and were able to make SSB QRP DX contacts over thousands of kilometers on the 20m and 40m bands. During CQ WW contest I was able to make 34 random QSOs on 40m with 5W and an inverted-V over the house in just a few hours with CN3A as my furthest contact, I could observe the benefits of using SSB with constant-envelope in cases where my signal was weak; for FT8 a Raspberry Pi 3B+ with JTDX was used to make FT8 contacts all the way up to NA.
 
 Measurements:
 The following performance measurements were made with QCX-SSB R1.01, a modified RTL-SDR, Spektrum-SVmod-v0.19, Sweex 5.0 USB Audio device and Audicity player. It is recognized that this measurement setup has its own limitations, hence the dynamic range of the measurements is somewhat limited by the RTL-SDR as this device goes easily into overload. Measurements were made with the following setttings: USB modulation, no pre-distortion, two-tone input 1000Hz/1200Hz where audio level is set just before the point where compression starts. Results:
-- Intermodulation distortion products (two-tone; SSB with varying  envelope) IMD3, IMD5, IMD7: respectively -30dBc; -33dBc; -36dBc
-- Intermodulation distortion products (two-tone; SSB with constant envelope) IMD3, IMD5, IMD7: respectively -13dBc; -13dBc; -16dBc
+- Intermodulation distortion products (two-tone; SSB with varying  envelope) IMD3, IMD5, IMD7: respectively -33dBc; -36dBc; -39dBc
+- Intermodulation distortion products (two-tone; SSB with constant envelope) IMD3, IMD5, IMD7: respectively -16dBc; -16dBc; -19dBc
 - Opposite side-band rejection (two-tone): better than -45dBc
 - Carrier rejection (two-tone): better than -45dBc
 - Wide-band spurious (two-tone): better than -45dBc
@@ -117,11 +134,11 @@ Known issues:
 
 | Rev.  | Issue | Cause | Resolution |
 | ----- | ----- | ----- | ---------- |
-| R1.00 | in some cases degraded audio quality especially in local QSOs  |  analog operation of Q6 causes challenges with biasing, dynamic range, linearity and thermal-drift |  (fixed in R1.01) change C31/C32 so that Q6 operates in digital mode and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably |
+| R1.00 | in some cases degraded audio quality especially in local QSOs  |  analog operation of Q6 causes challenges with biasing, dynamic range, linearity and thermal-drift |  (FIXED in R1.01) change C31/C32 so that Q6 operates in digital mode and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably |
 | R1.00 | crackling sounds and noise on TX  |  ATMEGA ADC is sensitive for noise and in some cases RF feedback worsen this |  (not fixed yet) dynamic noise gating algorithm could be an effective way of mitigating the issue, adding additional inductor in series with mic in could help preventig RF feedback, increasing MIC_ATTEN value in code attentuates the audio input can put the noise below a threshold at the cost of audio sensitivity |
 | R1.00 | in VOX mode TX constantly on when soundcard is connected to mic input |  VOX is too sensitive and hence responds to the noise of the external device |  (not fixed yet) reduce gain on audio input, e.g. by reducing the output level of the external device, adding a resistive divider in the audio line, increase the MIC_ATTEN value in code to attenuate the signal in software or increase VOX_THRESHOLD to make the VOX algorithm less sensitive, dynamic noise gating algorithm could be an effective way of mitigating the issue |
 | R1.01 | RFI on the headphones during TX  |  audio opamp share the same 12V supply as the PA |  (not fixed yet) adding 100uF capacitor from emitter of Q6 to GND alleviates the issue, issue does not occur with constant amplitude SSB |
-| R1.01 | after pressing PTT or while tuning RX stops working, audio quality on TX alsoimpacted  |  unknown, likely caused by overclocking I2C signalling of si5351 |  (not fixed yet) probably adding a few asm("nop"); statements could reduce the speed to an acceptable level (while tweaking this make sure CPU_tx < 100%) |
+| R1.01 | after pressing PTT or while tuning RX stops working, audio quality on TX also impacted  | likely caused by an I2C speed that is too fast for si5351, reuslting in I2C transmission errors | (FIXED in R1.01a) I2C bus speed has been changed from ~900kb/s to 600kb/s, and extensive voltage, CPU-timing and I2C relibility checks are done at startup |
 
 
 ### Notes:
@@ -133,7 +150,7 @@ Known issues:
 
 
 ### Credits:
-[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] stage as used in [ATS] by _Steven Weber (KD1JV)_ and inspired by _Frank Cathell (W7YAZ)_ in 1988, and combined with popular components such as a Silicon Labs [SI5351] Clock Generator, Atmel [ATMEGA328P] microprocessor and a Hitachi [HD44780] LCD display. The [QCX-SSB] modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi in 2013 and is basically a kind of [EER] implemented in software.
+[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] stage as used in [ATS] by _Steven Weber (KD1JV)_ since 2003 and inspired by _Frank Cathell (W7YAZ)_ in 1988, and combined with popular components such as a Silicon Labs [SI5351] Clock Generator, Atmel [ATMEGA328P] microprocessor and a Hitachi [HD44780] LCD display. The [QCX-SSB] modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi in 2013 and is basically a kind of [EER] implemented in software.
 
 [QCX]: https://qrp-labs.com/qcx.html
 
@@ -163,7 +180,7 @@ Known issues:
 
 [CMOS driven MOSFET PA]: http://www.maxmcarter.com/Classexmtr/simplebeacon/mpm_class_e.html
 
-[ATS]: http://ok1hra.nagano.cz/2007_ats3b_manual_v2.pdf
+[ATS]: https://groups.yahoo.com/neo/groups/AT_Sprint/files/AT%20Sprint%20/
 
 [EER]: https://core.ac.uk/download/pdf/148657773.pdf
 
@@ -180,4 +197,8 @@ Known issues:
 [ATMEGA328P]: http://ww1.microchip.com/downloads/en/DeviceDoc/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061A.pdf
 
 [HD44780]: https://www.sparkfun.com/datasheets/LCD/HD44780.pdf
+
+[sample1]: https://youtu.be/lna4xQDhK20
+
+[sample2]: https://youtu.be/DrUMMQo8Fb0
 
