@@ -1,7 +1,7 @@
 # **ⓆⒸⓍ-ⓈⓈⒷ**
  
 # QCX-SSB: SSB with your QCX transceiver (modification)
-This is a simple and experimental modification that transforms a [QCX] into a (Class-E driven) SSB transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8. It can be fully-continuous tuned through bands 160m-10m in the LSB/USB-modes with a 2200Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
+This is a simple and experimental modification that transforms a [QCX] into a (Class-E driven) SSB transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8. It can be fully-continuous tuned through bands 160m-10m in the LSB/USB-modes with a 2400Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
 
 The SSB transmit-stage is implemented completely in a digital and software-based manner: at the heart the 
 ATMEGA328P is sampling the input-audio and reconstructing a SSB-signal by controlling the SI5351 PLL phase (through tiny frequency changes over 800kbit/s I2C) and controlling the PA Power (through PWM on the key-shaping circuit). In this way a highly power-efficient class-E driven SSB-signal can be realized; a PWM driven class-E design keeps the SSB transceiver simple, tiny, cool, power-efficient and low-cost (ie. no need for power-inefficient and complex linear amplifier with bulky heat-sink as often is seen in SSB transceivers).
@@ -18,7 +18,7 @@ pe1nnz@amsat.org
 ## List of features:
 - **[EER]/[Polar-transmitter] Class-E** driven SSB transmit-stage
 - Approximately **5W PEP SSB output** (depending on supply voltage, PA voltage regulated through PWM with **48dB dynamic range**)
-- Supports **USB and LSB** modes up to **2200 Hz bandwidth** (receiver and transmitter)
+- Supports **USB and LSB** modes up to **2400 Hz bandwidth** (receiver and transmitter)
 - Two-tone third-order intermodulation distortion **(IMD3) of -33dBc** and **carrier/side-band rejection better than -45dBc** (two-tone)
 - Receiver unwanted side-band **rejection up to -20dB**
 - Continuously tunable through bands **80m-10m** (anything between 20kHz-99MHz is tunable but with degraded or loss in performance)
@@ -108,7 +108,7 @@ For SSB reception the QCX CW filter is too small, therefore the first modificati
 
 For SSB transmission the QCX DVM-circuitry is changed and used as an audio-input circuit (installation steps 2-5). An electret-microphone (with PTT switch) is added to the Paddle jack connecting the DVM-circuitry, whereby the DOT input acts as the PTT and the DASH input acts as the audio-input (installation step 7). The electret microphone is biased with 5V through a 10K resistor. A 10nF blocking capacitor prevents RF leakage into the circuit. The audio is fed into ADC2 input of the ATMEGA328P microprocessor through a 220nF decoupling capacitor. The ADC2 input is biased at 0.55V via a divider network of 10K to a 1.1V analog reference voltage, with 10-bits ADC resolution this means the microphone-input sensitivity is about 1mV (1.1V/1024) which is just sufficient to process unamplified speech.
 
-A new QCX-SSB firmware is uploaded to the ATMEGA328P (installation step 8), and facilitates a [digital SSB generation technique] in a completely software-based manner. A DSP algorithm samples the ADC2 audio-input at a rate of 4400 samples/s, performs a Hilbert transformation and determines the phase and amplitude of the complex-signal; the phase-changes are restricted<sup>[4](#note4)</sup> and transformed into either positive (for USB) or negative (for LSB) phase changes which in turn transformed into temporary frequency changes which are sent 4400 times per second over 800kbit/s I2C towards the SI5351 PLL. This result in phase changes on the SSB carrier signal and delivers a SSB-signal with a bandwidth of 2200 Hz whereby spurious in the opposite side-band components is attenuated. 
+A new QCX-SSB firmware is uploaded to the ATMEGA328P (installation step 8), and facilitates a [digital SSB generation technique] in a completely software-based manner. A DSP algorithm samples the ADC2 audio-input at a rate of 4400 samples/s, performs a Hilbert transformation and determines the phase and amplitude of the complex-signal; the phase-changes are restricted<sup>[4](#note4)</sup> and transformed into either positive (for USB) or negative (for LSB) phase changes which in turn transformed into temporary frequency changes which are sent 4400 times per second over 800kbit/s I2C towards the SI5351 PLL. This result in phase changes on the SSB carrier signal and delivers a SSB-signal with a bandwidth of 2400 Hz whereby spurious in the opposite side-band components is attenuated. 
 
 The amplitude of the complex-signal controls the supply-voltage of the PA, and thus the envelope of the SSB-signal. The key-shaping circuit is controlled with a 32kHz PWM signal, which can control the PA voltage from 0 to about 12V in 256 steps, providing a dynamic range of (log2(256) * 6 =) 48dB in the SSB signal. C31 is removed (installation step 6) to ensure that Q6 is operating as a digital switch, this improves the efficiency, thermal stability, linearity, dynamic range and response-time. Though the amplitude information is not mandatory to make a SSB signal intelligable, adding amplitude information improves quality. The complex-amplitude is also used in VOX-mode to determine when RX and TX transitions are supposed to be made.
 
@@ -116,7 +116,7 @@ The IMD performance is related dependent on the quality of the system: the linea
 
 
 ## Results
-Here is a [sample1] and [sample2] me calling CQ on 40m with my QCX-SSB at 5W and received back by the Hack Green websdr about 400km away.
+Here is a [sample] me calling CQ on 40m with my QCX-SSB at 5W and received back by the Hack Green websdr about 400km away.
 
 Several OMs reported a successful QCX-SSB modification and were able to make SSB QRP DX contacts over thousands of kilometers on the 20m and 40m bands. During CQ WW contest I was able to make 34 random QSOs on 40m with 5W and an inverted-V over the house in just a few hours with CN3A as my furthest contact, I could observe the benefits of using SSB with constant-envelope in cases where my signal was weak; for FT8 a Raspberry Pi 3B+ with JTDX was used to make FT8 contacts all the way up to NA.
 
@@ -127,7 +127,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - Opposite side-band rejection (two-tone): better than -45dBc
 - Carrier rejection (two-tone): better than -45dBc
 - Wide-band spurious (two-tone): better than -45dBc
-- 3dB bandwidth (sweep): 400..2130Hz
+- 3dB bandwidth (sweep): 400..2330Hz
 ![twotone](https://raw.githubusercontent.com/threeme3/QCX-SSB/master/twotone.png)
 
 Known issues:
@@ -198,7 +198,6 @@ Known issues:
 
 [HD44780]: https://www.sparkfun.com/datasheets/LCD/HD44780.pdf
 
-[sample1]: https://youtu.be/lna4xQDhK20
+[sample]: https://youtu.be/Q6_BCqBZjZU
 
-[sample2]: https://youtu.be/DrUMMQo8Fb0
 
