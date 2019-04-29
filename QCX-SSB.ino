@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01a"
+#define VERSION   "1.01b"
 
 // QCX pin defintion
 #define LCD_D4  0
@@ -33,7 +33,7 @@ LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 #include <avr/wdt.h>
 #define F_CPU 20000000   // Crystal frequency of XTAL1
 
-#define I2C_DELAY   6    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s [default]). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
+#define I2C_DELAY   4    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
 #define I2C_DDR DDRC     // Pins for the I2C bit banging
 #define I2C_PIN PINC
 #define I2C_PORT PORTC
@@ -373,9 +373,9 @@ inline void vox(bool trigger)
 }
 
 volatile uint8_t drive = 4;
-#define F_SAMP 4401      //4400 // ADC sample-rate; is best a multiple _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization (validate with test_samplerate)
-#define _UA  (4401)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP and maximized to have higest precision
-#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
+#define F_SAMP 4807        // 4807 4401 // ADC sample-rate; is best a multiple _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization (validate with test_samplerate)
+#define _UA  (F_SAMP)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP and maximized to have higest precision
+//#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 
 inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 { // source: [1] http://www-labs.iro.umontreal.ca/~mignotte/IFT2425/Documents/EfficientApproximationArctgFunction.pdf
@@ -406,28 +406,29 @@ inline int16_t ssb(int16_t in)
   v[15] = in - prev_in;     // DC decoupling
 
   i = v[7];
-  q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + v[6] * 79 - v[8] * 79) / 128; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (4402 SPS) when used in image-rejection scenario
+  q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
 
   uint16_t _amp = abs(i) > abs(q) ? abs(i) + abs(q) / 4 : abs(q) + abs(i) / 4; // approximation of: amp = sqrt(i*i + q*q); error 0.95dB
 
-#define VOX_THRESHOLD (1 << 1)  // 1*6=6dB above ADC noise level
+#define VOX_THRESHOLD (1 << 1)  // 1*6dB above ADC noise level
   if(vox_enable) vox((_amp > VOX_THRESHOLD));
 
   _amp = _amp << drive;
   _amp = ((_amp > 255) || (drive == 8)) ? 255 : _amp; // clip or when drive=8 use max output
-  OCR1BL = (tx) ? lut[_amp] : 0;  // submit amplitude to PWM register
+  OCR1BL = (tx) ? lut[_amp] : 0;  // submit amplitude to PWM register; can be done best as soon as possible to make sure that the new envelope setting is stabalized when the phase change occurs
 
   static int16_t prev_phase;
   int16_t phase = arctan3(q, i);
   int16_t dp = phase - prev_phase;  // phase difference and restriction
   prev_phase = phase;
 
-  if(dp < 0) dp = dp + _UA; // prevent negative frequencies to reduce spur on other sideband
+  if(dp < 0) dp = dp + _UA; // make negative phase shifts positive: prevents negative frequencies and will reduce spurs on other sideband
+#ifdef MAX_DP
   if(dp > MAX_DP){ // dp should be less than half unit-angle in order to keep frequencies below F_SAMP/2
     prev_phase = phase - (dp - MAX_DP);  // substract restdp
     dp = MAX_DP;
   }
-
+#endif
   if(usb)
     return dp * ( F_SAMP / _UA); // calculate frequency-difference based on phase-difference
   else
@@ -435,7 +436,7 @@ inline int16_t ssb(int16_t in)
 }
 
 volatile uint16_t numSamples = 0;
-#define MIC_ATTEN  1  // 6dB attenuation/step, since LSB bits anyway are quite noisy
+#define MIC_ATTEN  1  // 1*6dB attenuation (note that the LSB bits are quite noisy)
 
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
