@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01b"
+#define VERSION   "1.01c"
 
 // QCX pin defintion
 #define LCD_D4  0
@@ -26,7 +26,34 @@
 #define SCL     19
 
 #include <LiquidCrystal.h>
+//#define LCD_RS_PORTIO   1  // define this to use port driven LiquidCrystal library instead 
+#ifdef LCD_RS_PORTIO
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+#else
+class QCXLiquidCrystal : public LiquidCrystal {
+  public: // QCXLiquidCrystal extends LiquidCrystal library with LCD_RS pull-up driven output, so it can be shared with I2C as is done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
+    QCXLiquidCrystal() : LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7){ };
+    virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
+      pinMode(LCD_RS, INPUT);  // pull-up LCD_RS
+      write4bits(value >> 4);
+      write4bits(value);
+      pinMode(LCD_RS, OUTPUT); // pull-down LCD_RS
+      return 1;
+    };
+    void write4bits(uint8_t value){
+      digitalWrite(LCD_D4, (value >> 0) & 0x01);
+      digitalWrite(LCD_D5, (value >> 1) & 0x01);
+      digitalWrite(LCD_D6, (value >> 2) & 0x01);
+      digitalWrite(LCD_D7, (value >> 3) & 0x01);
+      digitalWrite(LCD_EN, LOW);  // pulseEnable
+      delayMicroseconds(1);
+      digitalWrite(LCD_EN, HIGH);
+      delayMicroseconds(1);    // enable pulse must be >450ns
+      digitalWrite(LCD_EN, LOW);
+      delayMicroseconds(100);   // commands need > 37us to settle
+    };
+} lcd;
+#endif
 
 #include <inttypes.h>
 #include <avr/sleep.h>
@@ -37,8 +64,8 @@ LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 #define I2C_DDR DDRC     // Pins for the I2C bit banging
 #define I2C_PIN PINC
 #define I2C_PORT PORTC
-#define I2C_SDA (1 << 4) // PC4 (Pin 18)
-#define I2C_SCL (1 << 5) // PC5 (Pin 19)
+#define I2C_SDA (1 << 4) // PC4
+#define I2C_SCL (1 << 5) // PC5
 #define DELAY(n) for(uint8_t i = 0; i != n; i++) asm("nop");
 
 #define I2C_SDA_GET() I2C_PIN & I2C_SDA
@@ -59,7 +86,7 @@ inline void i2c_stop()
 {
   I2C_SCL_HI();
   I2C_SDA_HI();
-  I2C_DDR &= ~(I2C_SDA | I2C_SCL); //prepare for a start
+  I2C_DDR &= ~(I2C_SDA | I2C_SCL); // prepare for a start: pull-up both SDA, SCL
   i2c_suspend();
 }
 
@@ -94,7 +121,7 @@ inline uint8_t i2c_RecvBit(uint8_t mask)
   uint16_t i = 60000;
   for(;(!I2C_SCL_GET()) && i; i--);  // wait util slave release SCL to HIGH (meaning data valid), or timeout at 3ms
   if(!i){ lcd.setCursor(0, 1); lcd.print("E07 I2C timeout"); }
-  uint8_t data = I2C_SDA_GET(); 
+  uint8_t data = I2C_SDA_GET();
   I2C_SCL_LO();
   return (data) ? mask : 0;
 }
@@ -111,7 +138,7 @@ inline uint8_t i2c_RecvByte(uint8_t last)
   data |= i2c_RecvBit(1 << 1);
   data |= i2c_RecvBit(1 << 0);
   if(last){
-    I2C_SDA_HI();  // NACK    
+    I2C_SDA_HI();  // NACK
   } else {
     I2C_SDA_LO();  // ACK
   }
@@ -138,12 +165,14 @@ void i2c_deinit()
 
 inline void i2c_resume()
 {
-  I2C_PORT &= ~I2C_SDA; // Pin sharing SDA/LCD_RS mitigation
+#ifdef LCD_RS_PORTIO
+  I2C_PORT &= ~I2C_SDA; // pin sharing SDA/LCD_RS mitigation
+#endif
 }
 
 inline void i2c_suspend()
 {
-  I2C_DDR |= I2C_SDA;   // Pin sharing SDA/LCD_RS mitigation
+  I2C_SDA_LO();         // pin sharing SDA/LCD_RS: pull-down LCD_RS; QCXLiquidCrystal require this for any operation
 }
 
 #define SI_I2C_ADDR 96  // SI5351A I2C address
@@ -373,7 +402,7 @@ inline void vox(bool trigger)
 }
 
 volatile uint8_t drive = 4;
-#define F_SAMP 4807        // 4807 4401 // ADC sample-rate; is best a multiple _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization (validate with test_samplerate)
+#define F_SAMP 4807        // 4807 4401 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization (validate with test_samplerate)
 #define _UA  (F_SAMP)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP and maximized to have higest precision
 //#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 
@@ -747,7 +776,7 @@ float dbmeter(float ref = 0.0)
 {
   float rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
-  lcd.setCursor(9, 0); lcd.print(dbm); lcd.print("dB    "); 
+  lcd.setCursor(9, 0); lcd.print(dbm); lcd.print("dB    ");
   delay(300);
   return dbm;
 }
@@ -775,7 +804,7 @@ void iq_calibration()
   si5351_alt_clk2(freq - 800);
   lcd.setCursor(0, 1); lcd.print("Phase Hi (800 Hz)"); lcd.print(blanks);
   for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-  
+
   digitalWrite(SIG_OUT, false); // loopback off
   si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   change = true;  //restore original frequency setting
@@ -883,7 +912,7 @@ void setup()
     wdt_reset();
   }
 
-  // Measure VDD (+5V)
+  // Measure VDD (+5V); should be ~5V
   digitalWrite(RX, LOW);  // mute RX
   digitalWrite(KEY_OUT, LOW);
   si5351_SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0
@@ -895,7 +924,7 @@ void setup()
     wdt_reset();
   }
 
-  // Measure VEE (+3.3V)
+  // Measure VEE (+3.3V); should be ~3.3V
   float vee = (float)analogRead(SCL) * 5.0 / 1024.0;
   if(!(vee > 3.2 && vee < 3.8)){
     lcd.setCursor(0, 1); lcd.print("E03 +3.3V not OK");
@@ -903,7 +932,7 @@ void setup()
     wdt_reset();
   }
 
-  // Measure AVCC via AREF and using internal 1.1V reference fed to ADC
+  // Measure AVCC via AREF and using internal 1.1V reference fed to ADC; should be ~5V
   analogRead(6); // setup almost proper ADC readout
   bitSet(ADMUX, 3); // Switch to channel 14 (Vbg=1.1V)
   delay(1); // delay improves accuracy
@@ -916,7 +945,7 @@ void setup()
     wdt_reset();
   }
 
-  // Measure DVM bias
+  // Measure DVM bias; should be ~VAREF/2
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
   if(!(dvm > 1.8 && dvm < 3.2)){
     lcd.setCursor(0, 1); lcd.print("E05 DVM bias err");
@@ -929,8 +958,8 @@ void setup()
   for(i = 0; i != 1000; i++) si5351_SendPLLBRegisterBulk();
   t1 = micros();
   uint32_t i2c_speed = (1000000 * 8 * 7) / (t1 - t0); // speed in kbit/s
-  
-  // Measure I2C Bit-Error Rate (BER)
+
+  // Measure I2C Bit-Error Rate (BER); should be error free for a thousand random bulk PLLB writes
   uint16_t i2c_error = 0;  // number of I2C byte transfer errors
   for(i = 0; i != 1000; i++){
     for(int j = 3; j != 8; j++) si5351_pll_data[j] = rand();
@@ -942,8 +971,8 @@ void setup()
     delay(1500);
     wdt_reset();
   }
-  
-  lcd.setCursor(0, 1); lcd.print("CPU_tx="); lcd.print(load); lcd.print("%"); lcd.print(blanks); 
+
+  lcd.setCursor(0, 1); lcd.print("CPU_tx="); lcd.print(load); lcd.print("%"); lcd.print(blanks);
   delay(800);
   lcd.setCursor(7, 0); lcd.print("\001"); lcd.print(blanks); // Ready: display initialization complete normally
 }
