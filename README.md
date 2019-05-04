@@ -36,7 +36,8 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.01 | 2019-04-09 | Improved audio quality and IMD3 performance and experimental (amplitude) pre-distortion and calibration. Fixed an issue with spurious transmission for RX-TX-RX transitions. <span style="color:red">**Upgrade requires installation step 6 (see below).**</span> |
+| R1.01c | 2019-05-04 | Added I/Q Calibration feature. Added Voltage, I2C and CPU load self-tests on startup. Fix for reduced RFI. Fix for clock and amplitude-phase mis-alignments. Reduced LCD (s-meter) interference on RX. Increased TX bandwidth to 2.4 kHz. Cosmetic improvements. |
+| R1.01 | 2019-04-09 | Fix for Q6 bias instability - now digitally switched (**C31 must be removed**). Improved signal processing. Experimental (amplitude) pre-distortion and calibration. |
 | R1.00 | 2019-01-29 | Initial release of prototype                                        |
 
 
@@ -130,15 +131,15 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - 3dB bandwidth (sweep): 400..2330Hz
 ![twotone](https://raw.githubusercontent.com/threeme3/QCX-SSB/master/twotone.png)
 
-Known issues:
+Known/resolved issues:
 
 | Rev.  | Issue | Cause | Resolution |
 | ----- | ----- | ----- | ---------- |
-| ~~R1.00~~ | ~~in some cases degraded audio quality especially in local QSOs~~ | ~~analog operation of Q6 causes challenges with biasing, dynamic range, linearity and thermal-drift~~ | ~~(FIXED in R1.01) change C31/C32 so that Q6 operates in digital mode and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably~~ |
-| R1.00 | crackling sounds and noise on TX | ATMEGA ADC is sensitive for noise and in some cases RF feedback worsen this |  (not fixed yet) dynamic noise gating algorithm could be an effective way of mitigating the issue, adding additional inductor in series with mic in could help preventig RF feedback, increasing MIC_ATTEN value in code attentuates the audio input can put the noise below a threshold at the cost of audio sensitivity |
-| R1.00 | in VOX mode TX constantly on when soundcard is connected to mic input | VOX is too sensitive and hence responds to the noise of the external device |  not fixed yet) reduce gain on audio input, e.g. by reducing the output level of the external device, adding a resistive divider in the audio line, increase the MIC_ATTEN value in code to attenuate the signal in software or increase VOX_THRESHOLD to make the VOX algorithm less sensitive, dynamic noise gating algorithm could be an effective way of mitigating the issue |
-| R1.01 | RFI on the headphones during TX  |  audio opamp share the same 12V supply as the PA |  (not fixed yet) adding 100uF capacitor from emitter of Q6 to GND alleviates the issue, issue does not occur with constant amplitude SSB |
-| R1.01 | ~~after pressing PTT or while tuning RX stops working, audio quality on TX also impacted~~ | ~~likely caused by an I2C speed that is too fast for si5351, reuslting in I2C transmission errors~~ | ~~(FIXED in R1.01a) I2C bus speed has been changed from 900kb/s to 600kb/s, and extensive voltage, CPU-timing and I2C relibility checks are done at startup~~ |
+| R1.00 | in some cases degraded audio quality especially in local QSOs | analog operation of Q6 causes challenges with biasing, dynamic range, linearity and thermal-drift | FIXED in R1.01) change C31/C32 so that Q6 operates in digital mode and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably |
+| R1.00 | crackling sounds and noise on TX | ATMEGA ADC is sensitive for noise and in some cases RF feedback worsen this | (FIXED in R1.01c) dynamic noise gating algorithm could be an effective way of mitigating the issue, adding additional inductor in series with mic in could help preventig RF feedback, increasing MIC_ATTEN value in code attentuates the audio input can put the noise below a threshold at the cost of audio sensitivity |
+| R1.00 | in VOX mode TX constantly on when soundcard is connected to mic input | VOX is too sensitive and hence responds to the noise of the external device | (FIXED in R1.01c) reduce gain on audio input, e.g. by reducing the output level of the external device, adding a resistive divider in the audio line, increase the MIC_ATTEN value in code to attenuate the signal in software or increase VOX_THRESHOLD to make the VOX algorithm less sensitive, dynamic noise gating algorithm could be an effective way of mitigating the issue |
+| R1.01 | RFI on the headphones during TX  | audio opamp share the same 12V supply as the PA |  (FIXED in R1.01c) performing ADC conversions before submitting envelope changes alleviate RFI issues; adding 100uF capacitor from emitter of Q6 to GND alleviates the issue, issue does not occur with constant amplitude SSB |
+| R1.01 | after pressing PTT or while tuning RX stops working, audio quality on TX also impacted | likely caused by an I2C speed that is too fast for si5351, resulting in I2C transmission errors | FIXED in R1.01a) I2C bus speed has been changed from 900kb/s to 600kb/s, and extensive voltage, CPU-timing and I2C relibility checks are done at startup |
 
 
 ### Notes:
@@ -198,6 +199,6 @@ Known issues:
 
 [HD44780]: https://www.sparkfun.com/datasheets/LCD/HD44780.pdf
 
-[sample]: https://youtu.be/Q6_BCqBZjZU
+[sample]: https://youtu.be/-QfMQulk0eA
 
 

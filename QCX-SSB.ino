@@ -58,7 +58,7 @@ class QCXLiquidCrystal : public LiquidCrystal {
 #include <inttypes.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
-#define F_CPU 20000000   // Crystal frequency of XTAL1
+#define F_CPU 20008400   //20000000   // Crystal frequency of XTAL1
 
 #define I2C_DELAY   4    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
 #define I2C_DDR DDRC     // Pins for the I2C bit banging
@@ -402,7 +402,7 @@ inline void vox(bool trigger)
 }
 
 volatile uint8_t drive = 4;
-#define F_SAMP 4807        // 4807 4401 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization (validate with test_samplerate)
+#define F_SAMP 4810        // 4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization (validate with test_samplerate)
 #define _UA  (F_SAMP)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP and maximized to have higest precision
 //#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 
@@ -420,6 +420,7 @@ inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 }
 
 uint8_t lut[256];
+volatile uint8_t amp;
 
 inline int16_t ssb(int16_t in)
 {
@@ -444,7 +445,8 @@ inline int16_t ssb(int16_t in)
 
   _amp = _amp << drive;
   _amp = ((_amp > 255) || (drive == 8)) ? 255 : _amp; // clip or when drive=8 use max output
-  OCR1BL = (tx) ? lut[_amp] : 0;  // submit amplitude to PWM register; can be done best as soon as possible to make sure that the new envelope setting is stabalized when the phase change occurs
+  amp = (tx) ? lut[_amp] : 0;
+  //OCR1BL = amp; // submit amplitude to PWM register
 
   static int16_t prev_phase;
   int16_t phase = arctan3(q, i);
@@ -469,14 +471,15 @@ volatile uint16_t numSamples = 0;
 
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
-ISR(ADC_vect)                   // ADC conversion interrupt
+ISR(ADC_vect)                          // ADC conversion interrupt
 { // jitter dependent things first
-  si5351_SendPLLBRegisterBulk();    // submit frequency registers to SI5351 over ~840kbit/s I2C
-  uint8_t low  = ADCL;              // ADC sample 10-bits analog input, first ADCL, then ADCH
-  uint8_t high = ADCH;
+  uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
+  uint8_t high = ADCH;  
+  OCR1BL = amp;                        // submit amplitude to PWM register
+  si5351_SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over ~840kbit/s I2C
   int16_t adc = ((high << 8) | low) - 512;
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
-  si5351_freq_calc_fast(df);         // calculate SI5351 registers based on frequency shift and carrier frequency
+  si5351_freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
   numSamples++;
 }
 
