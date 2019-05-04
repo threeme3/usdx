@@ -36,8 +36,8 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.01c | 2019-05-04 | Added I/Q Calibration feature. Added Voltage, I2C and CPU load self-tests on startup. Fix for reduced RFI. Fix for clock and amplitude-phase mis-alignments. Reduced LCD (s-meter) interference on RX. Increased TX bandwidth to 2.4 kHz. Cosmetic improvements. |
-| R1.01 | 2019-04-09 | Fix for Q6 bias instability - now digitally switched (**C31 must be removed**). Improved signal processing. Experimental (amplitude) pre-distortion and calibration. |
+| R1.01d | 2019-05-05 | Added I/Q Calibration feature. Added Voltage, I2C and CPU load self-tests on startup. Reduced RFI feedback on mic. Fix for clock and amplitude-phase mis-alignments. Reduced s-meter (LCD) interference on RX. S-meter Readings. Increased TX bandwidth to 2.4 kHz. Cosmetic improvements. |
+| R1.01 | 2019-04-09 | Q6 now digitally switched - improving stability and IMD (**C31 must be removed**). Improved signal processing. Experimental amplitude pre-distortion and calibration. |
 | R1.00 | 2019-01-29 | Initial release of prototype                                        |
 
 
@@ -67,29 +67,29 @@ Currently, the following functions have been assigned to the buttons:
 
 | Button              | Function                                                |
 | ------------------- | ------------------------------------------------------- |
-| LEFT single-press   | LSB/USB-mode                                            | 
-| LEFT double-press   | RX I/Q calibration                                      |
-| LEFT long-press     | VOX mode (for full-break-in or digital modes)           |
+| LEFT single-press   | RX I/Q calibration                                      |
+| LEFT double-press   | Internal calibration of PA amplitude (experimental!)    |
+| LEFT long-press     | Sweep over frequency 0..2550Hz and amplitude 0..100%    |
 | CENTER single-press | Select (smaller) frequency step                         |
 | CENTER double-press | Select Band                                             |
 | CENTER long-press   | Select (larger) frequency step                          |
 | CENTER turn         | Tune frequency                                          |
-| RIGHT single-press  | Set amplitude drive level on (8=constant carrier on TX) |
-| RIGHT double-press  | (experimental!) Internal calibration of PA amplitude    |
-| RIGHT long-press    | Sweep over frequency 0..2550Hz and amplitude 0..100%    |
+| RIGHT single-press  | LSB/USB-mode                                            | 
+| RIGHT double-press  | Set amplitude drive level on (8=constant carrier on TX) |
+| RIGHT long-press    | VOX mode (for full-break-in or digital modes)           |
 | KEY                 | Transmitter-keyed (PTT)                                 |
 
 Operating Instructions:
 
-Tuning can be done by turning the rotary encoder. Its step size can be decreased or increased by a short or long press. A change of band can be done with a double press. The mode of operation is altered with a short press on the left button; this can be combined with changing S4 to change between wide-band (SSB) and small-band operation operation.
+Tuning can be done by turning the rotary encoder. Its step size can be decreased or increased by a short or long press. A change of band can be done with a double press. The mode of operation is altered with a short press on the right button; this can be combined with changing S4 to change between wide-band (SSB) and small-band operation operation.
 
-For SSB voice operation, adjust the amplitude drive by pressing right button to a level where voice peaks providing maximum power output (not more than that); this provides an acceptable IMD with good intelligability for local and normal distant operations. In cases where your signal is too weak, set the drive level to 8 to increase the average power output by using a constant amplitude-envelope; in some cases this might be just enough to put your signal above the noise-floor and make yourselve heard; note that this operation degrades the IMD considerably, but since this does not impact the intelligability and since these inter-modulation products are anyway below the noise-floor (and BW limited) they are not in the way, ie. they are not observable by the other station. For long duration QSOs on a specific frequency you can stop holding the PTT by enter (or leave) VOX mode with a long press on left button.
+For SSB voice operation, adjust the amplitude drive by double-pressing right button to a level where voice peaks providing maximum power output (not more than that); this provides an acceptable IMD with good intelligability for local and normal distant operations. In cases where your signal is too weak, set the drive level to 8 to increase the average power output by using a constant amplitude-envelope; in some cases this might be just enough to put your signal above the noise-floor and make yourselve heard; note that this operation degrades the IMD considerably, but since this does not impact the intelligability and since these inter-modulation products are anyway below the noise-floor (and BW limited) they are not in the way, ie. they are not observable by the other station. For long duration QSOs on a specific frequency you can stop holding the PTT by enter (or leave) VOX mode with a long press on right button.
 
 For FT8 (and any other digital) operation, select one of the pre-programmed FT8 bands by double press the rotary encoder, connect the headphone jack to sound card microphone jack, sound card speaker jack to microphone jack, and give a long press on left button to enter VOX mode. Adjust the sound card speaker volume to a minimum and start your favorite FT8 application (JTDX for instance).
 
-To experiment with amplitude pre-distortion algorithm, double-press right button to train the PA amplitude characteristic. This sweeps the amplitude from maximum PWM to minimum PWM and measures the PA response through an internal receiver loopback and stores the values into volatile memory. Once trained, set the appropriate amplitude drive level for voice input. Pre-distorted amplitude response can be measured with a storage spectrum-analyser and a long-press of right button; it will sweep the pre-distorted amplitude from 0 to 100% in 255 steps, where each step has a 10Hz frequency offset.
+To experiment with amplitude pre-distortion algorithm, double-press left button to train the PA amplitude characteristic. This sweeps the amplitude from maximum PWM to minimum PWM and measures the PA response through an internal receiver loopback and stores the values into volatile memory. Once trained, set the appropriate amplitude drive level for voice input. Pre-distorted amplitude response can be measured with a storage spectrum-analyser and a long-press of left button; it will sweep the pre-distorted amplitude from 0 to 100% in 255 steps, where each step has a 10Hz frequency offset.
 
-The receiver side-band rejection an be measured and adjusted through a left double press button. To do so, turn down the volume, connect a dummy-load and enable the original CW-filter. After pressing the button, the I-Q balance, Lo Phase and High phase is measured; adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB.
+The receiver side-band rejection an be measured and adjusted through a left single press button. To do so, turn down the volume, connect a dummy-load and enable the original CW-filter. After pressing the button, the I-Q balance, Lo Phase and High phase is measured; adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB.
 
 On startup, the transceiver is performing a self-test. It is checking the voltages, I2C communications and algorithmic performance. In case of deviations, the display will report an error during startup:
 
@@ -135,11 +135,11 @@ Known/resolved issues:
 
 | Rev.  | Issue | Cause | Resolution |
 | ----- | ----- | ----- | ---------- |
-| R1.00 | in some cases degraded audio quality especially in local QSOs | analog operation of Q6 causes challenges with biasing, dynamic range, linearity and thermal-drift | FIXED in R1.01) change C31/C32 so that Q6 operates in digital mode and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably |
+| R1.00 | in some cases degraded audio quality especially in local QSOs | analog operation of Q6 causes challenges with biasing, dynamic range, linearity and thermal-drift | (FIXED in R1.01) change C31/C32 so that Q6 operates in digital mode and together with the more accurate signal processing of the new firmware, the IMD performance, carrier+side-band rejection and spectral purity has been improved considerably |
 | R1.00 | crackling sounds and noise on TX | ATMEGA ADC is sensitive for noise and in some cases RF feedback worsen this | (FIXED in R1.01c) dynamic noise gating algorithm could be an effective way of mitigating the issue, adding additional inductor in series with mic in could help preventig RF feedback, increasing MIC_ATTEN value in code attentuates the audio input can put the noise below a threshold at the cost of audio sensitivity |
 | R1.00 | in VOX mode TX constantly on when soundcard is connected to mic input | VOX is too sensitive and hence responds to the noise of the external device | (FIXED in R1.01c) reduce gain on audio input, e.g. by reducing the output level of the external device, adding a resistive divider in the audio line, increase the MIC_ATTEN value in code to attenuate the signal in software or increase VOX_THRESHOLD to make the VOX algorithm less sensitive, dynamic noise gating algorithm could be an effective way of mitigating the issue |
 | R1.01 | RFI on the headphones during TX  | audio opamp share the same 12V supply as the PA |  (FIXED in R1.01c) performing ADC conversions before submitting envelope changes alleviate RFI issues; adding 100uF capacitor from emitter of Q6 to GND alleviates the issue, issue does not occur with constant amplitude SSB |
-| R1.01 | after pressing PTT or while tuning RX stops working, audio quality on TX also impacted | likely caused by an I2C speed that is too fast for si5351, resulting in I2C transmission errors | FIXED in R1.01a) I2C bus speed has been changed from 900kb/s to 600kb/s, and extensive voltage, CPU-timing and I2C relibility checks are done at startup |
+| R1.01 | after pressing PTT or while tuning RX stops working, audio quality on TX also impacted | likely caused by an I2C speed that is too fast for si5351, resulting in I2C transmission errors | (FIXED in R1.01a) I2C bus speed has been changed from 900kb/s to 700kb/s, and extensive voltage, CPU-timing and I2C relibility checks are done at startup |
 
 
 ### Notes:

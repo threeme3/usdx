@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01c"
+#define VERSION   "1.01d"
 
 // QCX pin defintion
 #define LCD_D4  0
@@ -26,39 +26,35 @@
 #define SCL     19
 
 #include <LiquidCrystal.h>
-//#define LCD_RS_PORTIO   1  // define this to use port driven LiquidCrystal library instead 
-#ifdef LCD_RS_PORTIO
-LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
-#else
 class QCXLiquidCrystal : public LiquidCrystal {
-  public: // QCXLiquidCrystal extends LiquidCrystal library with LCD_RS pull-up driven output, so it can be shared with I2C as is done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
-    QCXLiquidCrystal() : LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7){ };
-    virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
-      pinMode(LCD_RS, INPUT);  // pull-up LCD_RS
-      write4bits(value >> 4);
-      write4bits(value);
-      pinMode(LCD_RS, OUTPUT); // pull-down LCD_RS
-      return 1;
-    };
-    void write4bits(uint8_t value){
-      digitalWrite(LCD_D4, (value >> 0) & 0x01);
-      digitalWrite(LCD_D5, (value >> 1) & 0x01);
-      digitalWrite(LCD_D6, (value >> 2) & 0x01);
-      digitalWrite(LCD_D7, (value >> 3) & 0x01);
-      digitalWrite(LCD_EN, LOW);  // pulseEnable
-      delayMicroseconds(1);
-      digitalWrite(LCD_EN, HIGH);
-      delayMicroseconds(1);    // enable pulse must be >450ns
-      digitalWrite(LCD_EN, LOW);
-      delayMicroseconds(100);   // commands need > 37us to settle
-    };
-} lcd;
-#endif
+public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
+  QCXLiquidCrystal(uint8_t rs, uint8_t en, uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7) : LiquidCrystal(rs, en, d4, d5, d6, d7){ };
+  virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
+    pinMode(LCD_RS, INPUT);  // pull-up LCD_RS
+    write4bits(value >> 4);
+    write4bits(value);
+    pinMode(LCD_RS, OUTPUT); // pull-down LCD_RS
+    return 1;
+  };
+  void write4bits(uint8_t value){
+    digitalWrite(LCD_D4, (value >> 0) & 0x01);
+    digitalWrite(LCD_D5, (value >> 1) & 0x01);
+    digitalWrite(LCD_D6, (value >> 2) & 0x01);
+    digitalWrite(LCD_D7, (value >> 3) & 0x01);
+    digitalWrite(LCD_EN, LOW);  // pulseEnable
+    delayMicroseconds(1);
+    digitalWrite(LCD_EN, HIGH);
+    delayMicroseconds(1);    // enable pulse must be >450ns
+    digitalWrite(LCD_EN, LOW);
+    delayMicroseconds(100);   // commands need > 37us to settle
+  };
+};
+QCXLiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
 #include <inttypes.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
-#define F_CPU 20008400   //20000000   // Crystal frequency of XTAL1
+#define F_CPU 20008440   //20000000   // Actual crystal frequency of XTAL1
 
 #define I2C_DELAY   4    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
 #define I2C_DDR DDRC     // Pins for the I2C bit banging
@@ -197,7 +193,7 @@ inline void i2c_suspend()
 #define SI_CLK_IDRV_8MA 0b00000011
 #define SI_CLK_INV 0b00010000
 
-#define SI_XTAL_FREQ 27003847  // Measured crystal frequency of XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here. (e.g. 27004000, 27003847, 27004452)
+#define SI_XTAL_FREQ 27003847  //27003847 27004452  Measured crystal frequency of XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
 
 #define log2(n) (log(n) / log(2))
 
@@ -402,7 +398,7 @@ inline void vox(bool trigger)
 }
 
 volatile uint8_t drive = 4;
-#define F_SAMP 4810        // 4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization (validate with test_samplerate)
+#define F_SAMP 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization
 #define _UA  (F_SAMP)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP and maximized to have higest precision
 //#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 
@@ -424,16 +420,15 @@ volatile uint8_t amp;
 
 inline int16_t ssb(int16_t in)
 {
-  static int16_t prev_in;
+  static int16_t dc;
 
   int16_t i, q;
   uint8_t j;
   static int16_t v[16];
-  for(j = 0; j != 15; j++)
-    v[j] = v[j + 1];
+  for(j = 0; j != 15; j++) v[j] = v[j + 1];
 
-  prev_in += (in - prev_in) / 2;
-  v[15] = in - prev_in;     // DC decoupling
+  dc += (in - dc) / 2;
+  v[15] = in - dc;     // DC decoupling
 
   i = v[7];
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
@@ -446,7 +441,6 @@ inline int16_t ssb(int16_t in)
   _amp = _amp << drive;
   _amp = ((_amp > 255) || (drive == 8)) ? 255 : _amp; // clip or when drive=8 use max output
   amp = (tx) ? lut[_amp] : 0;
-  //OCR1BL = amp; // submit amplitude to PWM register
 
   static int16_t prev_phase;
   int16_t phase = arctan3(q, i);
@@ -467,7 +461,7 @@ inline int16_t ssb(int16_t in)
 }
 
 volatile uint16_t numSamples = 0;
-#define MIC_ATTEN  1  // 1*6dB attenuation (note that the LSB bits are quite noisy)
+#define MIC_ATTEN  0  // 0*6dB attenuation (note that the LSB bits are quite noisy)
 
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
@@ -475,8 +469,9 @@ ISR(ADC_vect)                          // ADC conversion interrupt
 { // jitter dependent things first
   uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
   uint8_t high = ADCH;  
-  OCR1BL = amp;                        // submit amplitude to PWM register
-  si5351_SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over ~840kbit/s I2C
+  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
+  si5351_SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
+  //OCR1BL = amp;                        // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
   int16_t adc = ((high << 8) | low) - 512;
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351_freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
@@ -524,8 +519,8 @@ void adc_start(uint8_t adcpin, uint8_t ref1v1)
   TCCR0A |= (1 << WGM01); // turn on CTC mode
   TCCR0B |= (1 << CS01) | (1 << CS00);  // Set CS01 and CS00 bits for 64 prescaler
   TIMSK0 |= (1 << OCIE0B);  // enable timer compare interrupt TIMER0_COMPB_vect
-  uint8_t ocr = ((F_CPU / 64) / F_SAMP) - 1;
-  OCR0A = ocr; // Set the value that you want to count to :   OCRn = [clock_speed / (Prescaler_value * Fs)] - 1  : sampling frequency 6.25 kHz
+  uint8_t ocr = (((float)F_CPU / (float)64) / (float)F_SAMP + 0.5) - 1;   // ((F_CPU / 64) / F_SAMP) - 1;
+  OCR0A = ocr; // Set the value that you want to count to :   OCRn = [clock_speed / (Prescaler_value * Fs)] - 1  : sampling frequency
 
   // Timer 1: PWM mode
   TCCR1A = 0;
@@ -536,6 +531,8 @@ void adc_start(uint8_t adcpin, uint8_t ref1v1)
   ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
   OCR1BH = 0;
   OCR1BL = 0;  // PWM duty-cycle (span set by ICR).
+
+  amp = 0;
 }
 
 void adc_stop()
@@ -564,7 +561,7 @@ static uint8_t bandval = 2; //4
 #define N_BANDS 7 //13
 uint32_t band[] = { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };  //{ 472000, 1840000, 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000 };
 enum step_enum { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
-volatile uint8_t stepsize = STEP_1k;
+volatile int8_t stepsize = STEP_1k;
 
 void encoder_vect(int8_t sign)
 {
@@ -596,8 +593,9 @@ void stepsize_showcursor()
 void stepsize_change(int8_t val)
 {
   stepsize += val;
-  if(stepsize < STEP_10M) stepsize += 1;
-  if(stepsize > STEP_1) stepsize -= 1;
+  if(stepsize < STEP_1M) stepsize = STEP_10;
+  if(stepsize > STEP_10) stepsize = STEP_1M;
+  if(stepsize == STEP_10k || stepsize == STEP_500k) stepsize += val;
   stepsize_showcursor();
 }
 
@@ -689,13 +687,28 @@ float smeter(float ref = 0.0)
   static uint8_t cnt;
   cnt++;
   if((cnt % 8) == 0){
+//#define DBM_METER  1
+#ifdef DBM_METER
     lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print((ref == 0.0) ? "dBm   " : "dB    ");
+#else
+    uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
+    lcd.setCursor(14, 0); if(s < 10){ lcd.print("S"); } lcd.print(s); 
+#endif
     dbm_max = -174.0 + 34.0;
   }
   return dbm;
 }
 
-void test_amp()
+float dbmeter(float ref = 0.0)
+{
+  float rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
+  lcd.setCursor(9, 0); lcd.print(dbm); lcd.print("dB    ");
+  delay(300);
+  return dbm;
+}
+
+void test_tx_amp()
 {
   lcd.setCursor(9, 0); lcd.print(blanks);
   TCCR1A = 0;   // Timer 1: PWM mode
@@ -729,7 +742,7 @@ void test_amp()
   change = true;  //restore original frequency setting
 }
 
-void test_calibrate()
+void calibrate_predistortion()
 {
   lcd.setCursor(9, 0); lcd.print(blanks);
   TCCR1A = 0;   // Timer 1: PWM mode
@@ -775,17 +788,8 @@ void test_calibrate()
   change = true;  //restore original frequency setting
 }
 
-float dbmeter(float ref = 0.0)
-{
-  float rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
-  lcd.setCursor(9, 0); lcd.print(dbm); lcd.print("dB    ");
-  delay(300);
-  return dbm;
-}
-
 // RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
-void iq_calibration()
+void calibrate_iq()
 {
   lcd.setCursor(9, 0); lcd.print(blanks);
   digitalWrite(SIG_OUT, true); // loopback on
@@ -808,9 +812,11 @@ void iq_calibration()
   lcd.setCursor(0, 1); lcd.print("Phase Hi (800 Hz)"); lcd.print(blanks);
   for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
 
+  lcd.setCursor(9, 0); lcd.print(blanks);  // cleanup dbmeter
   digitalWrite(SIG_OUT, false); // loopback off
   si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   change = true;  //restore original frequency setting
+
 }
 
 void powermeter()
@@ -1019,10 +1025,23 @@ void loop()
       wdt_reset();
     }
     for(; digitalRead(BUTTONS);) wdt_reset(); // until released
-    if(val < 862){       // Left-button   ADC=780
+    if(val < 862){       // LEFT-button   ADC=780
       if(doubleclick){
-        iq_calibration();
+        calibrate_predistortion();
+        return;
+      }
+      if(longpress){
+        test_tx_amp();
         //powermeter();
+        return;
+      } //single-click
+      calibrate_iq();
+    } else if(val < 1023){ // RIGHT-button  ADC=943
+        if(doubleclick){
+        if(drive == 0) drive = 1;
+        else drive += 1;
+        if(drive > 8) drive = 0;
+        lcd.setCursor(0, 1); lcd.print("Drive "); lcd.print(drive); lcd.print(blanks);
         return;
       }
       if(longpress){
@@ -1039,24 +1058,11 @@ void loop()
         for(; digitalRead(BUTTONS);) wdt_reset(); // until released
         delay(100);
         return;
-      }
+      } //single-click
       usb = !usb;
       si5351_prev_pll_freq = 0;  // enforce PLL reset
       change = true;
-    } else if(val < 1023){ // Right-button  ADC=943
-      if(doubleclick){
-        test_calibrate();
-        return;
-      }
-      if(longpress){
-        test_amp();
-        return;
-      }
-      if(drive == 0) drive = 1;
-      else drive += 1;
-      if(drive > 8) drive = 0;
-      lcd.setCursor(0, 1); lcd.print("Drive "); lcd.print(drive); lcd.print(blanks);
-    } else {               // Rotory-button ADC=1023
+    } else {               // ROTARY-button ADC=1023
       if(doubleclick){
         delay(100);
         bandval++;
@@ -1069,7 +1075,7 @@ void loop()
       if(longpress){
         stepsize_change(-1);
         return;
-      }
+      } //single-click
       stepsize_change(+1);
     }
   }
@@ -1084,7 +1090,9 @@ void loop()
       scale /= 1000;
       n = n2 / scale;
       n2 = n2  % scale;
-      sprintf(buf, ",%03u", n); lcd.print(buf);
+      if(scale == 1) sprintf(buf, ",%02u", n / 10); else // leave last digit out
+      sprintf(buf, ",%03u", n);
+      lcd.print(buf);
     }
     lcd.print((usb) ? " USB" : " LSB");
     lcd.print(" ");
