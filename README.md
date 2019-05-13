@@ -36,7 +36,7 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.01d | 2019-05-05 | Added I/Q Calibration feature. Added Voltage, I2C and CPU load self-tests on startup. Reduced RFI feedback on mic. Fix for clock and amplitude-phase mis-alignments. Reduced s-meter (LCD) interference on RX. S-meter Readings. Increased TX bandwidth to 2.4 kHz. Cosmetic improvements. |
+| R1.01f | 2019-05-14 | Added I/Q Calibration feature. Added Voltage, I2C and CPU load self-tests on startup. Reduced RFI feedback on mic. Fix for clock and amplitude-phase mis-alignments. Reduced s-meter (LCD) interference on RX. S-meter Readings. Increased TX bandwidth to 2.4 kHz. Cosmetic improvements. |
 | R1.01 | 2019-04-09 | Q6 now digitally switched - improving stability and IMD (**C31 must be removed**). Improved signal processing. Experimental amplitude pre-distortion and calibration. |
 | R1.00 | 2019-01-29 | Initial release of prototype                                        |
 
@@ -89,13 +89,13 @@ For FT8 (and any other digital) operation, select one of the pre-programmed FT8 
 
 To experiment with amplitude pre-distortion algorithm, double-press left button to train the PA amplitude characteristic. This sweeps the amplitude from maximum PWM to minimum PWM and measures the PA response through an internal receiver loopback and stores the values into volatile memory. Once trained, set the appropriate amplitude drive level for voice input. Pre-distorted amplitude response can be measured with a storage spectrum-analyser and a long-press of left button; it will sweep the pre-distorted amplitude from 0 to 100% in 255 steps, where each step has a 10Hz frequency offset.
 
-The receiver side-band rejection an be measured and adjusted through a left single press button. To do so, turn down the volume, connect a dummy-load and enable the original CW-filter. After pressing the button, the I-Q balance, Lo Phase and High phase is measured; adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB.
+The receiver side-band rejection can be measured and adjusted through a left single press button. To do so, turn down the volume, connect a dummy-load and enable the original CW-filter. After pressing the button, the I-Q balance, Lo Phase and High phase is measured; adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB.
 
 On startup, the transceiver is performing a self-test. It is checking the voltages, I2C communications and algorithmic performance. In case of deviations, the display will report an error during startup:
 
 | Error            | Description                                             |
 | ---------------- | ------------------------------------------------------- |
-| E01 CPU overload | The interrupt routine ADC_vect() is taking too long, more than there is CPU resources available; try to reduce I2C_DELAY or disable functionality in this routine |
+| E01 CPU overload | The interrupt routine ADC_vect() is taking too long, more than there are CPU resources available; try to reduce I2C_DELAY or disable functionality in this routine |
 | E02 +5V not OK   | The supply that is fed to pin 7 of IC2 is not the expected 5V; this might be an indication that there is an issue with L6 |
 | E03 +3.3V not OK | The supply that is fed to pin 1 of IC1 is not the expected 3.3V |
 | E04 AVCC not OK  | The supply that is fed to pin 20 of IC2 is not the expected 5V; this might be an indication that there is an issue with L5 |
@@ -153,6 +153,11 @@ Known/resolved issues:
 ### Credits:
 [QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] stage as used in [ATS] by _Steven Weber (KD1JV)_ since 2003 and inspired by _Frank Cathell (W7YAZ)_ in 1988, and combined with popular components such as a Silicon Labs [SI5351] Clock Generator, Atmel [ATMEGA328P] microprocessor and a Hitachi [HD44780] LCD display. The [QCX-SSB] modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi in 2013 and is basically a kind of [EER] implemented in software.
 
+
+### Other
+
+- The VERON association interviewed me in the [PI4AA June issue] about this project (in Dutch, starting at timestamp 15:30).
+
 [QCX]: https://qrp-labs.com/qcx.html
 
 [original schematic]: https://qrp-labs.com/images/qcx/HiRes.png
@@ -200,5 +205,7 @@ Known/resolved issues:
 [HD44780]: https://www.sparkfun.com/datasheets/LCD/HD44780.pdf
 
 [sample]: https://youtu.be/-QfMQulk0eA
+
+[PI4AA June issue]: https://cdn.veron.nl/pi4aa/2019/PI4AA_Uitzending20190607.mp3
 
 

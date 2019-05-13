@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01d"
+#define VERSION   "1.01f"
 
 // QCX pin defintion
 #define LCD_D4  0
@@ -13,6 +13,7 @@
 #define ROT_A   6
 #define ROT_B   7
 #define RX      8
+#define SIDETONE 9
 #define KEY_OUT 10
 #define SIG_OUT 11
 #define DAH     12
@@ -54,6 +55,7 @@ QCXLiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 #include <inttypes.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
+#undef F_CPU
 #define F_CPU 20008440   //20000000   // Actual crystal frequency of XTAL1
 
 #define I2C_DELAY   4    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
@@ -369,7 +371,8 @@ void si5351_alt_clk2(uint32_t freq)
   //si5351_SendRegister(SI_PLL_RESET, 0xA0);
 }
 
-volatile bool usb = true;
+enum mode_t { LSB, USB, CW };
+volatile uint8_t mode = USB;
 volatile bool change = true;
 volatile int32_t freq = 7074000;
 
@@ -398,6 +401,7 @@ inline void vox(bool trigger)
 }
 
 volatile uint8_t drive = 4;
+//#define F_SAMP 4402
 #define F_SAMP 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP) - 1 , should not exceed CPU utilization
 #define _UA  (F_SAMP)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP and maximized to have higest precision
 //#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
@@ -427,15 +431,16 @@ inline int16_t ssb(int16_t in)
   static int16_t v[16];
   for(j = 0; j != 15; j++) v[j] = v[j + 1];
 
-  dc += (in - dc) / 2;
+  //dc += (in - dc) / 2;
   v[15] = in - dc;     // DC decoupling
+  dc = in;  // this is actually creating a low-pass filter
 
   i = v[7];
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
 
   uint16_t _amp = abs(i) > abs(q) ? abs(i) + abs(q) / 4 : abs(q) + abs(i) / 4; // approximation of: amp = sqrt(i*i + q*q); error 0.95dB
 
-#define VOX_THRESHOLD (1 << 1)  // 1*6dB above ADC noise level
+#define VOX_THRESHOLD (1 << 2)  // 2*6dB above ADC noise level
   if(vox_enable) vox((_amp > VOX_THRESHOLD));
 
   _amp = _amp << drive;
@@ -454,7 +459,7 @@ inline int16_t ssb(int16_t in)
     dp = MAX_DP;
   }
 #endif
-  if(usb)
+  if(mode == USB)
     return dp * ( F_SAMP / _UA); // calculate frequency-difference based on phase-difference
   else
     return dp * (-F_SAMP / _UA);
@@ -465,7 +470,7 @@ volatile uint16_t numSamples = 0;
 
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
-ISR(ADC_vect)                          // ADC conversion interrupt
+void dsp_tx()
 { // jitter dependent things first
   uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
   uint8_t high = ADCH;  
@@ -476,6 +481,122 @@ ISR(ADC_vect)                          // ADC conversion interrupt
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351_freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
   numSamples++;
+}
+
+
+int16_t dsp(int16_t in)
+{
+  static int16_t dc;
+
+  int16_t i, q;
+  uint8_t j;
+  static int16_t v[16];
+  for(j = 0; j != 15; j++) v[j] = v[j + 1];
+
+  dc += (in - dc) / 2;
+  v[15] = in - dc;     // DC decoupling
+
+  i = v[7];
+  q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+  return abs(i) > abs(q) ? abs(i) + abs(q) / 4 : abs(q) + abs(i) / 4; // approximation of: amp = sqrt(i*i + q*q); error 0.95dB
+}
+
+static int32_t signal;
+static int16_t avg = 0;
+static int16_t maxpk=0;
+static int16_t k0=0;
+static int16_t k1=0;
+static uint8_t sym;
+static int16_t ta=0;
+static char m2c[] = "##ETIANMSURWDKGOHVF#L#PJBXCYZQ##54S3###2##+###J16=/###H#7#G#8#90############?_####\"##.####@###'##-########;!#)#####,####:####";
+
+char cw(int16_t in)
+{
+  char ch = 0;
+  int i;
+  signal += dsp(in);
+  #define OSR 64 // (8*FS/1000)
+  if((numSamples % OSR) == 0){   // process every 8 ms
+    if(!signal) return ch;
+    signal = signal / OSR;  //normalize
+    maxpk = signal > maxpk ? signal : maxpk;
+    #define RT  4
+    if(signal>(maxpk/2) ){  // threshold: 3dB below max signal
+      k1++;  // key on
+      k0=0;
+    } else {
+      k0++;  // key off
+      if(k0>0 && k1>0){        //symbol space
+        if(k1>(ta/100)) ta=RT*ta/100+(100-RT)*k1;                   // go slower
+        if(k1>(ta/600) && k1<(ta/300)) ta=(100-RT)*ta/100+RT*k1*3;  // go faster
+        if(k1>(ta/600)) sym=(sym<<1)|(k1>(ta/200));        // dit (0) or dash (1)
+        k1=0;
+      }
+      if(k0>=(ta/200) && sym>1){ //letter space
+        if(sym<128) ch=m2c[sym];
+        sym=1;
+      }
+      if(k0>=(ta/67)){        //word space (67=1.5/100)
+        ch = ' ';
+        k0=-1000*(ta/100);           //delay word spaces
+      }
+    }
+    avg = avg*99/100 + signal*1/100;
+    maxpk = maxpk*99/100 + signal*1/100;
+    signal = 0;
+  }
+  return ch;
+}
+
+int16_t filt_cwn(int16_t in)
+{
+  static int16_t v[4];
+  int16_t f0 = (in*16+105*v[0]+-57*v[1])/64;
+  int16_t f1 = (38*f0+-76*v[0]+38*v[1])/128;
+  v[1]=v[0];
+  v[0]=f0;
+
+  int16_t f2 = (f1*16+100*v[2]+-56*v[3])/64;
+  int16_t f3 = (32*v[1]+64*v[2]+32*v[3])/128;
+  v[3]=v[2];
+  v[2]=f2;
+
+  return f3;
+}
+
+static char out[] = "                ";
+volatile bool cw_event = false;
+
+// This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
+void dsp_rx()
+{ // jitter dependent things first
+  uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
+  uint8_t high = ADCH;  
+  int16_t adc = ((high << 8) | low) - 512;
+
+  static int16_t dc;
+  dc += (adc - dc) / 2;
+  int16_t ac = adc - dc;     // DC decoupling
+  if(mode == CW) ac = filt_cwn(ac);
+  OCR1AL = ac + 128;
+
+//#define CW_DECODER  1
+#ifdef CW_DECODER
+  char ch = cw(adc >> 0);
+  if(ch){
+    for(int i=0; i!=15;i++) out[i]=out[i+1];
+    out[15] = ch;
+    cw_event = true;
+  }
+#endif
+  numSamples++;
+}
+
+typedef void (*func_t)(void);
+static volatile func_t func_ptr = dsp_tx;
+ISR(ADC_vect)                          // ADC conversion interrupt
+{
+  func_ptr();
 }
 
 ISR(TIMER0_COMPB_vect)  // Timer0 interrupt
@@ -489,6 +610,55 @@ uint8_t old_TCNT0;
 uint8_t old_TIMSK0;
 
 void adc_start(uint8_t adcpin, uint8_t ref1v1)
+{
+  // Setup ADC
+  DIDR0 |= (1 << adcpin); // disable digital input
+  ADCSRA = 0;             // clear ADCSRA register
+  ADCSRB = 0;             // clear ADCSRB register
+  ADMUX = 0;              // clear ADMUX register
+  ADMUX |= (adcpin & 0x0f);    // set analog input pin
+  ADMUX |= ((ref1v1) ? (1 << REFS1) : 0) | (1 << REFS0);  // set AREF=1.1V (Internal ref); otherwise AREF=AVCC=(5V)
+  //ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // 128 prescaler for 9.6kHz*1.25
+  //ADCSRA |= (1 << ADPS2) | (1 << ADPS1);    // 64 prescaler for 19.2kHz*1.25
+  //ADCSRA |= (1 << ADPS2) | (1 << ADPS0);    // 32 prescaler for 38.5 KHz*1.25  (this seems to contain more precision and gain compared to 153.8kHz*1.25
+  //ADCSRA |= (1 << ADPS2);                   // 16 prescaler for 76.9 KHz*1.25
+  ADCSRA |= (1 << ADPS1) | (1 << ADPS0);      // ADPS=011: 8 prescaler for 153.8 KHz*1.25;  sampling rate is [ADC clock] / [prescaler] / [conversion clock cycles]  for Arduino Uno ADC clock is 20 MHz and a conversion takes 13 clock cycles: ADPS=011: 8 prescaler for 153.8 KHz, ADPS=100: 16 prescaler for 76.9 KHz; ADPS=101: 32 prescaler for 38.5 KHz; ADPS=110: 64 prescaler for 19.2kHz; // ADPS=111: 128 prescaler for 9.6kHz
+  ADCSRA |= (1 << ADIE);  // enable interrupts when measurement complete
+  ADCSRA |= (1 << ADEN);  // enable ADC
+  //ADCSRA |= (1 << ADSC);  // start ADC measurements
+
+  // backup Timer 0, is used by delay(), micros(), etc.
+  old_TCCR0A = TCCR0A;
+  old_TCCR0B = TCCR0B;
+  old_TCNT0 = TCNT0;
+  old_TIMSK0 = TIMSK0;
+
+  // Timer 0: interrupt mode
+  TCCR0A = 0;
+  TCCR0B = 0;
+  TCNT0 = 0;
+  TCCR0A |= (1 << WGM01); // turn on CTC mode
+  TCCR0B |= (1 << CS01) | (1 << CS00);  // Set CS01 and CS00 bits for 64 prescaler
+  TIMSK0 |= (1 << OCIE0B);  // enable timer compare interrupt TIMER0_COMPB_vect
+  uint8_t ocr = (((float)F_CPU / (float)64) / (float)F_SAMP + 0.5) - 1;   // ((F_CPU / 64) / F_SAMP) - 1;
+  OCR0A = ocr; // Set the value that you want to count to :   OCRn = [clock_speed / (Prescaler_value * Fs)] - 1  : sampling frequency
+
+  // Timer 1: PWM mode
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCCR1A |= (1 << COM1B1); // Clear OC1B on Compare Match when upcounting. Set OC1B on Compare Match when downcounting.
+  TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
+  ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
+  ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
+  OCR1BH = 0;
+  OCR1BL = 0;  // PWM duty-cycle (span set by ICR).
+
+  amp = 0;
+}
+
+#define F_SAMP_RX 8000
+
+void adc_start_rx(uint8_t adcpin, uint8_t ref1v1)
 {
   // Setup ADC
   DIDR0 |= (1 << adcpin); // disable digital input
@@ -519,20 +689,18 @@ void adc_start(uint8_t adcpin, uint8_t ref1v1)
   TCCR0A |= (1 << WGM01); // turn on CTC mode
   TCCR0B |= (1 << CS01) | (1 << CS00);  // Set CS01 and CS00 bits for 64 prescaler
   TIMSK0 |= (1 << OCIE0B);  // enable timer compare interrupt TIMER0_COMPB_vect
-  uint8_t ocr = (((float)F_CPU / (float)64) / (float)F_SAMP + 0.5) - 1;   // ((F_CPU / 64) / F_SAMP) - 1;
+  uint8_t ocr = (((float)F_CPU / (float)64) / (float)F_SAMP_RX + 0.5) - 1;   // ((F_CPU / 64) / F_SAMP) - 1;
   OCR0A = ocr; // Set the value that you want to count to :   OCRn = [clock_speed / (Prescaler_value * Fs)] - 1  : sampling frequency
 
   // Timer 1: PWM mode
   TCCR1A = 0;
   TCCR1B = 0;
-  TCCR1A |= (1 << COM1B1); // Clear OC1A/OC1B on Compare Match when upcounting. Set OC1A/OC1B on Compare Match when downcounting.
+  TCCR1A |= (1 << COM1A1); // Clear OC1A on Compare Match when upcounting. Set OC1A on Compare Match when downcounting.
   TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
   ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
   ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
-  OCR1BH = 0;
-  OCR1BL = 0;  // PWM duty-cycle (span set by ICR).
-
-  amp = 0;
+  OCR1AH = 0;
+  OCR1AL = 0;  // PWM duty-cycle (span set by ICR).
 }
 
 void adc_stop()
@@ -547,6 +715,7 @@ void adc_stop()
   //TIMSK0 &= ~(1 << OCIE0B);  // disable timer compare interrupt TIMER0_COMPB_vect
   //TCCR0A |= (1 << WGM00);  // for some reason WGM00 must be 1 in normal operation
 
+  OCR1AL = 0x00;
   OCR1BL = 0x00;
 
   //ADCSRA &= ~(1 << ADATE); // disable auto trigger
@@ -560,7 +729,7 @@ void adc_stop()
 static uint8_t bandval = 2; //4
 #define N_BANDS 7 //13
 uint32_t band[] = { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };  //{ 472000, 1840000, 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000 };
-enum step_enum { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
+enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 volatile int8_t stepsize = STEP_1k;
 
 void encoder_vect(int8_t sign)
@@ -600,8 +769,8 @@ void stepsize_change(int8_t val)
 }
 
 ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
-  static uint8_t last_state;
   noInterrupts();
+  static uint8_t last_state;
   uint8_t curr_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
   switch((last_state << 2) | curr_state){ //transition
 #ifdef ENCODER_ENHANCED_RESOLUTION // Option: enhance encoder from 24 to 96 steps/revolution, see: https://www.sdr-kits.net/documents/PA0KLT_Manual.pdf
@@ -630,8 +799,10 @@ void qcx_setup()
   digitalWrite(SIG_OUT, LOW);
   digitalWrite(RX, HIGH);
   digitalWrite(KEY_OUT, LOW);
+  digitalWrite(SIDETONE, LOW);
 
   // pins
+  pinMode(SIDETONE, OUTPUT);
   pinMode(SIG_OUT, OUTPUT);
   pinMode(RX, OUTPUT);
   pinMode(KEY_OUT, OUTPUT);
@@ -811,7 +982,15 @@ void calibrate_iq()
   si5351_alt_clk2(freq - 800);
   lcd.setCursor(0, 1); lcd.print("Phase Hi (800 Hz)"); lcd.print(blanks);
   for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-
+/*
+  for(uint32_t offset = 0; offset < 3000; offset += 100){
+    si5351_alt_clk2(freq + offset);
+    dbc = dbmeter();
+    si5351_alt_clk2(freq - offset);
+    lcd.setCursor(0, 1); lcd.print(offset); lcd.print(" Hz"); lcd.print(blanks);
+    wdt_reset(); dbmeter(dbc); delay(500); wdt_reset(); 
+  }
+*/
   lcd.setCursor(9, 0); lcd.print(blanks);  // cleanup dbmeter
   digitalWrite(SIG_OUT, false); // loopback off
   si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
@@ -840,6 +1019,18 @@ void powermeter()
   si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   change = true;  //restore original frequency setting
   delay(1000);
+}
+
+void toggle_rxdsp()
+{
+  if(func_ptr != dsp_rx){
+    func_ptr = dsp_rx;  //enable RX DSP
+    adc_start_rx(0, false);
+  } else {
+    adc_stop();  //disable RX DSP
+    func_ptr = dsp_tx;
+  }
+  change = true;
 }
 
 /*
@@ -990,8 +1181,12 @@ void loop()
 {
   delay(100);
 
-  smeter();
-
+  if(func_ptr != dsp_rx) smeter();
+  if(mode == CW && cw_event){
+    cw_event = false;
+    lcd.setCursor(0, 1); lcd.print(out);
+  }
+  
   if(!digitalRead(DIT)){
     lcd.setCursor(15, 1); lcd.print("T");
     lcd.setCursor(9, 0); lcd.print(blanks);
@@ -1011,7 +1206,10 @@ void loop()
     lcd.setCursor(15, 1); lcd.print("R");
   }
   if(digitalRead(BUTTONS)){ // Left-/Right-/Rotary-button
-    uint16_t val = analogRead(BUTTONS);
+    uint16_t val;
+    if(func_ptr != dsp_rx)  //hack to prevent corrupting RX DSP ADC settings
+      val = analogRead(BUTTONS);
+    else { toggle_rxdsp(); return; }
     bool longpress = false;
     bool doubleclick = false;
     int32_t t0 = millis();
@@ -1035,7 +1233,8 @@ void loop()
         //powermeter();
         return;
       } //single-click
-      calibrate_iq();
+      //calibrate_iq();
+      toggle_rxdsp();
     } else if(val < 1023){ // RIGHT-button  ADC=943
         if(doubleclick){
         if(drive == 0) drive = 1;
@@ -1059,7 +1258,8 @@ void loop()
         delay(100);
         return;
       } //single-click
-      usb = !usb;
+      mode++;
+      if(mode > CW) mode = LSB;
       si5351_prev_pll_freq = 0;  // enforce PLL reset
       change = true;
     } else {               // ROTARY-button ADC=1023
@@ -1094,14 +1294,18 @@ void loop()
       sprintf(buf, ",%03u", n);
       lcd.print(buf);
     }
-    lcd.print((usb) ? " USB" : " LSB");
     lcd.print(" ");
-    lcd.setCursor(15, 1); lcd.print("R");
+    if(mode == LSB) lcd.print("LSB");
+    if(mode == USB) lcd.print("USB");
+    if(mode ==  CW) lcd.print("CW ");
+    lcd.print(" ");
+    if(func_ptr != dsp_rx) lcd.setCursor(15, 1); lcd.print("R");
+    if(func_ptr == dsp_rx) lcd.setCursor(15, 1); lcd.print("D");
 
-    if(usb)
-      si5351_freq(freq, 0, 90);  // RX in USB
-    else
+    if(mode == LSB)
       si5351_freq(freq, 90, 0);  // RX in LSB
+    else
+      si5351_freq(freq, 0, 90);  // RX in USB
   }
   wdt_reset();
   stepsize_showcursor();
