@@ -548,27 +548,6 @@ char cw(int16_t in)
   return ch;
 }
 
-/*
-inline int16_t filt_cwn(int16_t _v)
-{ // 2nd Order Bandpass 650-840Hz (SR=8kHz) IIR in Direct Form II
-  float v = _v;
-  float z0;
-
-  static float za1,za2;
-  z0=(16.0*v+105.0*za1+-58.0*za2)/64.0;
-  v=(41.0*z0+-82.0*za1+41.0*za2)/128.0;
-  za2=za1;
-  za1=z0;
-
-  static float zb1,zb2;
-  z0=(16.0*v+97.0*zb1+-57.0*zb2)/64.0;
-  v=(32.0*z0+64.0*zb1+32.0*zb2)/128.0;
-  zb2=zb1;
-  zb1=z0;
-  return v;
-}
-*/
-
 inline int16_t filt_cwn(int16_t v)
 { // 2nd Order Bandpass 650-840Hz (SR=8kHz) IIR in Direct Form I
   float zx0 = v;
@@ -589,51 +568,6 @@ inline int16_t filt_cwn(int16_t v)
   return zx0;
 }
 
-/*
-inline int16_t filt_cwn(int16_t v)
-{ // not working well: Optimized 2nd Order Bandpass 650-840Hz (SR=8kHz) IIR in Direct Form I
-  float zx0;
-
-  static int16_t za1,za2;
-  static float zb1,zb2;
-  zx0=( (v+za2-za1-za1)*5.0 +105.0*zb1+-58.0*zb2)/64.0;
-  za2=za1;
-  za1=v;
-  zb2=zb1;
-  zb1=zx0;
-
-  static float zc1,zc2;
-  zx0=(zx0+zb1+zb1+zb2+97.0*zc1+-57.0*zc2)/64.0;
-  zc2=zc1;
-  zc1=zx0;
-
-  return zx0;
-}
-*/
-/*
-inline int16_t filt_cwn(int16_t _v)
-{ // 2nd Order Bandpass 650-840Hz (SR=8kHz) IIR in Direct Form I
-  int16_t v = _v;
-  int16_t z0;
-
-  static int16_t za1,za2;
-  static int16_t zb1,zb2;
-  z0=(5*v+-10*za1+5*za2+105*zb1+-58*zb2)/64;
-  za2=za1;
-  za1=v;
-  zb2=zb1;
-  zb1=z0;
-
-  static int16_t zc1,zc2;
-  z0=(z0+2*zb1+zb2+97*zc1+-57*zc2)/64;
-  zc2=zc1;
-  zc1=z0;
-  v=z0;
-
-  return v;
-}
-*/
-
 static float gain = 1.0;
 
 inline int16_t agc(int16_t in)
@@ -648,6 +582,7 @@ inline int16_t agc(int16_t in)
 static char out[] = "                ";
 volatile bool cw_event = false;
 
+
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 void dsp_rx()
 { // jitter dependent things first
@@ -658,9 +593,34 @@ void dsp_rx()
   static int16_t dc;
   dc += (adc - dc) / 2;
   int16_t ac = adc - dc;     // DC decoupling
+//#define RX_SIMPLE  1
+#ifdef RX_SIMPLE
   ac = agc(ac);
   if(mode == CW) ac = filt_cwn(ac /* *64 */ * 16 );
   OCR1AL = ac + 128;
+#endif
+
+#define RX_CIC  1
+#ifdef RX_CIC
+  // Decimating 2nd Order CIC filter
+  #define R 8  // Rate change from 62.5kSPS to 7812.5SPS
+  static int16_t zi1, zi2, zd1, zd2;
+  zi2 = zi1 + zi2;  // Integrator section
+  zi1 = ac + zi1;
+  if((numSamples % R) == 0){
+    int16_t d1 = zi2 - zd1;  // Comb section
+    ac = d1 - zd2;
+    zd2 = d1;
+    zd1 = zi2;
+    
+    if(mode == CW) ac = filt_cwn(ac /* *64 */ * 4 );
+    else ac = ac >> drive; //ac >> 3; //ac = agc(ac);
+    
+    ac=min(max(ac, -128), 127);  // clip
+    OCR1AL = ac + 128;
+  }
+#endif
+
 
 //#define CW_DECODER  1
 #ifdef CW_DECODER
@@ -674,17 +634,69 @@ void dsp_rx()
   numSamples++;
 }
 
+//#define ORIG  1
 typedef void (*func_t)(void);
 static volatile func_t func_ptr = dsp_tx;
 ISR(ADC_vect)                          // ADC conversion interrupt
 {
+#ifdef ORIG
   func_ptr();
+#endif
 }
+
+//#define ADC_NR  1       // Stop CPU at ADC conversion, reduces noise but costs 30% CPU performance when ADC prescaler is 8
+
+#ifdef ORIG
+ISR(TIMER2_COMPB_vect)  // Timer2 COMPB interrupt
+{
+#ifdef ADC_NR
+  interrupts();
+  sleep_cpu();
+#else
+  ADCSRA |= (1 << ADSC); // start ADC conversion (triggers ADC interrupt)
+#endif
+}
+#else
 
 ISR(TIMER2_COMPB_vect)  // Timer2 COMPB interrupt
 {
+#ifdef ADC_NR
+  interrupts();
+  sleep_cpu();
+  noInterrupts();
+  uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
+  uint8_t high = ADCH;  
+#else
+  uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
+  uint8_t high = ADCH;  
   ADCSRA |= (1 << ADSC); // start ADC conversion (triggers ADC interrupt)
+#endif
+  int16_t adc = ((high << 8) | low) - 512;
+
+  static int16_t dc;
+  dc += (adc - dc) / 2;
+  int16_t ac = adc - dc;     // DC decoupling
+
+  // Decimating 2nd Order CIC filter
+  #define R 8  // Rate change from 62.5kSPS to 7812.5SPS, providing 18dB gain
+  static int16_t zi1, zi2, zd1, zd2;
+  zi2 = zi1 + zi2;  // Integrator section
+  zi1 = ac + zi1;
+  if((numSamples % R) == 0){
+    int16_t d1 = zi2 - zd1;  // Comb section
+    ac = d1 - zd2;
+    zd2 = d1;
+    zd1 = zi2;
+    
+    if(mode == CW) ac = filt_cwn(ac /* *64 */ * 4 );
+    else ac = ac >> drive; //ac = agc(ac);
+    
+    ac=min(max(ac, -128), 127);  // clip
+    OCR1AL = ac + 128;
+  }
+  numSamples++;
 }
+#endif
 
 void adc_start(uint8_t adcpin, uint8_t ref1v1, uint32_t fs)
 {
@@ -697,12 +709,23 @@ void adc_start(uint8_t adcpin, uint8_t ref1v1, uint32_t fs)
   ADMUX |= ((ref1v1) ? (1 << REFS1) : 0) | (1 << REFS0);  // set AREF=1.1V (Internal ref); otherwise AREF=AVCC=(5V)
   //ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // 128 prescaler for 9.6kHz*1.25
   //ADCSRA |= (1 << ADPS2) | (1 << ADPS1);    // 64 prescaler for 19.2kHz*1.25
-  ADCSRA |= (1 << ADPS2) | (1 << ADPS0);    // 32 prescaler for 38.5 KHz*1.25  (this seems to contain more precision and gain compared to 153.8kHz*1.25
-  //ADCSRA |= (1 << ADPS2);                   // 16 prescaler for 76.9 KHz*1.25
-//  ADCSRA |= (1 << ADPS1) | (1 << ADPS0);      // ADPS=011: 8 prescaler for 153.8 KHz*1.25;  sampling rate is [ADC clock] / [prescaler] / [conversion clock cycles]  for Arduino Uno ADC clock is 20 MHz and a conversion takes 13 clock cycles: ADPS=011: 8 prescaler for 153.8 KHz, ADPS=100: 16 prescaler for 76.9 KHz; ADPS=101: 32 prescaler for 38.5 KHz; ADPS=110: 64 prescaler for 19.2kHz; // ADPS=111: 128 prescaler for 9.6kHz
+  //ADCSRA |= (1 << ADPS2) | (1 << ADPS0);    // 32 prescaler for 38.5kHz*1.25  (this seems to contain more precision and gain compared to 153.8kHz*1.25
+  //ADCSRA |= (1 << ADPS2);                   // 16 prescaler for 76.9kHz*1.25
+  ADCSRA |= (1 << ADPS1) | (1 << ADPS0);      // ADPS=011: 8 prescaler for 153.8kHz*1.25;  sampling rate is [ADC clock] / [prescaler] / [conversion clock cycles]  for Arduino Uno ADC clock is 20 MHz and a conversion takes 13 clock cycles: ADPS=011: 8 prescaler for 153.8 KHz, ADPS=100: 16 prescaler for 76.9 KHz; ADPS=101: 32 prescaler for 38.5 KHz; ADPS=110: 64 prescaler for 19.2kHz; // ADPS=111: 128 prescaler for 9.6kHz
+#ifdef ORIG
   ADCSRA |= (1 << ADIE);  // enable interrupts when measurement complete
+#else
+#ifdef ADC_NR
+  ADCSRA |= (1 << ADIE);  // enable interrupts when measurement complete
+#endif
+#endif
   ADCSRA |= (1 << ADEN);  // enable ADC
   //ADCSRA |= (1 << ADSC);  // start ADC measurements
+#ifdef ADC_NR
+//  set_sleep_mode(SLEEP_MODE_ADC);  // ADC NR sleep destroys the timer2 integrity, therefore Idle sleep is better alternative (keeping clkIO as an active clock domain)
+  set_sleep_mode(SLEEP_MODE_IDLE);
+  sleep_enable();
+#endif
 
   // Timer 2: interrupt mode
   ASSR &= ~(1 << AS2);  // Timer 2 clocked from CLK I/O (like Timer 0 and 1)
@@ -730,7 +753,8 @@ void adc_start(uint8_t adcpin, uint8_t ref1v1, uint32_t fs)
   amp = 0;
 }
 
-#define F_SAMP_RX 8000
+//#define F_SAMP_RX 8000
+#define F_SAMP_RX 62500
 
 void adc_stop()
 {
@@ -743,6 +767,10 @@ void adc_stop()
   //ADCSRA &= ~(1 << ADATE); // disable auto trigger
   ADCSRA &= ~(1 << ADIE);  // disable interrupts when measurement complete
   ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);    // 128 prescaler for 9.6kHz
+
+#ifdef ADC_NR
+  sleep_disable();
+#endif
 
   ADMUX = 0;              // clear ADMUX register
   ADMUX |= (1 << REFS0);  // restore reference voltage AREF (5V)
@@ -1084,8 +1112,11 @@ float getTemp()
   return (float)WDTmicrosTime * 0.0026 - 3668.1;  //calibrate here
 }
 */
+//#define SAFE  1
+
 void setup()
 {
+#ifdef SAFE
   // Benchmark ADC_vect() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
   uint32_t t0, t1;
   t0 = micros();
@@ -1095,6 +1126,7 @@ void setup()
   float load = (t1 - t0) * F_SAMP * 100.0 / 1000000.0;
 
   wdt_enable(WDTO_2S);  // Enable watchdog, resolves QCX startup issue
+#endif
 
   lcd.begin(16, 2);
   lcd.createChar(1, font_run);
@@ -1127,6 +1159,7 @@ void setup()
   for(i = 0; i != 256; i++)
     lut[i] = (float)i / ((float)255 / ((float)PWM_MAX - (float)PWM_MIN)) + PWM_MIN;
 
+#ifdef SAFE
   // Measure CPU loads
   if(!(load < 100.0)){
     lcd.setCursor(0, 1); lcd.print("E01 CPU overload");
@@ -1195,6 +1228,7 @@ void setup()
   }
 
   lcd.setCursor(0, 1); lcd.print("CPU_tx="); lcd.print(load); lcd.print("%"); lcd.print(blanks);
+#endif
   delay(800);
   lcd.setCursor(7, 0); lcd.print("\001"); lcd.print(blanks); // Ready: display initialization complete normally
 }
@@ -1231,7 +1265,7 @@ void loop()
     uint16_t val;
     if(func_ptr != dsp_rx)  //hack to prevent corrupting RX DSP ADC settings
       val = analogRead(BUTTONS);
-    else { toggle_rxdsp(); return; }
+    else { toggle_rxdsp(); return; }  //hack
     bool longpress = false;
     bool doubleclick = false;
     int32_t t0 = millis();
@@ -1256,7 +1290,7 @@ void loop()
         return;
       } //single-click
       //calibrate_iq();
-      toggle_rxdsp();
+      toggle_rxdsp();  // enable/disable digital RX
     } else if(val < 1023){ // RIGHT-button  ADC=943
         if(doubleclick){
         if(drive == 0) drive = 1;
