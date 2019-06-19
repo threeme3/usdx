@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01f"
+#define VERSION   "1.01g"
 
 // QCX pin defintion
 #define LCD_D4  0
@@ -586,9 +586,7 @@ volatile bool cw_event = false;
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 void dsp_rx()
 { // jitter dependent things first
-  uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
-  uint8_t high = ADCH;  
-  int16_t adc = ((high << 8) | low) - 512;
+  int16_t adc = (ADCL | (ADCH << 8)) - 512; // ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
 
   static int16_t dc;
   dc += (adc - dc) / 2;
@@ -658,41 +656,81 @@ ISR(TIMER2_COMPB_vect)  // Timer2 COMPB interrupt
 }
 #else
 
+#define IQ_MOD  1
+
 ISR(TIMER2_COMPB_vect)  // Timer2 COMPB interrupt
 {
-#ifdef ADC_NR
-  interrupts();
-  sleep_cpu();
-  noInterrupts();
-  uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
-  uint8_t high = ADCH;  
+  static int16_t i, q;
+  #undef  R  // Decimating 2nd Order CIC filter
+  #define R 4 //8  // Rate change from 62.5/2 kSPS to 7812.5SPS per chan, providing 12dB gain
+
+  // process I for even samples
+  if((numSamples % 2) == 0){  // at 62.5kSPS about 75% CPU load (excluding the Comb branch)
+#ifdef IQ_MOD
+    ADMUX = 1 | (1 << REFS1) | (1 << REFS0); // prepare next Q conversion, 1v1 ref enabled
 #else
-  uint8_t low  = ADCL;                 // ADC sample 10-bits analog input, first ADCL, then ADCH
-  uint8_t high = ADCH;  
-  ADCSRA |= (1 << ADSC); // start ADC conversion (triggers ADC interrupt)
+    ADMUX = 2 | (1 << REFS0); // prepare next Q conversion (use dummy)
 #endif
-  int16_t adc = ((high << 8) | low) - 512;
+    ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
+    int16_t adc = (ADCL | (ADCH << 8)) - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
 
-  static int16_t dc;
-  dc += (adc - dc) / 2;
-  int16_t ac = adc - dc;     // DC decoupling
+    // Correct I/Q sample delay by means of linear interpolation
+    static int16_t prev_adc;
+    int16_t corr_adc = (prev_adc + adc) / 2;
+    prev_adc = adc;
 
-  // Decimating 2nd Order CIC filter
-  #define R 8  // Rate change from 62.5kSPS to 7812.5SPS, providing 18dB gain
-  static int16_t zi1, zi2, zd1, zd2;
-  zi2 = zi1 + zi2;  // Integrator section
-  zi1 = ac + zi1;
-  if((numSamples % R) == 0){
-    int16_t d1 = zi2 - zd1;  // Comb section
-    ac = d1 - zd2;
-    zd2 = d1;
-    zd1 = zi2;
-    
-    if(mode == CW) ac = filt_cwn(ac /* *64 */ * 4 );
-    else ac = ac >> drive; //ac = agc(ac);
-    
-    ac=min(max(ac, -128), 127);  // clip
-    OCR1AL = ac + 128;
+    static int16_t dc;
+    dc += (corr_adc - dc) / 2;
+    int16_t ac = corr_adc - dc;    // DC decoupling
+
+    static int16_t zi1, zi2, zd1, zd2;
+    zi2 = zi1 + zi2;          // Integrator section
+    zi1 = ac + zi1;
+    if((numSamples % (R*2)) == 0){  // I-Comb branch: about 7% CPU load
+      int16_t d1 = zi2 - zd1; // Comb section
+      static int16_t v[16];
+      /* i = */ v[15] = d1 - zd2;
+      zd2 = d1;
+      zd1 = zi2;
+
+      for(uint8_t j = 0; j != 15; j++) v[j] = v[j + 1];
+      i = v[7];  // Delay to match Hilbert transform on Q branch
+
+      // post processing I and Q results
+      ac = i + q;
+      if(mode == CW) ac = filt_cwn(ac /* *64 */ * 4 );
+      else ac = ac >> drive; //ac = agc(ac);
+      i=min(max(ac, -128), 127);  // clip
+      OCR1AL = ac + 128;
+    }
+  } 
+  // process Q for odd samples
+  else {
+#ifdef IQ_MOD
+    ADMUX = 0 | (1 << REFS1) | (1 << REFS0); // prepare next I conversion, 1v1 ref enabled
+#else
+    ADMUX = 0 | (1 << REFS0); // prepare next I conversion
+#endif
+    ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
+    int16_t adc = (ADCL | (ADCH << 8)) - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  
+    static int16_t dc;
+    dc += (adc - dc) / 2;
+    int16_t ac = adc - dc;    // DC decoupling
+  
+    static int16_t zi1, zi2, zd1, zd2;
+    zi2 = zi1 + zi2;          // Integrator section
+    zi1 = ac + zi1;
+    if((numSamples % (R*2)) == ((R*2)-1) ){  // Q-Comb branch: about 17% CPU load - executed just 1 sample before executing I-Comb (and final) branch
+      int16_t d1 = zi2 - zd1; // Comb section
+      static int16_t v[16];
+      /* q = */ v[15] = d1 - zd2;
+      zd2 = d1;
+      zd1 = zi2;
+
+      for(uint8_t j = 0; j != 15; j++) v[j] = v[j + 1];
+      q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+    }
   }
   numSamples++;
 }
@@ -776,9 +814,9 @@ void adc_stop()
   ADMUX |= (1 << REFS0);  // restore reference voltage AREF (5V)
 }
 
-static uint8_t bandval = 2; //4
-#define N_BANDS 7 //13
-uint32_t band[] = { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };  //{ 472000, 1840000, 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000 };
+static uint8_t bandval = 4; //2
+#define N_BANDS 14 //7
+uint32_t band[] = { 472000, 1840000, 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000, 144125000 };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 volatile int8_t stepsize = STEP_1k;
 
@@ -799,7 +837,7 @@ void encoder_vect(int8_t sign)
   }
   if(stepval < STEP_100) freq %= 1000; // when tuned and stepsize > 100Hz then forget fine-tuning details
   freq += sign * stepval;
-  freq = max(1, min(99999999, freq));
+  //freq = max(1, min(99999999, freq));
   change = true;
 }
 
@@ -1112,12 +1150,13 @@ float getTemp()
   return (float)WDTmicrosTime * 0.0026 - 3668.1;  //calibrate here
 }
 */
-//#define SAFE  1
+#define SAFE  1
 
 void setup()
 {
 #ifdef SAFE
   // Benchmark ADC_vect() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
+  numSamples = 0;
   uint32_t t0, t1;
   t0 = micros();
   TIMER2_COMPB_vect();
