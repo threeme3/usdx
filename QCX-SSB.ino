@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01h"
+#define VERSION   "1.01i"
 
 // QCX pin defintion
 #define LCD_D4  0
@@ -381,12 +381,11 @@ void si5351_powerDown()
   si5351_SendRegister(SI_CLK_OE, 0b11111111); // Disable all CLK outputs
 }
 
-const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
 enum mode_t { LSB, USB, CW, AM, FM };
 volatile uint8_t mode = USB;
+const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
 volatile bool change = true;
 volatile int32_t freq = 7074000;
-
 volatile bool ptt = false;
 volatile uint8_t tx = 0;
 volatile bool vox_enable = false;
@@ -394,6 +393,12 @@ enum dsp_cap_t { ANALOG, DSP, SDR };
 static uint8_t dsp_cap = 0;
 static uint8_t ssb_cap = 0;
 volatile bool att_enable = false;
+//#define PROFILING  1
+#ifdef PROFILING
+volatile uint32_t numSamples = 0;
+#else
+volatile uint8_t numSamples = 0;
+#endif
 
 inline void txen(bool en)
 {
@@ -491,12 +496,6 @@ inline int16_t ssb(int16_t in)
     return dp * (-F_SAMP_TX / _UA);
 }
 
-//#define PROFILING  1
-#ifdef PROFILING
-volatile uint32_t numSamples = 0;
-#else
-volatile uint16_t numSamples = 0;
-#endif
 #define MIC_ATTEN  0  // 0*6dB attenuation (note that the LSB bits are quite noisy)
 
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
@@ -577,42 +576,23 @@ char cw(int16_t in)
   return ch;
 }
 
-inline int16_t filt_cwn(int16_t v)
-{ // 2nd Order Bandpass 650-840Hz (SR=8kHz) IIR in Direct Form I
-  float zx0 = v;
-
-  static float za1,za2;
-  static float zb1,zb2;
-  zx0=(zx0+-2.0*za1+za2+21.0*zb1+-11.6*zb2)*5.0/64.0;  //zx0=(5.0*zx0+-10.0*za1+5.0*za2+105.0*zb1+-58.0*zb2)/64.0;
-  za2=za1;
-  za1=v;
-  zb2=zb1;
-  zb1=zx0;
-
-  static float zc1,zc2;
-  zx0=(zx0+2.0*zb1+zb2+97.0*zc1+-57.0*zc2)/64.0;
-  zc2=zc1;
-  zc1=zx0;
-
-  return zx0;
-}
-
 static float gain = 1.0;
 
 static char out[] = "                ";
 volatile bool cw_event = false;
 
-volatile uint8_t volume = 8;
 //#define F_SAMP_RX 156250
 //#define F_SAMP_RX 78125
-//#define F_SAMP_RX 62500  //overrun; sample rate of 55500 can be obtained
-#define F_SAMP_RX 52083
+#define F_SAMP_RX 62500  //overrun; sample rate of 55500 can be obtained
+//#define F_SAMP_RX 52083
 //#define F_SAMP_RX 44643
 //#define F_SAMP_RX 39062
 //#define F_SAMP_RX 34722
 //#define F_SAMP_RX 31250
 //#define F_SAMP_RX 28409
 #define F_ADC_CONV 192307
+
+volatile uint8_t volume = 8;
 
 inline int16_t agc(int16_t in)
 {  // source: Lyons Understanding Digital Signal Processing 3rd edition 13.30
@@ -626,245 +606,204 @@ inline int16_t agc(int16_t in)
 
 #define JUNK  1
 #ifdef JUNK
-// This is here only for historical purpose and because of code alignment (makes sdr_rx faster)
-void dsp_rx()
-{ // jitter dependent things first
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
-  int16_t adc = (ADCL | (ADCH << 8)) - 512; // ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
-
-  static int16_t dc;
-  dc += (adc - dc) / 2;
-  int16_t ac = adc - dc;     // DC decoupling
-//#define RX_SIMPLE  1
-#ifdef RX_SIMPLE
-  ac = agc(ac);
-  if(mode == CW) ac = filt_cwn(ac /* *64 */ * 16 );
-  OCR1AL = ac + 128;
-#endif
-
-#define RX_CIC  1
-#ifdef RX_CIC
-  // Decimating 2nd Order CIC filter
-  #define R 8  // Rate change from 62.5kSPS to 7812.5SPS
-  static int16_t zi1, zi2, zd1, zd2;
-  zi2 = zi1 + zi2;  // Integrator section
-  zi1 = ac + zi1;
-  if((numSamples % R) == 0){
-    int16_t d1 = zi2 - zd1;  // Comb section
-    ac = d1 - zd2;
-    zd2 = d1;
-    zd1 = zi2;
-    
-    if(mode == CW) filt_cwn(ac >> (16-volume));//filt_cwn(ac * volume/256 ); //ac = filt_cwn(ac /* *64 */ * 4 );
-    else ac = (volume) ? ac >> (16-volume) : 0;//ac * volume/256;//ac >> drive; //ac >> 3; //ac = agc(ac);
-    
-    ac=min(max(ac, -128), 127);  // clip
-    OCR1AL = ac + 128;
-  }
-#endif
-//#define CW_DECODER  1
-#ifdef CW_DECODER
-  char ch = cw(adc >> 0);
-  if(ch){
-    for(int i=0; i!=15;i++) out[i]=out[i+1];
-    out[15] = ch;
-    cw_event = true;
-  }
-#endif
-  numSamples++;
+// Having this function included here and referenced makes sdr_rx faster 15% faster (normally including filt_cwn() in sdr_rx() makes the thing slower for an unknown reason)
+void junk()
+{ 
+    filt_cwn(0);
 }
 #endif
+
+inline int16_t filt_cwn(int16_t v)
+{ // 2nd Order Bandpass 650-840Hz (SR=8kHz) IIR in Direct Form I
+
+  int16_t zx0 = v;
+
+  static int16_t za1,za2;
+  static int16_t zb1,zb2;
+  zx0=(5L*(zx0-2*za1+za2)+105L*zb1-58L*zb2)/64L;  //zx0=(zx0+-2*za1+za2+21*zb1+-12*zb2); zx0=zx0/16+zx0/64;  //zx0=(5.0*zx0+-10.0*za1+5.0*za2+105.0*zb1+-58.0*zb2)/64.0;
+  za2=za1;
+  za1=v;
+  zb2=zb1;
+  zb1=zx0;
+
+  static int16_t zc1,zc2;
+  zx0=((int32_t)(zx0+2*zb1+zb2)+97L*zc1-57L*zc2)/64L;  //zx0=(zx0+2*zb1+zb2)/64 + zc1*3/2 - zc2*9/10; //zx0=(zx0+2.0*zb1+zb2+97.0*zc1+-57.0*zc2)/64.0;
+  zc2=zc1;
+  zc1=zx0;
+
+  return zx0;
+}
 
 /*
 iterate through modes always from begin, skipping the current one
 code definitions and re-use for comb, integrator, dc decoupling, arctan
 add sdr_rx capability to skip ADCMUX changing and Q processing, (while oversampling I branch?)
 in func_ptr for different mode types
-agc based on rms128
+agc based on rms256
 skip adc processing while smeter lcd update?
 vox by sampling mic port in sdr_rx?
 
  */
 
-volatile uint8_t admuxi, admuxq;
-volatile uint32_t rms128 = 0;
-//#define ADC_NR  1       // Stop CPU at ADC conversion, reduces noise but costs 30% CPU performance when ADC prescaler is 8
+typedef void (*func_t)(void);
+#ifdef JUNK
+volatile func_t func_ptr = junk;
+#else
+volatile func_t func_ptr;
+#endif
 
-// sdr_rx() is sampling the ADC0 (I) and ADC1 (Q) inputs in alternating fashion, and generating a PWM output at OC1A. For both 
-// I and Q samples, a DC-decoupling and CIC down-sampling is performed by integrating the samples and for each R samples performing 
-// a comb and post-processing step where the I and Q results are demodulated into a single signal which is CIC upsampled again via 
-// a comb; the upsampled signal is integrated and ouput via PWM.
-// 
-// The ADC sampling is governed by Timer2 compare match A interrupt. When the rate is too high for the CPU, sdr_rx() is still performing
-// well: the integration of each sample takes longer than the sample-period, the next interrupt is scheduled later (once the current interrupt 
-// finishes) or is missed due to a delay that has been build-up and wwhere an interrupt happens while an interrupt flag was already 
-// set. As a result, the actual sample rate is a fraction of the timer rate, and the CPU is freed for the moments an interrupt 
-// is missed. Since the time for sampling and integrating is roughly the same processing time for both the I and Q channel, 
-// a constant sample-rate is obtained when next interrupts are delayed and scheduled. Missing samples however disturbs the 
-// continuous sampling, and therefore cause a (random) phase shift errors for on the next series of samples. But, since these phase-shift 
-// are instantly and and effective on both the I/Q inputs and PWM output, the resulting output do contain a constant average of 
-// these phase-shift errors, and hence are not harmful. Hence, predicted sample rate = F_SAMP_RX / CPU_load_rx_avg
-// [1] ATMEGA328P datasheet, chapter 6.7, "Reset and Interrupt Handling". Current performance figures:
-// CPU load figures for numSamples[4..12]={250, 125, 125, 125, 125, 125, 125, 225} at R=4, Fs=62.5k, DUC on
-// CPU load figures for numSamples[4..12]={187, 104, 104, 104, 104, 104, 104, 187} at R=4, Fs=52k, DUC on
+volatile uint32_t absavg256 = 0;
+volatile uint8_t admux[2];
+volatile bool _init;
+volatile int16_t ocomb, i, q, qh;
+#undef  R  // Decimating 2nd Order CIC filter
+#define R 4  // Rate change from 52.083/2 kSPS to 6510.4SPS, providing 12dB gain
 
 void sdr_rx()
 {
-  static int16_t ozi1, ozi2, ozd1, ozd2, ocomb;
-  static int16_t i, q, qh;
-  #undef  R  // Decimating 2nd Order CIC filter
-  //#define R 8  // Rate change from 62.5/2 kSPS to 3906.25SPS, providing 18dB gain
-  //#define R 4  // Rate change from 62.5/2 kSPS to 7812.5SPS, providing 12dB gain
-  #define R 4  // Rate change from 52.083/2 kSPS to 6510.4SPS, providing 12dB gain
+  static int16_t dc, zi1, zi2, zd1, zd2;
 
-  // process I for even samples
-  if((numSamples % 2) == 0){  // [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
-    ADMUX = admuxq; //1 | (1 << REFS1) | (1 << REFS0); // prepare next Q conversion, 1v1 ref enabled
-#ifdef ADC_NR
-    interrupts();
-    sleep_cpu();
-//    noInterrupts();
-#else
-    ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
-#endif
-    int16_t adc = (ADCL | (ADCH << 8)) - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  // process I for even samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
+  ADMUX = admux[1];  // set MUX for next conversion
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion
+  func_ptr = sdr_rx_2;    // processing function for next conversion
+  int16_t adc = (ADCL | (ADCH << 8)) - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  sdr_rx_common();
 
-    // Correct I/Q sample delay by means of linear interpolation
-    static int16_t prev_adc;
-    int16_t corr_adc = (prev_adc + adc) / 2;
-    prev_adc = adc;
+  // Only for I: correct I/Q sample delay by means of linear interpolation
+  static int16_t prev_adc;
+  int16_t corr_adc = (prev_adc + adc) / 2;
+  prev_adc = adc;
+  adc = corr_adc;
 
-    static int16_t dc;
-    dc += (corr_adc - dc) / 2;
-    int16_t ac = corr_adc - dc;    // DC decoupling
+  dc += (adc - dc) / 2;
+  int16_t ac = adc - dc;     // DC decoupling
+  zi2 = zi1 + zi2;           // Integrator section
+  zi1 = ac + zi1;
 
-    static int16_t zi1, zi2, zd1, zd2;
-    zi2 = zi1 + zi2;          // Integrator section
-    zi1 = ac + zi1;
-    if((numSamples % (R*2)) == 0){  // I-Comb branch [175% CPU@R=4;Fs=62.5k]
-      int16_t d1 = zi2 - zd1; // Comb section
-      static int16_t v[9];
-      v[8] = d1 - zd2;
-      zd2 = d1;
-      zd1 = zi2;
+  //if((numSamples % (R*2)) == 0){
+  if(numSamples == 0){
+    int16_t d1 = zi2 - zd1;  // Comb section
+    int16_t d2 = d1 - zd2;
+    zd2 = d1;
+    zd1 = zi2;
 
-      for(uint8_t j = 0; j != 8; j++) v[j] = v[j + 1]; // (25%CPU)
-      i = v[0];  // Delay to match Hilbert transform on Q branch
+    // post processing I and Q results
+    static int16_t v[9];
+    v[8] = d2;
+    
+    //for(uint8_t j = 0; j != 8; j++) v[j] = v[j + 1]; // (25%CPU)
+    v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7]; v[7] = v[8];
+    i = v[0];  // Delay to match Hilbert transform on Q branch
 
-      //i = i>>(drive-4);
-      //q = q>>(drive-4);
+    int16_t ac = i + qh;
+    static uint8_t absavg256cnt;
+    if(!(absavg256cnt--)){ absavg256 = 0; } else absavg256 += abs(ac);
 
-      // post processing I and Q results
-      ac = i + qh;
-      if((numSamples % (R*2*128)) == 0) rms128 = 0; else rms128 += abs(ac);
-
-      if(mode == AM) { // (12%CPU for the mode selection etc)
-        { static int16_t dc;
-          dc += (i - dc) / 2;
-          i = i - dc; }  // DC decoupling
-        { static int16_t dc;
-          dc += (q - dc) / 2;
-          q = q - dc; }  // DC decoupling
-        ac = magn(i, q);  //(25%CPU)
-        { static int16_t dc;
-          dc += (ac - dc) / 2;
-          ac = ac - dc; }  // DC decoupling
-      } else if(mode == FM){
-        static int16_t z1;
-        int16_t z0 = arctan3(q, i);
-        ac = z0 - z1;
-        z1 = z0;
-      }  // needs: p.12 https://www.veron.nl/wp-content/uploads/2014/01/FmDemodulator.pdf
-      else { ; }  // USB, LSB, CW
-      if(1)//(mode != LSB && mode != USB)
-        ac >>= (16-volume);
-      else 
-        ac = agc(ac);
-      if(mode == CW){
-        ac = filt_cwn(ac << 4);
+    if(mode == AM) { // (12%CPU for the mode selection etc)
+      { static int16_t dc;
+        dc += (i - dc) / 2;
+        i = i - dc; }  // DC decoupling
+      { static int16_t dc;
+        dc += (q - dc) / 2;
+        q = q - dc; }  // DC decoupling
+      ac = magn(i, q);  //(25%CPU)
+      { static int16_t dc;
+        dc += (ac - dc) / 2;
+        ac = ac - dc; }  // DC decoupling
+    } else if(mode == FM){
+      static int16_t z1;
+      int16_t z0 = arctan3(q, i);
+      ac = z0 - z1; // Differentiator
+      z1 = z0;
+      //ac = ac * (F_SAMP_RX/R) / _UA;  // =ac*3.5 -> skip
+    }  // needs: p.12 https://www.veron.nl/wp-content/uploads/2014/01/FmDemodulator.pdf
+    else { ; }  // USB, LSB, CW
+    if(1)//(mode != LSB && mode != USB)
+      ac >>= (16-volume);
+    else 
+      ac = agc(ac);
+    if(mode == CW){
+      ac = filt_cwn(ac << 6);
 //#define CW_DECODER  1
 #ifdef CW_DECODER
-        char ch = cw(ac >> 0);
-        if(ch){
-          for(int i=0; i!=15;i++) out[i]=out[i+1];
-          out[15] = ch;
-          cw_event = true;
-        }
-#endif
+      char ch = cw(ac >> 0);
+      if(ch){
+        for(int i=0; i!=15;i++) out[i]=out[i+1];
+        out[15] = ch;
+        cw_event = true;
       }
-      //static int16_t dc;
-      //dc += (ac - dc) / 2;
-      //ac = ac - dc;    // DC decoupling
-
-#define DUC  1
-#ifdef DUC
-      // Output stage
-      if(numSamples == 0){ ozd1= 0; ozd2 = 0; ozi1 = 0; ozi2 = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
-      int16_t od1 = ac - ozd1; // Comb section
-      ocomb = od1 - ozd2;
-      ozd2 = od1;
-      ozd1 = ac;
-#else
-#ifndef PROFILING
-      OCR1AL = min(max(ac + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
-#endif
 #endif
     }
-  } 
-  // process Q for odd samples
-  else {  // [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
-    ADMUX = admuxi; //0 | (1 << REFS1) | (1 << REFS0); // prepare next I conversion, 1v1 ref enabled
-#ifdef ADC_NR
-    interrupts();
-    sleep_cpu();
-#else
-    ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
-#endif
-    int16_t adc = (ADCL | (ADCH << 8)) - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+    //static int16_t dc;
+    //dc += (ac - dc) / 2;
+    //ac = ac - dc;    // DC decoupling
 
-    static int16_t dc;
-    dc += (adc - dc) / 2;
-    int16_t ac = adc - dc;    // DC decoupling
-  
-    static int16_t zi1, zi2, zd1, zd2;
-    zi2 = zi1 + zi2;          // Integrator section
-    zi1 = ac + zi1;
-    if((numSamples % (R*2)) == ((R*2)-1) ){  // Q-Comb branch: [125% CPU@R=4;Fs=62.5k] - executed just 1 sample before executing I-Comb (and final) branch
-      //interrupts();
-      int16_t d1 = zi2 - zd1; // Comb section
-      static int16_t v[16];
-      v[15] = d1 - zd2;
-      zd2 = d1;
-      zd1 = zi2;
-
-      for(uint8_t j = 0; j != 15; j++) v[j] = v[j + 1];
-      q = v[7];
-      qh = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
-    }
+    // Output stage
+    static int16_t ozd1, ozd2;
+    if(_init){ ozd1= 0; ozd2 = 0; _init = false; } // hack: on first sample init accumlators of further stages (to prevent instability)
+    int16_t od1 = ac - ozd1; // Comb section
+    ocomb = od1 - ozd2;
+    ozd2 = od1;
+    ozd1 = ac;
   }
-  
-#ifdef DUC
+  numSamples++;
+}
+
+void sdr_rx_2()
+{
+  static int16_t dc, zi1, zi2, zd1, zd2;
+
+  // process Q for odd samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
+  ADMUX = admux[0];  // set MUX for next conversion
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion
+  func_ptr = sdr_rx;    // processing function for next conversion
+  int16_t adc = (ADCL | (ADCH << 8)) - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+
+  dc += (adc - dc) / 2;
+  int16_t ac = adc - dc;     // DC decoupling
+  zi2 = zi1 + zi2;           // Integrator section
+  zi1 = ac + zi1;
+
+  //if((numSamples % (R*2)) == ((R*2)-1) ){
+  if(numSamples == (R*2)-1){
+    int16_t d1 = zi2 - zd1;  // Comb section
+    int16_t d2 = d1 - zd2;
+    zd2 = d1;
+    zd1 = zi2;
+
+    // Process Q samples
+    static int16_t v[16];
+    v[15] = d2;
+
+    for(uint8_t j = 0; j != 15; j++) v[j] = v[j + 1];
+    q = v[7];
+    qh = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+#ifndef PROFILING
+    numSamples = 0;
+  } else
+    numSamples++;
+#else
+  }
+  numSamples++;
+#endif
+}
+
+inline void sdr_rx_common()
+{
+  static int16_t ozi1, ozi2;
+  if(_init){ ozi1 = 0; ozi2 = 0; } // hack
   // Output stage [25% CPU@R=4;Fs=62.5k]
   ozi2 = ozi1 + ozi2;          // Integrator section 
   ozi1 = ocomb + ozi1;
 #ifndef PROFILING
   if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
-  numSamples++;
-#endif
-#endif
-  //
+#endif  
 }
-
-
-typedef void (*func_t)(void);
-static volatile func_t func_ptr = dsp_rx;  //referencing dsp_rx means it is used, and because it is there sdr_rx runs faster!
 
 ISR(TIMER2_COMPA_vect)  // Timer2 COMPA interrupt
 {
   func_ptr();
-#ifdef PROFILING
-  numSamples++;
-#endif
 }
 
 void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
@@ -1039,30 +978,11 @@ void customDelay(uint32_t _micros)  //_micros=100000 is 132052us delay
   uint32_t i; for(i = 0; i != _micros * 3; i++) wdt_reset();
 }
 
-uint32_t sample_amp(uint8_t pin, uint16_t osr)
+float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
 {
-  uint16_t avg = 1024 / 2;
-  uint32_t rms = 0;
-  uint16_t i;
-  for(i = 0; i != 16; i++){
-    uint16_t adc = analogRead(pin);
-    avg = (avg + adc) / 2;
-  }
-  for(i = 0; i != osr; i++){ // 128 overampling is 42dB gain => with 10-bit ADC resulting in a total of 102dB DR
-    uint16_t adc = analogRead(pin);
-    avg = (avg + adc) / 2;  // average
-    rms += ((adc > avg) ? 1 : -1) * (adc - avg);  // rectify based
-    wdt_reset();
-  }
-  return rms;
-}
-
-float smeter(float ref = 0.0)
-{
-  float rms;
-  if(dsp_cap == ANALOG) rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0 * 120.0 / 1.750); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  if(dsp_cap == DSP) rms = (float)rms128 * 5.0 / (1024.0 * 128.0 * 100.0 * 120.0 / 1.750); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  if(dsp_cap == SDR) rms = (float)rms128 * 1.1 / (1024.0 * (float)R * 128.0 * 100.0 * 50.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  float rms = absavg256 / 256; //sqrt(256.0);
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  else               rms = (float)rms * 5.0 / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
   static float dbm_max;
   dbm_max = max(dbm_max, dbm);
@@ -1081,6 +1001,24 @@ float smeter(float ref = 0.0)
   return dbm;
 }
 
+uint32_t sample_amp(uint8_t pin, uint16_t osr)
+{
+  uint16_t avg = 1024 / 2;
+  uint32_t rms = 0;
+  uint16_t i;
+  for(i = 0; i != 16; i++){
+    uint16_t adc = analogRead(pin);
+    avg = (avg + adc) / 2;
+  }
+  for(i = 0; i != osr; i++){ // 128 overampling is 42dB gain => with 10-bit ADC resulting in a total of 102dB DR
+    uint16_t adc = analogRead(pin);
+    avg = (avg + adc) / 2;  // average
+    rms += ((adc > avg) ? 1 : -1) * (adc - avg);  // rectify based
+    wdt_reset();
+  }
+  return rms;
+}
+
 float dbmeter(float ref = 0.0)
 {
   float rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
@@ -1088,6 +1026,75 @@ float dbmeter(float ref = 0.0)
   lcd.setCursor(9, 0); lcd.print(dbm); lcd.print("dB    ");
   delay(300);
   return dbm;
+}
+
+// RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
+void calibrate_iq()
+{
+  lcd.setCursor(9, 0); lcd.print(blanks);
+  digitalWrite(SIG_OUT, true); // loopback on
+  si5351_prev_pll_freq = 0;  //enforce PLL reset
+  si5351_freq(freq, 0, 90);  // RX in USB
+  float dbc;
+  si5351_alt_clk2(freq + 700);
+  dbc = dbmeter();
+  si5351_alt_clk2(freq - 700);
+  lcd.setCursor(0, 1); lcd.print("I-Q bal. (700 Hz)"); lcd.print(blanks);
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  si5351_alt_clk2(freq + 600);
+  dbc = dbmeter();
+  si5351_alt_clk2(freq - 600);
+  lcd.setCursor(0, 1); lcd.print("Phase Lo (600 Hz)"); lcd.print(blanks);
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  si5351_alt_clk2(freq + 800);
+  dbc = dbmeter();
+  si5351_alt_clk2(freq - 800);
+  lcd.setCursor(0, 1); lcd.print("Phase Hi (800 Hz)"); lcd.print(blanks);
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+/*
+  for(uint32_t offset = 0; offset < 3000; offset += 100){
+    si5351_alt_clk2(freq + offset);
+    dbc = dbmeter();
+    si5351_alt_clk2(freq - offset);
+    lcd.setCursor(0, 1); lcd.print(offset); lcd.print(" Hz"); lcd.print(blanks);
+    wdt_reset(); dbmeter(dbc); delay(500); wdt_reset(); 
+  }
+*/
+  lcd.setCursor(9, 0); lcd.print(blanks);  // cleanup dbmeter
+  digitalWrite(SIG_OUT, false); // loopback off
+  si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  change = true;  //restore original frequency setting
+
+}
+
+void powermeter()
+{
+  lcd.setCursor(9, 0); lcd.print(blanks);
+  si5351_prev_pll_freq = 0;  //enforce PLL reset
+  si5351_freq(freq, 0, 90);  // RX in USB
+  si5351_alt_clk2(freq + 1000); // si5351_freq_clk2(freq + 1000);
+  si5351_SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
+  digitalWrite(KEY_OUT, HIGH); //OCR1BL = 0xFF;
+  digitalWrite(RX, LOW);  // TX
+
+  //if(dsp_cap != SDR){ adc_start(1, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX; }
+  wdt_reset(); delay(100); 
+
+  float rms;
+  rms = ((float)sample_amp(AUDIO2, 128)) * 5.0 / (1024.0 * 128.0 * 100.0 / 10000.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * rx/tx switch attenuation]
+  //if(dsp_cap == SDR) rms = (float)rms256 * 1.1 / (1024.0 * (float)R * 256.0 * 100.0 * 50.0 / 10000);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  //else               rms = (float)rms256 * 5.0 / (1024.0 * (float)R * 256.0 * 100.0 / 10000);
+  float w = (rms * rms) / 50.0;
+  float dbm = 10.0 * log10(w) + 30.0; //from rmsV to dBm at 50R
+
+  lcd.setCursor(9, 0); lcd.print("  "); lcd.print(w); lcd.print("W   ");
+  //lcd.setCursor(9, 0); lcd.print(" +"); lcd.print((int16_t)dbm ); lcd.print("dBm   ");
+
+  digitalWrite(KEY_OUT, LOW); //OCR1BL = 0x00;
+  digitalWrite(RX, HIGH);  // RX
+  si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  change = true;  //restore original frequency setting
+  delay(1000);
 }
 
 void test_tx_amp()
@@ -1170,88 +1177,25 @@ void calibrate_predistortion()
   change = true;  //restore original frequency setting
 }
 
-// RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
-void calibrate_iq()
-{
-  lcd.setCursor(9, 0); lcd.print(blanks);
-  digitalWrite(SIG_OUT, true); // loopback on
-  si5351_prev_pll_freq = 0;  //enforce PLL reset
-  si5351_freq(freq, 0, 90);  // RX in USB
-  float dbc;
-  si5351_alt_clk2(freq + 700);
-  dbc = dbmeter();
-  si5351_alt_clk2(freq - 700);
-  lcd.setCursor(0, 1); lcd.print("I-Q bal. (700 Hz)"); lcd.print(blanks);
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-  si5351_alt_clk2(freq + 600);
-  dbc = dbmeter();
-  si5351_alt_clk2(freq - 600);
-  lcd.setCursor(0, 1); lcd.print("Phase Lo (600 Hz)"); lcd.print(blanks);
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-  si5351_alt_clk2(freq + 800);
-  dbc = dbmeter();
-  si5351_alt_clk2(freq - 800);
-  lcd.setCursor(0, 1); lcd.print("Phase Hi (800 Hz)"); lcd.print(blanks);
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-/*
-  for(uint32_t offset = 0; offset < 3000; offset += 100){
-    si5351_alt_clk2(freq + offset);
-    dbc = dbmeter();
-    si5351_alt_clk2(freq - offset);
-    lcd.setCursor(0, 1); lcd.print(offset); lcd.print(" Hz"); lcd.print(blanks);
-    wdt_reset(); dbmeter(dbc); delay(500); wdt_reset(); 
-  }
-*/
-  lcd.setCursor(9, 0); lcd.print(blanks);  // cleanup dbmeter
-  digitalWrite(SIG_OUT, false); // loopback off
-  si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-  change = true;  //restore original frequency setting
-
-}
-
-void powermeter()
-{
-  lcd.setCursor(9, 0); lcd.print(blanks);
-  si5351_prev_pll_freq = 0;  //enforce PLL reset
-  si5351_freq(freq, 0, 90);  // RX in USB
-  si5351_alt_clk2(freq + 1000); // si5351_freq_clk2(freq + 1000);
-  si5351_SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
-  digitalWrite(KEY_OUT, HIGH); //OCR1BL = 0xFF;
-  digitalWrite(RX, LOW);  // TX
-  delay(100);
-
-  float rms = ((float)sample_amp(AUDIO2, 128)) * 5.0 / (1024.0 * 128.0 * 100.0 * 50.0 / 100000.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * rx/tx switch attenuation]
-  float dbm = 10.0 * log10((rms * rms) / 50.0) + 30.0; //from rmsV to dBm at 50R
-
-  lcd.setCursor(9, 0); lcd.print(" +"); lcd.print((int16_t)dbm); lcd.print("dBm   ");
-
-  digitalWrite(KEY_OUT, LOW); //OCR1BL = 0x00;
-  digitalWrite(RX, HIGH);  // RX
-  si5351_SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-  change = true;  //restore original frequency setting
-  delay(1000);
-}
-
 void start_rx()
 {
 //if(!vox_enable) txen(false);
   timer2_stop();
   timer1_stop();
   adc_stop();
-  if(dsp_cap){
-    tx = 1;
-    func_ptr = sdr_rx;  //enable RX DSP/SDR
-    numSamples = 0;
-    if(dsp_cap == SDR){
-      adc_start(0, true, F_ADC_CONV); admuxi = ADMUX;
-      adc_start(1, true, F_ADC_CONV); admuxq = ADMUX;
-      timer2_start(F_SAMP_RX);
-      timer1_start(F_SAMP_RX);
-    } else { // ANALOG, DSP
-      adc_start(0, false, F_ADC_CONV); admuxi = ADMUX; admuxq = ADMUX;
-      timer2_start(F_SAMP_RX);
-      timer1_start(F_SAMP_RX);
-    }
+  tx = 1;  // transit from TX to RX
+  _init = true;
+  func_ptr = sdr_rx;  //enable RX DSP/SDR
+  numSamples = 0;
+  if(dsp_cap == SDR){
+    adc_start(0, true, F_ADC_CONV); admux[0] = ADMUX;
+    adc_start(1, true, F_ADC_CONV); admux[1] = ADMUX;
+    timer2_start(F_SAMP_RX);
+    timer1_start(F_SAMP_RX);
+  } else { // ANALOG, DSP
+    adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
+    timer2_start(F_SAMP_RX);
+    timer1_start(F_SAMP_RX);
   }
 }
 
@@ -1260,7 +1204,8 @@ void start_tx()
   timer2_stop();
   timer1_stop();
   adc_stop();  //disable RX DSP
-  tx = 0;
+  tx = 0;  // transit from RX to TX
+  _init = true;
   func_ptr = dsp_tx;
   numSamples = 0;
   amp = 0;  // initialize
@@ -1286,9 +1231,9 @@ int analogSafeRead(uint8_t pin)
   return val;
 }
 
-static uint8_t bandval = 4; //2
-#define N_BANDS 14 //7
-uint32_t band[] = { 472000, 1840000, 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000, 144125000 };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
+static uint8_t bandval = 2;
+#define N_BANDS 11
+uint32_t band[] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000/*, 144125000*/ };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 int32_t stepsizes[] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
 volatile int8_t stepsize = STEP_1k;
@@ -1362,35 +1307,6 @@ void powerDown()
   resetFunc();
 }
 
-/*
-volatile boolean WDTalarm = false;
-ISR(WDT_vect)
-{
-  wdt_disable();  // disable watchdog so the system does not restart
-  WDTalarm = true;  // flag the event
-}
-float getTemp()
-{
-  WDTalarm = false;
-  // Set the Watchdog timer                    from: https://www.gammon.com.au/power
-  byte interval = 0b000110; // 1s=0b000110,  2s=0b000111, 4s=0b100000, 8s=0b10000
-  //64ms= 0b000010, 128ms = 0b000011, 256ms= 0b000100, 512ms= 0b000101
-  noInterrupts ();
-  MCUSR = 0;
-  WDTCSR |= 0b00011000;    // set WDCE, WDE
-  WDTCSR = 0b01000000 | interval;    // set WDIE & delay interval
-  wdt_reset();  // pat the dog
-  interrupts ();
-  unsigned long startTime = micros();
-  while(!WDTalarm)  {    //sleep while waiting for the WDT
-    set_sleep_mode (SLEEP_MODE_IDLE);
-    noInterrupts ();  sleep_enable();  interrupts ();  sleep_cpu ();
-    sleep_disable();  //processor starts here when any interrupt occurs
-  }
-  unsigned long WDTmicrosTime = micros() - startTime; // this is your measurement!
-  return (float)WDTmicrosTime * 0.0026 - 3668.1;  //calibrate here
-}
-*/
 #define SAFE  1
 
 void setup()
@@ -1442,10 +1358,6 @@ void setup()
   lcd.begin(16, 2);
   lcd.createChar(1, font_run);
 
-  //PCICR |= (1 << PCIE0);
-  //PCMSK0 |= (1 << PCINT5) | (1 << PCINT4) | (1 << PCINT3);
-  //interrupts();
-
   // initialize LUT
   //#define C31_IS_INSTALLED  1   // Uncomment this line when C31 is installed (shaping circuit will be driven with analog signal instead of being switched digitally with PWM signal)
 #ifdef C31_IS_INSTALLED // In case of analog driven shaping circuit:
@@ -1488,9 +1400,6 @@ void setup()
   lcd.setCursor(8, 0); lcd.print("R"); lcd.print(VERSION); lcd.print(blanks);
   //lcd.setCursor(0, 0); lcd.print(String("QCX-") +  (String[]){"SSB", "DSP", "SDR" }[dsp_cap] + F(" R") + F(VERSION) + blanks );
 
-  //lcd.setCursor(0, 1); lcd.print("temp="); lcd.print(getTemp()); lcd.print("C");
-  //for(;!digitalRead(BUTTONS);) wdt_reset();
-
 #ifdef SAFE
   // Measure CPU loads
   if(!(load_tx < 100.0))
@@ -1498,17 +1407,23 @@ void setup()
     lcd.setCursor(0, 1); lcd.print("!!CPU_tx="); lcd.print(load_tx); lcd.print("%"); lcd.print(blanks);
     delay(1500); wdt_reset();
   }
-  for(i = 0; i != 8; i++){
-    if(!(load_rx[i] < 100.0))
-    {
-      lcd.setCursor(0, 1); lcd.print("!!CPU_rx"); lcd.print(i); lcd.print("="); lcd.print(load_rx[i]); lcd.print("%"); lcd.print(blanks);
-      delay(1500); wdt_reset();
-    }
+
+  {
+    lcd.setCursor(0, 1); lcd.print("!!CPU_rx"); lcd.print(0); lcd.print("="); lcd.print(load_rx[0]); lcd.print("%"); lcd.print(blanks);
+    delay(1500); wdt_reset();
   }
-  //if(!(load_rx_avg < 100.0))
+  if(!(load_rx_avg < 100.0))
   {
     lcd.setCursor(0, 1); lcd.print("!!CPU_rx"); lcd.print("="); lcd.print(load_rx_avg); lcd.print("%"); lcd.print(blanks);
     delay(1500); wdt_reset();
+    // and specify indivual timings for each of the eight alternating processing functions:
+    for(i = 1; i != 8; i++){
+      if(!(load_rx[i] < 100.0))
+      {
+        lcd.setCursor(0, 1); lcd.print("!!CPU_rx"); lcd.print(i); lcd.print("="); lcd.print(load_rx[i]); lcd.print("%"); lcd.print(blanks);
+        delay(1500); wdt_reset();
+      }
+    }
   }
 
   // Measure VDD (+5V); should be ~5V
@@ -1582,8 +1497,7 @@ void setup()
   }
 #endif
 
-  // Display banner
-  //delay(800); wdt_reset();
+  //delay(800); wdt_reset();  // Display banner
   lcd.setCursor(7, 0); lcd.print("\001"); lcd.print(blanks);
 
   volume = (dsp_cap) ? ((dsp_cap == SDR) ? 8 : 14) : 0;
@@ -1637,13 +1551,15 @@ void loop()
           att_enable = !att_enable;
           lcd.setCursor(0, 1); lcd.print("Attenuate: "); lcd.print(att_enable ? "ON" : "OFF"); lcd.print(blanks);
           txen(false); // submit attenuator setting
+          wdt_reset(); delay(1500); wdt_reset();
+          change = true; // refresh display
         }
         break;
       case BL|DC: powerDown(); break;
       case BL|PL:
         //calibrate_predistortion();
-        //powermeter();
-        test_tx_amp();
+        powermeter();
+        //test_tx_amp();
         break;
       case BL|PT: break;
       case BR|SC:
