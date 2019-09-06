@@ -492,23 +492,6 @@ void dsp_tx()
   numSamples++;
 }
 
-int16_t dsp(int16_t in)
-{
-  static int16_t dc;
-
-  int16_t i, q;
-  uint8_t j;
-  static int16_t v[16];
-  for(j = 0; j != 15; j++) v[j] = v[j + 1];
-
-  dc += (in - dc) / 2;
-  v[15] = in - dc;     // DC decoupling
-
-  i = v[7];
-  q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
-  return abs(i) > abs(q) ? abs(i) + abs(q) / 4 : abs(q) + abs(i) / 4; // approximation of: amp = sqrt(i*i + q*q); error 0.95dB
-}
-
 static int32_t signal;
 static int16_t avg = 0;
 static int16_t maxpk=0;
@@ -517,14 +500,16 @@ static int16_t k1=0;
 static uint8_t sym;
 static int16_t ta=0;
 static char m2c[] = "##ETIANMSURWDKGOHVF#L#PJBXCYZQ##54S3###2##+###J16=/###H#7#G#8#90############?_####\"##.####@###'##-########;!#)#####,####:####";
+static uint8_t nsamp=0;
 
 char cw(int16_t in)
 {
   char ch = 0;
   int i;
-  signal += dsp(in);
+  signal += abs(in);
   #define OSR 64 // (8*FS/1000)
-  if((numSamples % OSR) == 0){   // process every 8 ms
+  if((nsamp % OSR) == 0){   // process every 8 ms
+    nsamp=0;
     if(!signal) return ch;
     signal = signal / OSR;  //normalize
     maxpk = signal > maxpk ? signal : maxpk;
@@ -553,10 +538,9 @@ char cw(int16_t in)
     maxpk = maxpk*99/100 + signal*1/100;
     signal = 0;
   }
+  nsamp++;
   return ch;
 }
-
-static float gain = 1.0;
 
 static char out[] = "                ";
 volatile bool cw_event = false;
@@ -572,15 +556,30 @@ volatile bool cw_event = false;
 #define F_ADC_CONV 192307
 
 volatile uint8_t volume = 8;
+volatile bool agc = true;
+volatile bool nr = false;
 
-inline int16_t agc(int16_t in)
-{  // source: Lyons Understanding Digital Signal Processing 3rd edition 13.30
-  float out = in * gain;
-  //#define ref_level 32 /* 32 */  // average reference level (volume)
-  #define ref_level volume
-  #define alpha 0.0000001 /* very_slow=0.00000005 slow=0.0000001 medium=0.0000005 fast=0.000001 */ // time constant
-  gain = gain + (ref_level * ref_level - (out * out)) * alpha;
+//static uint32_t gain = 1024;
+static int16_t gain = 1024;
+inline int16_t process_agc(int16_t in)
+{
+  //int16_t out = ((uint32_t)(gain) >> 20) * in;
+  //gain = gain + (1024 - abs(out) + 512);
+  int16_t out = (gain >= 1024) ? (gain >> 10) * in : in;
+  //if(gain >= 1024) out = (gain >> 10) * in;  // net gain >= 1
+  //else if(gain >= 16) out = ((gain >> 4) * in) >> 6;  // net gain < 1
+  //else out = (gain * in) >> 10;
+  int16_t accum = (1 - abs(out >> 10));
+  if((INT16_MAX - gain) > accum) gain = gain + accum;
+  if(gain < 1) gain = 1;
   return out;
+}
+
+inline int16_t process_nr(int16_t ac)
+{
+  ac = ac >> (6-abs(ac));  // non-linear below amp of 6; to reduce noise (switchoff agc and tune-up volume until noise dissapears, todo:extra volume control needed)
+  ac = ac << 3;
+  return ac;
 }
 
 #define JUNK  1
@@ -618,7 +617,8 @@ inline int16_t filt_var(int16_t v)
     //case 1: zx0=(13*(zx0+2*za1+za2)-30*zb1-13*zb2)/64; break; //0-2500Hz 1st-order butterworth
     //case 1: zx0=(12*(zx0+2*za1+za2)-26*zb1-5*zb2)/64; break;    //0-2500Hz butterworth
     //case 1: zx0=(12*(zx0+2*za1+za2)+2*zb1-11*zb2)/64; break;    //0-2500Hz  elliptic
-    case 1: zx0=(10*(zx0+2*za1+za2)+6*zb1-11*zb2)/32; break;    //0-2500Hz  elliptic slower roll-off but deep
+    //case 1: zx0=(10*(zx0+2*za1+za2)+7*zb1-11*zb2)/32; break;    //0-2500Hz  elliptic slower roll-off but deep
+    case 1: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
     //case 2: zx0=(7*(zx0+2*za1+za2)+18*zb1-12*zb2)/64; break;  //0-1700Hz 1st-order
     //case 2: zx0=(7*(zx0+2*za1+za2)+16*zb1-3*zb2)/64; break;     //0-1700Hz butterworth
     case 2: zx0=(7*(zx0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
@@ -637,7 +637,8 @@ inline int16_t filt_var(int16_t v)
     //case 1: break;
     //case 1: zx0=(16*(zx0+2*zb1+zb2)-36*zc1-31*zc2)/64; break;   //0-2500Hz butterworth
     //case 1: zx0=(8*(zx0+zb2)+13*zb1-46*zc1-48*zc2)/64; break;   //0-2500Hz  elliptic
-    case 1: zx0=(8*(zx0+2*zb1+zb2)-46*zc1-47*zc2)/64; break;   //0-2500Hz  elliptic slower roll-off but deep
+    //case 1: zx0=(8*(zx0+2*zb1+zb2)-46*(zc1+zc2))/64; break;   //0-2500Hz  elliptic slower roll-off but deep
+    case 1: zx0=(8*(zx0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
     //case 2: break;
     //case 2: zx0=(16*(zx0+2*zb1+zb2)+22*zc1-29*zc2)/64; break;   //0-1700Hz butterworth
     case 2: zx0=(4*(zx0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
@@ -669,7 +670,8 @@ volatile func_t func_ptr = junk;
 volatile func_t func_ptr;
 #endif
 
-volatile uint32_t absavg256 = 0;
+static uint32_t absavg256 = 0;
+volatile uint32_t _absavg256 = 0;
 volatile uint8_t admux[2];
 volatile uint8_t _init;
 volatile int16_t ocomb, i, q, qh;
@@ -721,7 +723,7 @@ void sdr_rx()
             
         int16_t ac = i + qh;
         static uint8_t absavg256cnt;
-        if(!(absavg256cnt--)){ absavg256 = 0; } else absavg256 += abs(ac);
+        if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);
     
         if(mode == AM) { // (12%CPU for the mode selection etc)
           { static int16_t dc;
@@ -742,18 +744,15 @@ void sdr_rx()
           //ac = ac * (F_SAMP_RX/R) / _UA;  // =ac*3.5 -> skip
         }  // needs: p.12 https://www.veron.nl/wp-content/uploads/2014/01/FmDemodulator.pdf
         else { ; }  // USB, LSB, CW
-        if(1)//(mode != LSB && mode != USB)
-          ac >>= (16-volume);
-        else 
-          ac = agc(ac);
+        if(agc) ac = process_agc(ac);
+        ac = ac >> (16-volume);
+        if(nr) ac = process_nr(ac);
         if(mode == USB || mode == LSB){
-            //ac = filt_ssb(ac << 1);
             if(filt != -1) ac = filt_var(ac << 0);
         }
         if(mode == CW){
-          //ac = filt_cwn(ac << 6);
           if(filt != -1) ac = filt_var(ac << 6);
-//#define CW_DECODER  1
+#define CW_DECODER  1
 #ifdef CW_DECODER
           char ch = cw(ac >> 0);
           if(ch){
@@ -763,6 +762,8 @@ void sdr_rx()
           }
 #endif
         }
+
+        
         //static int16_t dc;
         //dc += (ac - dc) / 2;
         //ac = ac - dc;    // DC decoupling
@@ -974,15 +975,48 @@ void encoder_setup()
 }
 
 char blanks[] = "        ";
-byte font_run[] = {
-  0b01000,
+#define N_FONTS  5
+byte font[][8] = {
+{ 0b01000,  // 0
   0b00100,
   0b01010,
   0b00101,
   0b01010,
   0b00100,
   0b01000,
-  0b00000
+  0b00000 },
+{ 0b00000,  // 1
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000 },
+{ 0b10000,  // 2
+  0b10000,
+  0b10000,
+  0b10000,
+  0b10000,
+  0b10000,
+  0b10000,
+  0b10000 },
+{ 0b10000,  // 3
+  0b10000,
+  0b10100,
+  0b10100,
+  0b10100,
+  0b10100,
+  0b10100,
+  0b10100 },
+{ 0b10000,  // 4
+  0b10000,
+  0b10101,
+  0b10101,
+  0b10101,
+  0b10101,
+  0b10101,
+  0b10101 }
 };
 
 void customDelay(uint32_t _micros)  //_micros=100000 is 132052us delay
@@ -1034,7 +1068,7 @@ public:
   
   float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
   {
-    float rms = absavg256 / 256; //sqrt(256.0);
+    float rms = _absavg256 / 256; //sqrt(256.0);
     if(dsp_cap == SDR) rms = (float)rms * 1.1 / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
     else               rms = (float)rms * 5.0 / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
     float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
@@ -1046,12 +1080,27 @@ public:
   #define DBM_METER  1
   #ifdef DBM_METER
       lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print((ref == 0.0) ? "dBm   " : "dB    ");
-  #else
+  #endif
+  //#define SNR_METER  1
+  #ifdef SNR_METER
       uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
       lcd.setCursor(14, 0); if(s < 10){ lcd.print("S"); } lcd.print(s); 
   #endif
       dbm_max = -174.0 + 34.0;
     }
+  //#define SNR_BAR  1
+  #ifdef SNR_BAR
+    int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
+    lcd.setCursor(12, 0); 
+    char tmp[5];
+    tmp[0] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+    tmp[1] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+    tmp[2] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+    tmp[3] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+    tmp[4] = 0;
+    lcd.print(tmp);
+    //for(i = 0; i != 4; i++){ lcd.print((char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05)); s = s - 3; }
+  #endif
     return dbm;
   }
   
@@ -1393,8 +1442,9 @@ void setup()
 
   qcx.setup();
 
-  lcd.begin(16, 2);
-  lcd.createChar(1, font_run);
+  lcd.begin(16, 2);  // Init LCD
+  for(i = 0; i != N_FONTS; i++)  // Init fonts
+    lcd.createChar(0x01 + i, font[i]);
 
   // initialize LUT
   //#define C31_IS_INSTALLED  1   // Uncomment this line when C31 is installed (shaping circuit will be driven with analog signal instead of being switched digitally with PWM signal)
@@ -1536,7 +1586,7 @@ void setup()
 #endif
 
   //delay(800); wdt_reset();  // Display banner
-  lcd.setCursor(7, 0); lcd.print("\001"); lcd.print(blanks);
+  lcd.setCursor(7, 0); lcd.print("\x01"); lcd.print(blanks);
 
   volume = (dsp_cap) ? ((dsp_cap == SDR) ? 8 : 14) : 0;
   mode = (dsp_cap || ssb_cap) ? USB : CW;
@@ -1545,6 +1595,7 @@ void setup()
   
 void loop()
 {
+  //delay(10);
   delay(100);
 
   qcx.smeter();
@@ -1623,6 +1674,8 @@ void loop()
         else drive += 1;
         if(drive > 8) drive = 0;
         lcd.setCursor(0, 1); lcd.print("Drive: "); lcd.print(drive); lcd.print(blanks);
+        agc = (drive == 4);
+        nr = (drive % 2);
         break;
       case BR|PL:
         vox_enable = true;
