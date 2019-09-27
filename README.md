@@ -127,7 +127,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 
 ### Notes:
-1. <a name="note1"/>To support multi-band operation, the RX BPF can be omitted (C1,C5,C8, secondary 3 of T1), and a switchable LPF-bank could replace the existing LPF C25-28,L1-L3 and matching network C29-30,L4. The Arduino sketch could be extended to switch the filter-bank. When using external filters the on-board LPF may be bypassed with a wire.
+1. <a name="note1"/>To support multi-band operation, the RX BPF can be omitted (C1,C5,C8, secondary 3 of T1). To improve RX sensitivity on higher bands, T1 and R64 should be removed and on the original wire-endings of T1 (see [original Assembly instruction] chapter 3.56 for PC Board pattern) the following components should be installed: resistor 1K over 6-8 and 3-4; capacitor 10nF over 4-8. A switchable LPF-bank could replace the existing LPF C25-28,L1-L3, or a wire may bypass if external LPFs are present; the matching network C30,L4 should be set to 30pF and 1uH (16 turns). A switchable filter-bank could potentialy be controlled via I2C I/O port.
 2. <a name="note2"/>The QCX-SSB firmware can be uploaded to ATMEGA328P chip placed in the QCX via ISP programming on an Arduino Uno board. To do so, istall an [Arduino] environment, connect an Arduino Uno board to PC, upload this [ArduinoISP] sketch to Uno, install a new ATMEGA328P chip in QCX, connect Arduino Uno to QCX via [ISP jumper] wiring, power on QCX, in Arduino select "Tools > Programmer > Arduino as ISP", select "Tools > Board > Arduino/Genuino Uno", select "Tools > Port > /dev/ttyUSB0 or ttyACM0", select "Tools > Burn Bootloader", upload [QCX-SSB Sketch] by opening and selecting "Sketch > Upload Using Programmer". Once upload succeeds the LCD should display "QCX-SSB". Make sure that the Microphone is not connected during programming.
 3. <a name="note3"/>The occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to half a unit-circle _UA/2 (equivalent to 180 degrees)). The sensitivity of the VOX switching can be set with parameter VOX_THRESHOLD. Audio-input can be attenuated by increasing parameter MIC_ATTEN (6dB per step).
 4. <a name="note4"/>To implement the SDR stage, the 17 component changes of installation step 1 are easiest to be implemented on a newly to be build QCX. Alternatively, on an already built QCX it is easier to bypass the CW filter (see <sup>[note 4](#note4)</sup>), this maintains the hardware compatibility with the original QCX firmware. Optionally this can be extended with a Arduino based DSP filter stage (see <sup>[note 5](#note5)</sup>).
@@ -203,4 +203,5 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 [phase shift in the SI5351 clocks]: https://www.silabs.com/community/timing/forum.topic.html/difficulty_settingp-LchG
 
+[original Assembly instruction]: https://www.qrp-labs.com/images/qcx/assembly_A4_Rev_4b.pdf
 

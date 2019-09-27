@@ -362,7 +362,7 @@ public:
 
 static SI5351 si5351;
 enum mode_t { LSB, USB, CW, AM, FM };
-volatile uint8_t mode = USB;
+volatile int8_t mode = USB;
 const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
 volatile bool change = true;
 volatile int32_t freq = 7074000;
@@ -492,6 +492,9 @@ void dsp_tx()
   numSamples++;
 }
 
+
+volatile int8_t cwdec = 0;
+
 static int32_t signal;
 static int16_t avg = 0;
 static int16_t maxpk=0;
@@ -555,7 +558,7 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 28409
 #define F_ADC_CONV 192307
 
-volatile uint8_t volume = 8;
+volatile int8_t volume = 8;
 volatile bool agc = true;
 volatile bool nr = false;
 
@@ -582,7 +585,7 @@ inline int16_t process_nr(int16_t ac)
   return ac;
 }
 
-#define JUNK  1
+//#define JUNK  1
 #ifdef JUNK
 // Having this function included here and referenced makes sdr_rx faster 15% faster (normally including filt_cwn() in sdr_rx() makes the thing slower for an unknown reason)
 void junk()
@@ -591,14 +594,16 @@ void junk()
 }
 #endif
 
-volatile int8_t filt = -1;
+#define N_FILT 6
+volatile int8_t filt = 0;
+const char* filt_label[] = { "All", "4000", "2500", "1700", "200", "100", "50" };
 
 inline int16_t filt_var(int16_t v)
 { 
   int16_t zx0 = v;
 
   static int16_t za1,za2;
-  if(filt < 3){
+  if(filt < 4){
     // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     static int16_t zz1,zz2;
     zx0=(29*(zx0-zz1)+50*za1)/64;                               //300-Hz
@@ -608,23 +613,22 @@ inline int16_t filt_var(int16_t v)
   za2=za1;
   za1=zx0;
 
-  #define N_FILT 6
   // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
   //static int16_t za1,za2;
   static int16_t zb1,zb2;
   switch(filt){
-    case 0: break; //0-4000Hz (pass-through)
-    //case 1: zx0=(13*(zx0+2*za1+za2)-30*zb1-13*zb2)/64; break; //0-2500Hz 1st-order butterworth
-    //case 1: zx0=(12*(zx0+2*za1+za2)-26*zb1-5*zb2)/64; break;    //0-2500Hz butterworth
-    //case 1: zx0=(12*(zx0+2*za1+za2)+2*zb1-11*zb2)/64; break;    //0-2500Hz  elliptic
-    //case 1: zx0=(10*(zx0+2*za1+za2)+7*zb1-11*zb2)/32; break;    //0-2500Hz  elliptic slower roll-off but deep
-    case 1: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
-    //case 2: zx0=(7*(zx0+2*za1+za2)+18*zb1-12*zb2)/64; break;  //0-1700Hz 1st-order
-    //case 2: zx0=(7*(zx0+2*za1+za2)+16*zb1-3*zb2)/64; break;     //0-1700Hz butterworth
-    case 2: zx0=(7*(zx0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
-    case 3: zx0=(5*(zx0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
-    case 4: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
-    case 5: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
+    case 1: break; //0-4000Hz (pass-through)
+    //case 2: zx0=(13*(zx0+2*za1+za2)-30*zb1-13*zb2)/64; break; //0-2500Hz 1st-order butterworth
+    //case 2: zx0=(12*(zx0+2*za1+za2)-26*zb1-5*zb2)/64; break;    //0-2500Hz butterworth
+    //case 2: zx0=(12*(zx0+2*za1+za2)+2*zb1-11*zb2)/64; break;    //0-2500Hz  elliptic
+    //case 2: zx0=(10*(zx0+2*za1+za2)+7*zb1-11*zb2)/32; break;    //0-2500Hz  elliptic slower roll-off but deep
+    case 2: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
+    //case 3: zx0=(7*(zx0+2*za1+za2)+18*zb1-12*zb2)/64; break;  //0-1700Hz 1st-order
+    //case 3: zx0=(7*(zx0+2*za1+za2)+16*zb1-3*zb2)/64; break;     //0-1700Hz butterworth
+    case 3: zx0=(7*(zx0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
+    case 4: zx0=(5*(zx0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
+    case 5: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
+    case 6: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
   }
   //za2=za1;
   //za1=v;
@@ -633,18 +637,18 @@ inline int16_t filt_var(int16_t v)
 
   static int16_t zc1,zc2;
   switch(filt){
-    case 0: break; //0-4000Hz (pass-through)
-    //case 1: break;
-    //case 1: zx0=(16*(zx0+2*zb1+zb2)-36*zc1-31*zc2)/64; break;   //0-2500Hz butterworth
-    //case 1: zx0=(8*(zx0+zb2)+13*zb1-46*zc1-48*zc2)/64; break;   //0-2500Hz  elliptic
-    //case 1: zx0=(8*(zx0+2*zb1+zb2)-46*(zc1+zc2))/64; break;   //0-2500Hz  elliptic slower roll-off but deep
-    case 1: zx0=(8*(zx0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
+    case 1: break; //0-4000Hz (pass-through)
     //case 2: break;
-    //case 2: zx0=(16*(zx0+2*zb1+zb2)+22*zc1-29*zc2)/64; break;   //0-1700Hz butterworth
-    case 2: zx0=(4*(zx0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
-    case 3: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
-    case 4: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
-    case 5: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
+    //case 2: zx0=(16*(zx0+2*zb1+zb2)-36*zc1-31*zc2)/64; break;   //0-2500Hz butterworth
+    //case 2: zx0=(8*(zx0+zb2)+13*zb1-46*zc1-48*zc2)/64; break;   //0-2500Hz  elliptic
+    //case 2: zx0=(8*(zx0+2*zb1+zb2)-46*(zc1+zc2))/64; break;   //0-2500Hz  elliptic slower roll-off but deep
+    case 2: zx0=(8*(zx0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
+    //case 3: break;
+    //case 3: zx0=(16*(zx0+2*zb1+zb2)+22*zc1-29*zc2)/64; break;   //0-1700Hz butterworth
+    case 3: zx0=(4*(zx0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
+    case 4: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
+    case 5: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
+    case 6: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
   }
   zc2=zc1;
   zc1=zx0;
@@ -748,21 +752,22 @@ void sdr_rx()
         ac = ac >> (16-volume);
         if(nr) ac = process_nr(ac);
         if(mode == USB || mode == LSB){
-            if(filt != -1) ac = filt_var(ac << 0);
+            if(filt) ac = filt_var(ac << 0);
         }
         if(mode == CW){
-          if(filt != -1) ac = filt_var(ac << 6);
-#define CW_DECODER  1
-#ifdef CW_DECODER
-          char ch = cw(ac >> 0);
-          if(ch){
-            for(int i=0; i!=15;i++) out[i]=out[i+1];
-            out[15] = ch;
-            cw_event = true;
+          if(filt) ac = filt_var(ac << 6);
+          
+          if(cwdec){  // CW decoder enabled?
+            char ch = cw(ac >> 0);
+            if(ch){
+              for(int i=0; i!=15;i++) out[i]=out[i+1];
+              out[15] = ch;
+              cw_event = true;
+            }
           }
-#endif
+          
         }
-
+        //if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);  //hack
         
         //static int16_t dc;
         //dc += (ac - dc) / 2;
@@ -1019,6 +1024,8 @@ byte font[][8] = {
   0b10101 }
 };
 
+const char* cap_label[] = { "SSB", "DSP", "SDR" };
+
 void customDelay(uint32_t _micros)  //_micros=100000 is 132052us delay
 {
   uint32_t i; for(i = 0; i != _micros * 3; i++) wdt_reset();
@@ -1065,9 +1072,15 @@ public:
     pinMode(AUDIO1, INPUT);
     pinMode(AUDIO2, INPUT);
   }
+
+  int8_t smode = 1;
+  const char* smode_label[4] = { "none", "dBm", "S", "S-bar" };
   
   float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
   {
+    if(smode == 0){ // none
+      return 0;
+    }
     float rms = _absavg256 / 256; //sqrt(256.0);
     if(dsp_cap == SDR) rms = (float)rms * 1.1 / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
     else               rms = (float)rms * 5.0 / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
@@ -1077,30 +1090,28 @@ public:
     static uint8_t cnt;
     cnt++;
     if((cnt % 8) == 0){
-  #define DBM_METER  1
-  #ifdef DBM_METER
-      lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print((ref == 0.0) ? "dBm   " : "dB    ");
-  #endif
-  //#define SNR_METER  1
-  #ifdef SNR_METER
-      uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
-      lcd.setCursor(14, 0); if(s < 10){ lcd.print("S"); } lcd.print(s); 
-  #endif
+
+      if(smode == 1){ // dBm meter
+        lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print((ref == 0.0) ? "dBm   " : "dB    ");
+      }
+      if(smode == 2){ // S-meter
+        uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
+        lcd.setCursor(14, 0); if(s < 10){ lcd.print("S"); } lcd.print(s); 
+      }
       dbm_max = -174.0 + 34.0;
     }
-  //#define SNR_BAR  1
-  #ifdef SNR_BAR
-    int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
-    lcd.setCursor(12, 0); 
-    char tmp[5];
-    tmp[0] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-    tmp[1] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-    tmp[2] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-    tmp[3] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-    tmp[4] = 0;
-    lcd.print(tmp);
-    //for(i = 0; i != 4; i++){ lcd.print((char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05)); s = s - 3; }
-  #endif
+    if(smode == 3){ // S-bar
+      int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
+      lcd.setCursor(12, 0); 
+      char tmp[5];
+      tmp[0] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+      tmp[1] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+      tmp[2] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+      tmp[3] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
+      tmp[4] = 0;
+      lcd.print(tmp);
+      //for(i = 0; i != 4; i++){ lcd.print((char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05)); s = s - 3; }
+    }
     return dbm;
   }
   
@@ -1316,10 +1327,12 @@ public:
     timer1_start(39250);
     //if(!vox_enable) txen(true);
   }
-    
-  uint8_t bandval = 2;
+
+  int8_t prev_bandval = 2;
+  int8_t bandval = 2;
   #define N_BANDS 11
   uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000/*, 144125000*/ };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
+  const char* band_label[N_BANDS] = { /*"600", "160m",*/ "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" /*, "2m"*/};
   
   enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
   int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
@@ -1390,6 +1403,13 @@ public:
     sleep_cpu();  // go to sleep mode, wake-up by either INT0, INT1, Pin Change, TWI Addr Match, WDT, BOD
     sleep_disable();
     resetFunc();
+  }
+
+  void show_banner(){
+    lcd.setCursor(0, 0); 
+    lcd.print("QCX"); 
+    if(ssb_cap || dsp_cap){ lcd.print("-"); lcd.print(cap_label[dsp_cap]); }
+    lcd.print("\x01 "); lcd.print(blanks);
   }
 };
 
@@ -1483,14 +1503,12 @@ void setup()
   // Test if QCX has SSB capability: DVM is biased
   ssb_cap = analogRead(DVM) > 369;
 
-  const char* cap_label[] = { "SSB", "DSP", "SDR" };
-  lcd.setCursor(0, 0); lcd.print("QCX"); if(ssb_cap || dsp_cap){ lcd.print("-"); lcd.print(cap_label[dsp_cap]); }
+  qcx.show_banner();
   lcd.setCursor(8, 0); lcd.print("R"); lcd.print(VERSION); lcd.print(blanks);
-  //lcd.setCursor(0, 0); lcd.print(String("QCX-") +  (String[]){"SSB", "DSP", "SDR" }[dsp_cap] + F(" R") + F(VERSION) + blanks );
 
 #ifdef SAFE
   // Measure CPU loads
-  if(!(load_tx < 100.0))
+  if(!(load_tx <= 100.0))
   {
     lcd.setCursor(0, 1); lcd.print("!!CPU_tx="); lcd.print(load_tx); lcd.print("%"); lcd.print(blanks);
     delay(1500); wdt_reset();
@@ -1500,13 +1518,13 @@ void setup()
     lcd.setCursor(0, 1); lcd.print("!!CPU_rx"); lcd.print(0); lcd.print("="); lcd.print(load_rx[0]); lcd.print("%"); lcd.print(blanks);
     delay(1500); wdt_reset();
   }
-  if(!(load_rx_avg < 100.0))
+  if(!(load_rx_avg <= 100.0))
   {
     lcd.setCursor(0, 1); lcd.print("!!CPU_rx"); lcd.print("="); lcd.print(load_rx_avg); lcd.print("%"); lcd.print(blanks);
     delay(1500); wdt_reset();
     // and specify indivual timings for each of the eight alternating processing functions:
     for(i = 1; i != 8; i++){
-      if(!(load_rx[i] < 100.0))
+      if(!(load_rx[i] <= 100.0))
       {
         lcd.setCursor(0, 1); lcd.print("!!CPU_rx"); lcd.print(i); lcd.print("="); lcd.print(load_rx[i]); lcd.print("%"); lcd.print(blanks);
         delay(1500); wdt_reset();
@@ -1586,19 +1604,65 @@ void setup()
 #endif
 
   //delay(800); wdt_reset();  // Display banner
-  lcd.setCursor(7, 0); lcd.print("\x01"); lcd.print(blanks);
+  //lcd.setCursor(7, 0); lcd.print("\x01"); lcd.print(blanks);  // remove release number
+  qcx.show_banner();
 
   volume = (dsp_cap) ? ((dsp_cap == SDR) ? 8 : 14) : 0;
   mode = (dsp_cap || ssb_cap) ? USB : CW;
   qcx.start_rx();
 }
-  
+
+class ParamClass {
+public:
+  template<typename T> void update(T& value, const char* label, const char* enumArray[], int _min, int _max, bool continuous){
+    value += encoder_val;
+    encoder_val = 0;
+    if(continuous){
+      value = (value % (_max+1));
+      if((int)value < _min) value += _min;
+    } else
+      value = max(_min, min((int)value, _max));
+    lcd.setCursor(0, 1); if(label != NULL){ lcd.print(label); lcd.print(": "); }
+    if(enumArray == NULL)
+      lcd.print(value);
+    else
+      lcd.print(enumArray[value]); 
+    lcd.print(blanks);
+  }
+
+  template<typename T> void updateMenu(T& value, const char* label, const char* enumArray[], int _min, int _max, bool continuous, bool cursor){
+    value += encoder_val;
+    encoder_val = 0;
+    if(continuous){
+      value = (value % (_max+1));
+      if((int)value < _min) value += _min;
+    } else
+      value = max(_min, min((int)value, _max));
+    lcd.setCursor(0, 0); if(label != NULL){ lcd.print(label); lcd.print(blanks); lcd.print(blanks); }
+    lcd.setCursor(0, 1);
+    if(enumArray == NULL)
+      lcd.print(value);
+    else
+      lcd.print(enumArray[value]); 
+    lcd.print(blanks); lcd.print(blanks);
+    if(cursor){ lcd.setCursor(0, 1); lcd.cursor(); }
+  }
+};
+ParamClass Param;
+
+#define N_PARAMS 8
+volatile int8_t menumode = 0;
+volatile int8_t menu = 0;
+const char* offon_label[] = {"OFF", "ON"};
+
 void loop()
 {
-  //delay(10);
-  delay(100);
+  delay(10);
+  //delay(100);
 
-  qcx.smeter();
+  if(menumode == 0)
+    qcx.smeter();
+
   if(mode == CW && cw_event){
     cw_event = false;
     lcd.setCursor(0, 1); lcd.print(out);
@@ -1634,48 +1698,54 @@ void loop()
     }
     event |= (v < 862) ? BL : (v < 1023) ? BR : BE; // determine which button pressed based on threshold levels
     switch(event){
+      case BL|PL:  // Called when menu button released
+        menumode = 2;
+        
+        //calibrate_predistortion();
+        //qcx.powermeter();
+        //test_tx_amp();
+        break;
+      case BL|PT:
+        menumode = 1;
+        if(menu == 0) menu = 1;
+        break;
       case BL|SC:
         //calibrate_iq();
+        /*
         if(dsp_cap){
-          att_enable = !att_enable;
-          lcd.setCursor(0, 1); lcd.print("Attenuate: "); lcd.print(att_enable ? "ON" : "OFF"); lcd.print(blanks);
+          encoder_val = 1; Param.update(att_enable, "Attenuate", offon_label, 0, sizeof(offon_label)/sizeof(char *), true);
           txen(false); // submit attenuator setting
-          wdt_reset(); delay(1500); wdt_reset();
-          change = true; // refresh display
-        }
+          wdt_reset(); delay(1500); wdt_reset(); change = true; // wait & refresh display
+        }*/
+        int8_t _menumode;
+        if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }
+        if(menumode == 1){ _menumode = 2; }
+        if(menumode == 2){ _menumode = 0; qcx.show_banner(); } // Return menu to default screen
+        menumode = _menumode;
+        change = true;
         break;
       case BL|DC:
         //qcx.powerDown();
-        filt++;
-        _init = true;
-        //if(filt > N_FILT) filt = -1;
-        if(mode == CW && filt > N_FILT-1) filt = 3;
-        if(mode != CW && filt > 2) filt = -1;
-        lcd.setCursor(0, 1); lcd.print("Filter: "); lcd.print(filt); lcd.print(blanks);
-        wdt_reset(); delay(1500); wdt_reset();
-        change = true; // refresh display
         break;
-      case BL|PL:
-        //calibrate_predistortion();
-        qcx.powermeter();
-        //test_tx_amp();
-        break;
-      case BL|PT: break;
       case BR|SC:
-        mode++;  // mode change
+        encoder_val = 1; Param.update(mode, "Mode", mode_label, 0, sizeof(mode_label)/sizeof(char*), true);
         if(mode != CW) qcx.stepsize = qcx.STEP_1k; else qcx.stepsize = qcx.STEP_100;
-        if(mode > FM) mode = LSB;
-        if(mode == CW) filt = 3; else filt = -1;
+        //if(mode > FM) mode = LSB;
+        if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
+        if(mode == CW) filt = 4; else filt = 0;
         si5351.prev_pll_freq = 0;  // enforce PLL reset
         change = true;
         break;
       case BR|DC:
-        if(drive == 0) drive = 1;
-        else drive += 1;
-        if(drive > 8) drive = 0;
-        lcd.setCursor(0, 1); lcd.print("Drive: "); lcd.print(drive); lcd.print(blanks);
-        agc = (drive == 4);
-        nr = (drive % 2);
+        //encoder_val = 1; Param.update(drive, "Drive", NULL, 0, 8, true);
+        filt++;
+        _init = true;
+        if(mode == CW && filt > N_FILT) filt = 4;
+        if(mode != CW && filt > 3) filt = 0;
+        lcd.setCursor(0, 1); lcd.print("Filter: "); lcd.print(filt); lcd.print(blanks);
+        wdt_reset(); delay(1500); wdt_reset();
+        change = true; // refresh display
+
         break;
       case BR|PL:
         vox_enable = true;
@@ -1694,7 +1764,6 @@ void loop()
         delay(100);
         qcx.bandval++;
         if(qcx.bandval >= N_BANDS) qcx.bandval = 0;
-        freq = qcx.band[qcx.bandval];
         qcx.stepsize = qcx.STEP_1k;
         change = true;
         break;
@@ -1702,46 +1771,76 @@ void loop()
       case BE|PT:
           for(; digitalRead(BUTTONS);){ // process encoder changes until released
           wdt_reset();
-          if(encoder_val != 0 && (dsp_cap)){
-            int16_t tmp = volume;
-            tmp += encoder_val;
-            encoder_val = 0;
-            if(tmp < 0) qcx.powerDown();  // powerDown when volume < 0
-            volume = max(0, min(tmp, 255));
-            lcd.setCursor(0, 1); lcd.print("Volume "); lcd.print(volume); lcd.print(blanks);
+          if(dsp_cap && encoder_val){
+            Param.update(volume, "Volume", NULL, -1, 32, false);
+            if(volume == -1) qcx.powerDown();  // powerDown when volume < 0
           }
         }
         change = true; // refresh display
         break;
     }
   }
-  if(encoder_val){  // process encoder tuning steps
-    qcx.process_encoder_tuning_step(encoder_val);
-    encoder_val = 0;
-  }
-  if(change){
-    change = false;
-    uint32_t n = freq / 1000000;  // lcd.print(f) with commas
-    uint32_t n2 = freq % 1000000;
-    uint32_t scale = 1000000;
-    char buf[16];
-    sprintf(buf, "%2u", n); lcd.setCursor(0, 1); lcd.print(buf);
-    while(scale != 1){
-      scale /= 1000;
-      n = n2 / scale;
-      n2 = n2  % scale;
-      if(scale == 1) sprintf(buf, ",%02u", n / 10); else // leave last digit out
-      sprintf(buf, ",%03u", n);
-      lcd.print(buf);
-    }
-    lcd.print(" "); lcd.print(mode_label[mode]); lcd.print("  ");
-    lcd.setCursor(15, 1); lcd.print("R");
 
-    if(mode == LSB)
-      si5351.freq(freq, 90, 0);  // RX in LSB
-    else
-      si5351.freq(freq, 0, 90);  // RX in USB
+  if(menumode == 1){
+    menu += encoder_val;   // Navigate through menu of parameters and values
+    encoder_val = 0;
+    menu = max(0, min(menu, N_PARAMS));
+    change = true;  // refresh (in case menu=0)
   }
-  qcx.stepsize_showcursor();
+
+  if((menumode != 0) && (change == true)){  // Show parameter and value
+    switch(menu){
+      case 0: menumode = 0; qcx.show_banner(); break;
+      case 1: Param.updateMenu(volume, "1.1 Volume", NULL, 0, 32, false, menumode == 2); break;
+      case 2: Param.updateMenu(mode, "1.2 Mode", mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, false, menumode == 2); break;
+      case 3: Param.updateMenu(filt, "1.3 Filter BW", filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, menumode == 2); break;
+      case 4: Param.updateMenu(qcx.bandval, "1.4 Band", qcx.band_label, 0, sizeof(qcx.band_label)/sizeof(char*) - 1, false, menumode == 2); break;
+      case 5: Param.updateMenu(agc, "1.5 AGC", offon_label, 0, 1, false, menumode == 2); break;
+      case 6: Param.updateMenu(nr, "1.6 NR", offon_label, 0, 1, false, menumode == 2); break;
+      case 7: Param.updateMenu(qcx.smode, "1.7 S-meter", qcx.smode_label, 0, sizeof(qcx.smode_label)/sizeof(char*) - 1, false, menumode == 2); break;
+      case 8: Param.updateMenu(cwdec, "2,1 CW Decoder", offon_label, 0, 1, false, menumode == 2); break;
+      case 9: Param.updateMenu(drive, "3.1 TX Drive", NULL, 0, 8, false, menumode == 2); break;
+    }
+  }
+
+  if(menumode == 0){
+    if(encoder_val){  // process encoder tuning steps
+      qcx.process_encoder_tuning_step(encoder_val);
+      encoder_val = 0;
+    }
+
+    if(change){
+      change = false;
+      if(qcx.prev_bandval != qcx.bandval){ freq = qcx.band[qcx.bandval]; qcx.prev_bandval = qcx.bandval; }
+
+      uint32_t n = freq / 1000000;  // lcd.print(f) with commas
+      uint32_t n2 = freq % 1000000;
+      uint32_t scale = 1000000;
+      char buf[16];
+      sprintf(buf, "%2u", n); lcd.setCursor(0, 1); lcd.print(buf);
+      while(scale != 1){
+        scale /= 1000;
+        n = n2 / scale;
+        n2 = n2  % scale;
+        if(scale == 1) sprintf(buf, ",%02u", n / 10); else // leave last digit out
+        sprintf(buf, ",%03u", n);
+        lcd.print(buf);
+      }
+      lcd.print(" "); lcd.print(mode_label[mode]); lcd.print("  ");
+      lcd.setCursor(15, 1); lcd.print("R");
+      
+      if(mode == LSB)
+        si5351.freq(freq, 90, 0);  // RX in LSB
+      else
+        si5351.freq(freq, 0, 90);  // RX in USB
+  
+      // The following is a hack for SWR measurement:
+      //si5351.alt_clk2(freq + 2400);
+      //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
+      //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
+    }
+    qcx.stepsize_showcursor();
+  }
+  
   wdt_reset();
 }
