@@ -25,7 +25,7 @@ pe1nnz@amsat.org
 - **Multiband** support <sup>[note 1](#note1)</sup>
 - Software-based **VOX** that can be used as **fast Full Break-In** (QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
 - **Simple easy to install modification** with only **6 component changes and 4 wires** to implement a basic SSB transceiver
-- Firmware is **open source** through an Arduino Sketch, it allows experimentation, new features can be easily added, contributions can be shared via Github repository QCX-SSB
+- Firmware is **open source** through an Arduino Sketch, it allows experimentation, new features can be easily added, contributions can be shared via Github repository QCX-SSB, about 2000 lines of code
 - Completely **digital and software-based** SSB transmit-stage (**no additional circuitry needed**, except for the audio-in circuit)
 - **ATMEGA328P signal processing:** samples audio-input and reconstruct a SSB-signal by controlling the _phase of the SI5351 PLL_ (through tiny frequency changes over 800kbits/s I2C) and the _amplitude of the PA_ (through PWM of the PA key-shaping circuit).
 - **Lean and low-cost SSB transceiver design**: because of the EER/Polar-transmitter class-E stage it is **highly power-efficient** (no bulky heatsinks required), and has a **simple design** (no complex balanced linear power amplifier required)
@@ -33,7 +33,7 @@ pe1nnz@amsat.org
 - Possibility to extend the QCX analog phasing stage with a **DSP stage**
 - Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**.
 - A theoretical **digital receiver dynamic range of 83dB** at 2.4kHz BW.  (1 dB) Compression point (at -126dBm sensitivity): -44dBm/1mV (for in-band signal); -4dBm/160mV (for signal at 15kHz offset); 19dBm/2V (for signal at 100kHz offset or more).
-- Switchable attenuator steps: 0dB, -13dB, -20dB, -33dB
+- Switchable RF/IF attenuator steps: 0dB, -13dB, -20dB, -33dB
 - SDR implementation **simplifies** the receiver heaviliy and **shaves off roughly 30% of the components** from the original QCX design while adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
 - Can be used as alternate firmware on an unmodified QCX.
 

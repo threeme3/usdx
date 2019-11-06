@@ -378,7 +378,7 @@ enum dsp_cap_t { ANALOG, DSP, SDR };
 static uint8_t dsp_cap = 0;
 static uint8_t ssb_cap = 0;
 volatile uint8_t att = 0;
-const char* att_label[] = { "0dB", "-6dB", "-20dB", "-26dB" };
+const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB" };
 //#define PROFILING  1
 #ifdef PROFILING
 volatile uint32_t numSamples = 0;
@@ -949,13 +949,10 @@ void timer1_start(uint32_t fs)
 {  // Timer 1: OC1A and OC1B in PWM mode
   TCCR1A = 0;
   TCCR1B = 0;
-  TCCR1A |= (1 << COM1A1) | (1 << COM1B1); // Clear OC1A,OC1B on Compare Match when upcounting. Set OC1A,OC1B on Compare Match when downcounting.
-  TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
-  ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1F bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3F bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7F bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
-  //ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
-  //ICR1L = 160;   // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 62.500kHz, bit-depth=7.8
-  //ICR1L = 0x7F;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 78.125kHz, bit-depth=7
-  ICR1L = (float)F_CPU / (float)2 / (float)fs + 0.5;  // PWM value range (determines bit-depth and PWM frequency):  Fpwm = F_CPU / (2 * Prescaler * TOP)
+  TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11); // Clear OC1A,OC1B on Compare Match when upcounting. Set OC1A,OC1B on Compare Match when downcounting.
+  TCCR1B |= (1 << CS10) | (1 << WGM13) | (1 << WGM12); // WGM13: Mode 14 - Fast PWM;  CS10: clkI/O/1 (No prescaling)
+  ICR1H = 0x00;
+  ICR1L = (float)F_CPU / (float)fs - 0.5;  // PWM value range (determines bit-depth and PWM frequency):  Fpwm = F_CPU / Prescaler * (1 + TOP)
   OCR1AH = 0x00;
   OCR1AL = 0x00;  // OC1A (SIDETONE) PWM duty-cycle (span defined by ICR).
   OCR1BH = 0x00;
@@ -1371,7 +1368,7 @@ public:
       adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
     }
     timer2_start(F_SAMP_RX);
-    timer1_start(F_SAMP_RX);
+    timer1_start(78125);
   }
   
   void start_tx()
@@ -1385,7 +1382,7 @@ public:
     amp = 0;  // initialize
     adc_start(2, true, F_ADC_CONV);
     timer2_start(F_SAMP_TX);
-    timer1_start(39250);
+    timer1_start(78125);
     //if(!vox_enable) txen(true);
   }
 
