@@ -992,31 +992,31 @@ void timer1_stop()
 }
 
 volatile int8_t encoder_val = 0;
-static uint8_t last_state = 0b11;
+volatile int8_t encoder_step = 0;
+static uint8_t last_state;
 ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
   noInterrupts();
-  uint8_t curr_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
-  switch((last_state << 2) | curr_state){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
+  switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
 //#define ENCODER_ENHANCED_RESOLUTION  1
 #ifdef ENCODER_ENHANCED_RESOLUTION // Option: enhance encoder from 24 to 96 steps/revolution, see: appendix 1, https://www.sdr-kits.net/documents/PA0KLT_Manual.pdf
-    case 0b1101: case 0b0100: case 0b0010: case 0b1011: encoder_val++; break; //encoder_vect(1); break;
-    case 0b1110: case 0b1000: case 0b0001: case 0b0111: encoder_val--; break; //encoder_vect(-1); break;
+    case 0x31: case 0x10: case 0x02: case 0x23: encoder_val++; break;
+    case 0x32: case 0x20: case 0x01: case 0x13: encoder_val--; break;
 #else
-    case 0b1101: encoder_val++; break; //encoder_vect(1); break;
-    case 0b1110: encoder_val--; break; //encoder_vect(-1); break;
+    case 0x31: case 0x10: case 0x02: case 0x23: if(encoder_step < 0) encoder_step = 0; encoder_step++; if(encoder_step >  3){ encoder_step = 0; encoder_val++; } break;
+    case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;  
 #endif
   }
-  last_state = curr_state;
   interrupts();
 }
 void encoder_setup()
 {
   pinMode(ROT_A, INPUT_PULLUP);
   pinMode(ROT_B, INPUT_PULLUP);
-  *digitalPinToPCMSK(ROT_A) |= (1<<digitalPinToPCMSKbit(ROT_A));  // Arduino replacement for PCICR |= (1 << PCIE2); PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
+  *digitalPinToPCMSK(ROT_A) |= (1<<digitalPinToPCMSKbit(ROT_A));  // PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
   *digitalPinToPCMSK(ROT_B) |= (1<<digitalPinToPCMSKbit(ROT_B));
-  *digitalPinToPCICR(ROT_A) |= (1<<digitalPinToPCICRbit(ROT_A));
+  *digitalPinToPCICR(ROT_A) |= (1<<digitalPinToPCICRbit(ROT_A));  // PCICR |= (1 << PCIE2); 
   *digitalPinToPCICR(ROT_B) |= (1<<digitalPinToPCICRbit(ROT_B));
+  last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
   interrupts();
 }
 
