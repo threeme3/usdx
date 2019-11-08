@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01k"
+#define VERSION   "1.01l"
 
 // QCX pin defintion
 #define LCD_D4  0
@@ -36,16 +36,31 @@
 #define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
 
 #include <LiquidCrystal.h>
-class QCXLiquidCrystal : public LiquidCrystal {  // this class is used because QCX shares some of the LCD lines with the SI5351 lines, and these do have an absolute max rating of 3V6
+class QCXLiquidCrystal : public LiquidCrystal {  // this class resolves the QCX SDA/RS pin sharing issue for LCD writes; it ensures that RS line does not exceed the 3V3 pull-up level and attempts to reduce RFI by using a short RS pulse
 public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
-  QCXLiquidCrystal(uint8_t rs, uint8_t en, uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7) : LiquidCrystal(rs, en, d4, d5, d6, d7){ };
+  QCXLiquidCrystal() : LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7){ };
+#define FAST_RS  1
+#ifdef FAST_RS  // RFI quiet transfer (LCD_RS pull-up is causing RFI). Assumes LCD_D4..LCD_D7, LCD_EN are connected to PD0..PD4 and LCD_RS to PC4
   virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
-    //pinMode(LCD_RS, INPUT);  // pull-up LCD_RS
-    digitalWrite(LCD_RS, HIGH);  // pull LCD_RS to 5V (and not pull-up; this seems the only way to deal with the interference issue
+    uint8_t hi = (PORTD & 0xe0) | 0x10 | (value >> 4);
+    uint8_t lo = (PORTD & 0xe0) | 0x10 | (value & 0x0f);
+    PORTD = hi;       // LCD_D4..D7=value, LCD_EN=1  enable pulse must be >450ns
+    DDRC = 0x00;      // LCD_RS=1 pullup    //PORTC = 0x10; // LCD_RS=1
+    PORTD &= ~0x10;   // LCD_EN=0
+    PORTD = lo;       // LCD_D4..D7=value (connecting to PD0..PD4), LCD_EN=1  enable pulse must be >450ns
+    DDRC = 0x10;      // LCD_RS=0 pulldown  //PORTC = 0x00; // LCD_RS=0
+    DDRC = 0x00;      // LCD_RS=1 pullup    //PORTC = 0x10; // LCD_RS=1
+    PORTD &= ~0x10;   // LCD_EN=0
+    DDRC = 0x10;      // LCD_RS=0 pulldown  //PORTC = 0x00; // LCD_RS=0
+    delayMicroseconds(60);  // tcycE [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, figure 25] 
+    return 1;
+  }
+#else
+  virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
+    pinMode(LCD_RS, INPUT);  // pull-up LCD_RS
     write4bits(value >> 4);
     write4bits(value);
-    //pinMode(LCD_RS, OUTPUT); // restore LCD_RS as output, so that potential command write can be handled (LCD_RS pull-down is causing RFI, so better to prevent it if possible)
-    digitalWrite(LCD_RS, LOW);  // restore LCD_RS to 0V, so that potential command write can be handled (and LCD_RS interference is reduced).
+    pinMode(LCD_RS, OUTPUT); // restore LCD_RS as output, so that potential command writes can be handled
     return 1;
   }
   void write4bits(uint8_t value){
@@ -57,8 +72,9 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
     digitalWrite(LCD_EN, HIGH); //delayMicroseconds(1);  // enable pulse must be >450ns
     digitalWrite(LCD_EN, LOW);  //delayMicroseconds(50); // commands need > 37us to settle
   }
+#endif
 };
-QCXLiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+QCXLiquidCrystal lcd;
 
 class I2C {
 public:
@@ -181,7 +197,7 @@ public:
   #define SI_CLK_SRC_MS 0b00001100
   #define SI_CLK_IDRV_8MA 0b00000011
   #define SI_CLK_INV 0b00010000
-  #define SI_PLL_FREQ 400000000  //900000000
+  #define SI_PLL_FREQ 400000000  //900000000, with 400MHz PLL freq, usable range is 3.2..100MHz
   #define SI_XTAL_FREQ 27004900  //myqcx1:27003847 myqcx2:27004900  Measured crystal frequency of XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
 
   volatile uint8_t prev_divider;
@@ -1133,12 +1149,11 @@ public:
   }
 
   int8_t smode = 1;
-  const char* smode_label[4] = { "none", "dBm", "S", "S-bar" };
+  const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
   
   float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
   {
-    if(smode == 0 || freq > 30000000){ // none, no s-meter; also disabled for >22MHz as (shared) SDA/LCD_RS line keeps interfering on RX when writing to LCD
-      delay(100); // delay main loop for further reduced interference
+    if(smode == 0){ // none, no s-meter
       return 0;
     }
     float rms = _absavg256 / 256; //sqrt(256.0);
@@ -1523,8 +1538,8 @@ volatile int8_t menu = 0;  // current parameter id selected in menu
 const char* offon_label[] = {"OFF", "ON"};
 
 enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, SMETER, CWDEC, VOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
-#define N_PARAMS 14   // number of (visible) parameters
-#define N_ALL_PARAMS 16  // number of parameters
+#define N_PARAMS 15   // number of (visible) parameters
+#define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 uint8_t eeprom_version;
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
@@ -1816,7 +1831,6 @@ void loop()
     switch(event){
       case BL|PL:  // Called when menu button released
         menumode = 2;
-        
         //calibrate_predistortion();
         //qcx.powermeter();
         //test_tx_amp();
