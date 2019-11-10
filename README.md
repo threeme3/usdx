@@ -33,7 +33,7 @@ pe1nnz@amsat.org
 - Possibility to extend the QCX analog phasing stage with a **DSP stage**
 - Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**.
 - A theoretical **digital receiver dynamic range of 83dB** at 2.4kHz BW.  (1 dB) Compression point (at -126dBm sensitivity): -44dBm/1mV (for in-band signal); -4dBm/160mV (for signal at 15kHz offset); 19dBm/2V (for signal at 100kHz offset or more).
-- Switchable RF/IF attenuator steps: 0dB, -13dB, -20dB, -33dB
+- Digitally switchable RF front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**.
 - SDR implementation **simplifies** the receiver heaviliy and **shaves off roughly 30% of the components** from the original QCX design while adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
 - Can be used as alternate firmware on an unmodified QCX.
 
