@@ -1,6 +1,6 @@
 # **ⓆⒸⓍ-ⓈⓈⒷ**
 
-# QCX-SSB: SSB (+ SDR) with your QCX transceiver
+# QCX-SSB: SSB + SDR with your QCX transceiver
 This is a simple and experimental modification that transforms a [QCX] into a (Class-E driven) SSB transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8. It can be fully-continuous tuned through bands 160m-10m in the LSB/USB-modes with a 2400Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
 
 The SSB transmit and receiver stages are implemented completely in a digital and software-based manner. At transmit the ATMEGA328P samples the input-audio and reconstructing a SSB-signal by controlling the SI5351 PLL phase (through tiny frequency changes over 800kbit/s I2C) and controlling the PA Power (through PWM on the key-shaping circuit). In this way a highly power-efficient class-E driven SSB-signal can be realized; a PWM driven class-E design keeps the SSB transceiver simple, tiny, cool, power-efficient and low-cost (ie. no need for power-inefficient and complex linear amplifier with bulky heat-sink as often is seen in SSB transceivers). At receive the ATMEGA328P over-samples the I/Q at 62.5kHz, implements a down-sampling phasing receiver in the digital domain via Hilbert transformers and digital filters, and sends the resulting signal via PWM shaping to the headphone/speaker output.
@@ -22,7 +22,7 @@ pe1nnz@amsat.org
 - Two-tone third-order intermodulation distortion **(IMD3) of -33dBc** (-16dBc for constant-envelope) and **carrier/side-band rejection better than -45dBc** (two-tone)
 - Receiver unwanted side-band **rejection up to -20dB**
 - Continuously tunable through bands **80m-10m** (anything between 20kHz-99MHz is tunable but with degraded or loss in performance)
-- **Multiband** support <sup>[note 1](#note1)</sup>
+- **Multiband** support
 - Software-based **VOX** that can be used as **fast Full Break-In** (QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
 - **Simple easy to install modification** with only **6 component changes and 4 wires** to implement a basic SSB transceiver
 - Firmware is **open source** through an Arduino Sketch, it allows experimentation, new features can be easily added, contributions can be shared via Github repository QCX-SSB, about 2000 lines of code
@@ -41,7 +41,7 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 | 2019-09-01 | Embedded SDR receiver, CW decoder, DSP filters, AGC. |
+| R1.02 (current) | 2019-09-01 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT. |
 | R1.01 | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. |
 | R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
 
@@ -52,17 +52,23 @@ Below the schematic after the modification is applied, components are left out a
 
 
 ## Installation:
-To make the modification, you need to remove and change components, install wires, upload the new firmware and add a microphone. Before starting, familiarizing yourself with <sup>[note 4](#note4)</sup>, then apply the following changes in component value and type, and wire the following pads on the backside PCB:
+To make the SDR+SSB modification, you need to remove 9 and change 8 components, install 10 wires, upload firmware and connect a microphone. In addition on a newly to be build QCX, 37 components can be left out.
+
+**Note: Click here if you would like to apply the [original modification] without SDR. This firmware supports the original modification, optionally a DSP audio processing feature can be enabled by disconnecting R59 and hooking up a speaker on pin15/U2 (via 10uF capacitor), similar as shown above.**
+
+Change the following component values (and type of component in some cases), and wire the following component pins on the backside PCB (some pins must be disconnected from the pad):
 
 1. To implement the SDR receiver: R11,12,17,24,27,29,59,IC10 (remove); IC7-9,R13,R18-20,R25,R28-40,R60,C9,C11,C13-24,C52-53,D5,Q7 (omit on new builds); C10 (.1uF); R16,23 (120k); wire IC10(pin7) to IC6(pin7); wire R27(pin2) to IC6(pin1); wire IC2(pin15) to IC10(pin1); disconnect R50-5V and R52-5V and both wire to R57-DVM(pin3); disconnect R21-IC6(pin7) and R22-IC6(pin7) and both wire to R7-IC5(pin1).
 2. To implement the SSB transmitter: D4,R21,R56 (10k); R58 (.22uF); C32 (10uF); C31 (remove); wire IC2-pin21 to R57-DVM(pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58;
-3. Connect an electret microphone pins (+) to tip and (-) to sleeve of paddle-jack; PTT-switch pins to ring and sleeve (see [X1M-mic]).
-4. Install an [Arduino] environment and upload this [QCX-SSB Sketch] to an Arduino UNO board that contains a new ATMEGA328P chip, subsequently move it to IC2. Alternatively, while the ATMEGA328P chip is placed in IC2, the firmware can be uploaded via the ISP header (see <sup>[note 2](#note2)</sup>).
+3. To implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] chapter 3.56, p.53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish.
+4. Upload the hex firmware-file to existing or new ATMEGA328/328P chip (click on top green download button for zip). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>).
+5. Connect an electret microphone pins (+) to tip and (-) to sleeve of paddle-jack; PTT-switch pins to ring and sleeve (see [X1M-mic]).
 
-Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted on new builds:
+
+Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components must either be removed or may be omitted (see above):
 ![layout](layout.png)
 
-Below the wiring that needs to be applied on the bottom PCB; a circle indicates that the component pin is disconnected from the pad and connected to another pad via a wire:
+Below the wires that needs to be installed on the bottom PCB; a circle indicates that the component pin is disconnected from the pad and connected to another pad via a wire (feed through the PCB, or wired on the top side):
 ![pcb](pcb.png)
 
 
@@ -74,16 +80,16 @@ Currently, the following functions have been assigned to the buttons:
 | LEFT single-press   | Select menu-item, setting or goes back                  |
 | LEFT double-press   |                                                         |
 | LEFT long-press     |                                                         |
-| LEFT press + turn   | Quick menu                                              |
+| LEFT push + turn    | Quick menu                                              |
 | CENTER single-press | Select (smaller) frequency step                         |
 | CENTER double-press | Select Band                                             |
 | CENTER long-press   | Select (larger) frequency step                          |
 | CENTER turn         | Tune frequency                                          |
-| CENTER press + turn | Volume & Power-off                                      |
+| CENTER push + turn  | Volume & Power-off                                      |
 | RIGHT single-press  | LSB/USB/CW-mode                                         | 
 | RIGHT double-press  | Filter Bandwidth                                        |
 | RIGHT long-press    | VOX mode (for full-break-in or digital modes)           |
-| RIGHT press + turn  |                                                         |
+| RIGHT push + turn   |                                                         |
 | KEY                 | Push-to-talk (SSB) / Straight-key (CW)                  |
 
 Operating Instructions:
@@ -102,13 +108,13 @@ On startup, the transceiver is performing a self-test. It is checking the supply
 
 
 ## Technical Description:
-The principle of operation of this project is based on the following video-fragment: [Opzij] (in Dutch; [lyrics])
+The principle of operation is depicted in the following video-fragment: [Opzij] (in Dutch; [lyrics])
 
 For SSB reception, the QCX analog phasing receiver stage is replaced with a digital SDR stage; this means that the phase shifting op-amp IC6 is changed into a regular amplifier and whereby the individual I and Q outputs are directly fed into the ATMEGA328P ADC inputs for signal processing. The ATMEGA328P will over-sample the ADC input at a 32kHz sample-rate and perform a phase-shift by means of a Hilbert-transform and summing the result to obtain side-band rejection; it will also perform CW or SSB filtering and provide an AGC function. Since the phase-shifting network and analog CW filter are no used, about 30% of the components can be left out; by combining the function of IC7B into IC6A another op-amp can be saved. The ADC inputs are low-pass filtered (-40dB/decade roll-off at 1.5kHz cut-off) to prevent aliasing and input are biased with a 1.1V analog reference voltage to obtain additional sensitivity and dynamic range. With the 10-bit ADCs and a 4x over-sampling rate, a theoretical dynamic range of 72dB can be obtained in 2.4kHz SSB bandwidth. LSB/USB mode switching is done by changing the 90 degree phase shift on the CLK1/CLK2 signals of the SI5351 PLL.
 
 For SSB transmission the QCX DVM-circuitry is changed and used as an audio-input circuit. An electret-microphone (with PTT switch) is added to the Paddle jack connecting the DVM-circuitry, whereby the DOT input acts as the PTT and the DASH input acts as the audio-input. The electret microphone is biased with 5V through a 10K resistor. A 10nF blocking capacitor prevents RF leakage into the circuit. The audio is fed into ADC2 input of the ATMEGA328P microprocessor through a 220nF decoupling capacitor. The ADC2 input is biased at 0.55V via a divider network of 10K to a 1.1V analog reference voltage, with 10-bits ADC resolution this means the microphone-input sensitivity is about 1mV (1.1V/1024) which is just sufficient to process unamplified speech.
 
-A new QCX-SSB firmware is uploaded to the ATMEGA328P, and facilitates a [digital SSB generation technique] in a completely software-based manner. A DSP algorithm samples the ADC2 audio-input at a rate of 4800 samples/s, performs a Hilbert transformation and determines the phase and amplitude of the complex-signal; the phase-changes are restricted<sup>[note 3](#note3)</sup> and transformed into either positive (for USB) or negative (for LSB) phase changes which in turn transformed into temporary frequency changes which are sent 4800 times per second over 800kbit/s I2C towards the SI5351 PLL. This result in phase changes on the SSB carrier signal and delivers a SSB-signal with a bandwidth of 2400 Hz whereby spurious in the opposite side-band components is attenuated. 
+A new QCX-SSB firmware is uploaded to the ATMEGA328P, and facilitates a [digital SSB generation technique] in a completely software-based manner. A DSP algorithm samples the ADC2 audio-input at a rate of 4800 samples/s, performs a Hilbert transformation and determines the phase and amplitude of the complex-signal; the phase-changes are restricted<sup>[note 2](#note2)</sup> and transformed into either positive (for USB) or negative (for LSB) phase changes which in turn transformed into temporary frequency changes which are sent 4800 times per second over 800kbit/s I2C towards the SI5351 PLL. This result in phase changes on the SSB carrier signal and delivers a SSB-signal with a bandwidth of 2400 Hz whereby spurious in the opposite side-band components is attenuated. 
 
 The amplitude of the complex-signal controls the supply-voltage of the PA, and thus the envelope of the SSB-signal. The key-shaping circuit is controlled with a 32kHz PWM signal, which can control the PA voltage from 0 to about 12V in 256 steps, providing a dynamic range of (log2(256) * 6 =) 48dB in the SSB signal. C31 is removed to ensure that Q6 is operating as a digital switch, this improves the efficiency, thermal stability, linearity, dynamic range and response-time. Though the amplitude information is not mandatory to make a SSB signal intelligable, adding amplitude information improves quality. The complex-amplitude is also used in VOX-mode to determine when RX and TX transitions are supposed to be made.
 
@@ -132,19 +138,15 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 
 ### Notes:
-1. <a name="note1"/>To support multi-band operation, the RX BPF can be omitted (C1,C5,C8, secondary 3 of T1). To improve RX sensitivity on higher bands, T1 and R64 should be removed and on the original wire-endings of T1 (see [original Assembly instruction] chapter 3.56 for PC Board pattern) the following components should be installed: resistor 1K over 6-8 and 3-4; capacitor 10nF over 4-8. A switchable LPF-bank could replace the existing LPF C25-28,L1-L3, or a wire may bypass if external LPFs are present; the matching network C30,L4 should be set to 30pF and 1uH (16 turns). A switchable filter-bank could potentialy be controlled via I2C I/O port.
-2. <a name="note2"/>The QCX-SSB firmware can be uploaded to ATMEGA328P chip placed in the QCX via ISP programming on an Arduino UNO board. To do so, istall an [Arduino] environment, connect an Arduino UNO board to PC, upload this [ArduinoISP] sketch to UNO, install a new ATMEGA328P chip in QCX, connect Arduino UNO to QCX via [ISP jumper] wiring, power on QCX, in Arduino select "Tools > Programmer > Arduino as ISP", select "Tools > Board > Arduino/Genuino Uno", select "Tools > Port > /dev/ttyUSB0 or ttyACM0", select "Tools > Burn Bootloader", upload [QCX-SSB Sketch] by opening and selecting "Sketch > Upload Using Programmer". Once upload succeeds the LCD should display "QCX-SSB". Make sure that the Microphone is not connected during programming.
-Alternatively a firmware hex file can be uploaded with avrdude via an [ISP jumper] with: avrdude -c avrisp -b 19200 -P /dev/ttyUSB0 -p m328p -F -U flash:w:QCX-SSB.ino.with_bootloader.standard.hex
-Suitable fuse settings are: avrdude -c avrisp -b 19200 -P /dev/ttyUSB0 -p m328p -U efuse:w:0xfd:m -U hfuse:w:0xd1:m -U lfuse:w:0xF7:m
-If you have an Arduino UNO with a ATMEGA328P placed with a Arduino bootloader you can alternatively upload the firmware directly with: avrdude -c arduino -b 115200 -P /dev/ttyACM0 -p m328p -V -U flash:w:/home/guido/Arduino/QCX-SSB/QCX-SSB.ino.with_bootloader.standard.hex 
-3. <a name="note3"/>The occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to half a unit-circle _UA/2 (equivalent to 180 degrees)). The sensitivity of the VOX switching can be set with parameter VOX_THRESHOLD. Audio-input can be attenuated by increasing parameter MIC_ATTEN (6dB per step).
-4. <a name="note4"/>To implement the SDR stage, the 17 component changes of installation step 1 are easiest to be implemented on a newly to be build QCX. Alternatively, on an already built QCX it is easier to bypass the CW filter (see <sup>[note 4](#note4)</sup>), this maintains the hardware compatibility with the original QCX firmware. Optionally this can be extended with a Arduino based DSP filter stage (see <sup>[note 5](#note5)</sup>).
-5. <a name="note5"/>To implement SSB receiver via CW filter bypass: disconnect C21(+) and wire to common of a SPDT switch; wire R27(pin2) and IC9(pin1) both to each throw of SPDT switch. (see here the corresponding [schematic](https://raw.githubusercontent.com/threeme3/QCX-SSB/26c4e97a034d367e1325c5587a56a7c2a43c69f3/schematic.png) and [layout](https://raw.githubusercontent.com/threeme3/QCX-SSB/26c4e97a034d367e1325c5587a56a7c2a43c69f3/layout.png)).
-6. <a name="note6"/>To implement SSB receiver with DSP back end: disconnect C21(+) and wire to R27(pin2); R59 (remove); disconnect C51(+) and wire to IC2(pin15). (schematic and layout similar as analog back end, with SIDETONE output disconnected from audio stage and directly connected to headphones).
+1. <a name="note1"/>Firmware upload variations:
+- [AVRDudess] tool or avrdude CLI can be used for uploading the firmware via the ISP connector on the QCX. Follow [Arduino as ISP] instructions if you have a Arduino UNO board available; or [USBasp] instructions if you have a USBasp programmer; but many other ISP programmers can be used in similar manner such as USBTiny from Adafruit or AVRisp mkII. During ISP, mic should be disconnected, power supply should be connected; in tool do not set: erase, EEPROM; valid fuse settings are: E=FD H=D1 L=F7.
+- Alternatively, in case you have an ATMEGA328P chip with Arduino bootloader, you can place the chip in an Arduino UNO board and upload directly (without the need for a ISP cable and QCX) by specifying 'arduino' programmer and baudrate 115200.
+- Alternatively, in case you have an [Arduino] environment installed, you can upload the [QCX-SSB Sketch] directly from the Arduino environment (without using AVRDudess and firmware file); make sure "Tools > Board > Arduino/Genuino Uno",  "Tools > Port > /dev/ttyUSB0 or ttyACM0", and then "Sketch > Upload" is selected, while the ATMEGA328P chip is placed in the Arduino UNO socket. It is also possible to use [Arduino as ISP] method: upload this variation of [ArduinoISP] to the Arduino board and select "Tools > Programmer > Arduino as ISP", and "Sketch > Upload Using Programmer".
+2. <a name="note2"/>The occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to half a unit-circle _UA/2 (equivalent to 180 degrees)). The sensitivity of the VOX switching can be set with parameter VOX_THRESHOLD. Audio-input can be attenuated by increasing parameter MIC_ATTEN (6dB per step).
 
 
 ### Credits:
-[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] stage like the famous [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi in 2013 and is basically a kind of [EER] implemented in software.
+[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] stage like the famous [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] hardware modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi.
 
 
 ### References
@@ -155,17 +157,25 @@ If you have an Arduino UNO with a ATMEGA328P placed with a Arduino bootloader yo
 
 [QCX-SSB]: https://github.com/threeme3/QCX-SSB
 
-[ArduinoISP]: https://raw.githubusercontent.com/adafruit/ArduinoISP/master/ArduinoISP.ino
+[QCX-SSB Sketch]: QCX-SSB.ino
 
-[ISP jumper]: https://qrp-labs.com/images/qcx/HowToUpdateTheFirmwareOnTheQCXusingAnArduinoUNOandAVRDUDESS.pdf
+[original modification]: https://github.com/threeme3/QCX-SSB/tree/26c4e97a034d367e1325c5587a56a7c2a43c69f3
+
+[standard QCX firmware upload procedure]: https://www.qrp-labs.com/qcx/qcxfirmware.html
+
+[USBasp]: https://sites.google.com/site/g4zfqradio/qrplabs_program_chip_with_USBasp
+
+[Arduino as ISP]: https://qrp-labs.com/images/qcx/HowToUpdateTheFirmwareOnTheQCXusingAnArduinoUNOandAVRDUDESS.pdf
+
+[AVRDudess]: http://zakkemble.net/avrdudess
 
 [Arduino]: https://www.arduino.cc/en/main/software#download
+
+[ArduinoISP]: https://raw.githubusercontent.com/adafruit/ArduinoISP/master/ArduinoISP.ino
 
 [digital SSB generation technique]: http://pe1nnz.nl.eu.org/2013/05/direct-ssb-generation-on-pll.html
 
 [QCX]: https://qrp-labs.com/qcx.html
-
-[QCX-SSB Sketch]: QCX-SSB.ino
 
 [X1M-mic]: https://vignette.wikia.nocookie.net/x1m/images/f/f1/X1M_mic_pinout_diagram.jpg/revision/latest?cb=20131028014710
 
@@ -211,7 +221,7 @@ If you have an Arduino UNO with a ATMEGA328P placed with a Arduino bootloader yo
 
 [phase shift in the SI5351 clocks]: https://www.silabs.com/community/timing/forum.topic.html/difficulty_settingp-LchG
 
-[original Assembly instruction]: https://www.qrp-labs.com/images/qcx/assembly_A4_Rev_4b.pdf
+[QCX Assembly instruction]: https://www.qrp-labs.com/images/qcx/assembly_A4_Rev_4b.pdf
 
 [Arduino PWM]: http://interface.khm.de/index.php/lab/interfaces-advanced/arduino-dds-sinewave-generator/
 

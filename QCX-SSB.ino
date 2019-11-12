@@ -2,7 +2,7 @@
 //
 // https://github.com/threeme3/QCX-SSB
 
-#define VERSION   "1.01l"
+#define VERSION   "1.01m"
 
 /*
 code definitions and re-use for comb, integrator, dc decoupling, arctan
@@ -805,11 +805,15 @@ void sdr_rx_a()
 
 void sdr_rx_b()
 {
+  DDRC |= 0x03; // mute RX inputs
   ADMUX = admux[2];  // set MUX for next conversion
   adc_b = ADC;
-//delayMicroseconds(4);
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   func_ptr = sdr_rx;    // processing function for next conversion
+
+  delayMicroseconds(5);
+  DDRC &= ~0x03; // undo mute RX inputs
+
 }
 
 // Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
@@ -928,6 +932,7 @@ void sdr_rx_2()
 {
   // process Q for odd samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
 #ifdef DUPLEX
+  //DDRC &= ~0x03; // undo mute RX inputs
   adc_d = ADC;
   ADMUX = admux[0];  // set MUX for next conversion
   int16_t adc = adc_a - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
@@ -1611,10 +1616,10 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
       //if(action == UPDATE) paramAction(SAVE, value, menuid, label, enumArray, _min, _max, continuous, init_val);
       break;
     case LOAD:
-      for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) *ptr++ = eeprom_read_byte((uint8_t *) eeprom_addr++);
+      for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
       break;
     case SAVE:
-      for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) eeprom_write_byte((uint8_t *) eeprom_addr++, *ptr++);
+      for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++);
       break;
     case SKIP:
       eeprom_addr += sizeof(value);
@@ -1633,12 +1638,18 @@ enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, SMETER, CWDE
 #define N_PARAMS 15   // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 uint8_t eeprom_version;
+#define EEPROM_OFFSET 0x150  // avoids collision with QCX settings, overwrites text settings though
+#define EEPROM_SUPPORT  1
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
   if((action == SAVE) || (action == LOAD)){
-    eeprom_addr = 0;
+#ifdef EEPROM_SUPPORT
+    eeprom_addr = EEPROM_OFFSET;
     for(uint8_t _id = 1; _id < id; _id++) paramAction(SKIP, _id);
+#else
+    return;
+#endif
   }
   if(id == ALL) for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
   
@@ -1856,6 +1867,8 @@ void setup()
   paramAction(LOAD);
   if(get_version_id() != eeprom_version){
     paramAction(INIT);
+    //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
+    //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
     paramAction(SAVE);
     lcd.setCursor(0, 1); lcd.print(F("Reset settings.."));
     delay(500); wdt_reset();
@@ -1870,7 +1883,8 @@ void setup()
   qcx.show_banner();  // remove release number
 
   if(!dsp_cap) volume = 0;  // keep volume disabled for analog rig
-  
+
+
   // volume = (dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0;
   // mode = (ssb_cap) ? USB : CW;
   //if(mode == CW) filt = 4;
