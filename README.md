@@ -41,7 +41,7 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 (current) | 2019-09-01 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT. |
+| R1.02 (current) | 2019-09-01 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings. |
 | R1.01 | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. |
 | R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
 

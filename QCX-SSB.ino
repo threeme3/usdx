@@ -1630,6 +1630,8 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
   }
 }
 
+volatile uint8_t event;
+
 volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile int8_t menu = 0;  // current parameter id selected in menu
 const char* offon_label[] = {"OFF", "ON"};
@@ -1915,10 +1917,11 @@ void loop()
     delay(1);
     qcx.start_rx();
   }
-  if(digitalRead(BUTTONS)){ // Left-/Right-/Rotary-button
+  enum event_t { BL=0x10, BR=0x20, BE=0x40, SC=0x00, DC=0x01, PL=0x02, PT=0x04|0x02 }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
+  if(!digitalRead(BUTTONS)) event = 0; // no buttons pressed: reset event
+  if(digitalRead(BUTTONS) && !(event&PL)){ // Left-/Right-/Rotary-button (while not already pressed)
     uint16_t v = analogSafeRead(BUTTONS);
-    enum event_t { BL=0x00, BR=0x10, BE=0x20, SC=0x00, DC=0x01, PL=0x02, PT=0x03 }; // button-left, button-right and button-encoder; single-click, double-click, press-long, press-and-turn
-    uint8_t event = SC;
+    event = SC;
     int32_t t0 = millis();
     for(; digitalRead(BUTTONS);){ // until released or long-press
       if((millis() - t0) > 300){ event = PL; break; }
