@@ -24,18 +24,19 @@ pe1nnz@amsat.org
 - Continuously tunable through bands **80m-10m** (anything between 20kHz-99MHz is tunable but with degraded or loss in performance)
 - **Multiband** support
 - Software-based **VOX** that can be used as **fast Full Break-In** (QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
-- **Simple easy to install modification** with only **6 component changes and 4 wires** to implement a basic SSB transceiver
+- **Simple to install modification** with **6 component changes and 4 wires** to implement a basic SSB transceiver, **1 component change** to implement DSP feature,  **11 component changes and 6 wires** to implement SDR feature
 - Firmware is **open source** through an Arduino Sketch, it allows experimentation, new features can be easily added, contributions can be shared via Github repository QCX-SSB, about 2000 lines of code
 - Completely **digital and software-based** SSB transmit-stage (**no additional circuitry needed**, except for the audio-in circuit)
 - **ATMEGA328P signal processing:** samples audio-input and reconstruct a SSB-signal by controlling the _phase of the SI5351 PLL_ (through tiny frequency changes over 800kbits/s I2C) and the _amplitude of the PA_ (through PWM of the PA key-shaping circuit).
 - **Lean and low-cost SSB transceiver design**: because of the EER/Polar-transmitter class-E stage it is **highly power-efficient** (no bulky heatsinks required), and has a **simple design** (no complex balanced linear power amplifier required)
 - An **pre-distorion** algorithm that cancels out the amplitude errors of non-linearities in the PA voltage regulated PWM supply; a lookup table is used that can be calibrated with an internal PA amplitude measurement
 - Possibility to extend the QCX analog phasing stage with a **DSP stage**
-- Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**.
-- A theoretical **digital receiver dynamic range of 83dB** at 2.4kHz BW.  (1 dB) Compression point (at -126dBm sensitivity): -44dBm/1mV (for in-band signal); -4dBm/160mV (for signal at 15kHz offset); 19dBm/2V (for signal at 100kHz offset or more).
-- Digitally switchable RF front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**.
-- SDR implementation **simplifies** the receiver heaviliy and **shaves off roughly 30% of the components** from the original QCX design while adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
-- Can be used as alternate firmware on an unmodified QCX.
+- Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**
+- A theoretical **digital receiver dynamic range of 78dB** at 2.4kHz BW.  (1 dB) Compression point (at -126dBm sensitivity): -44dBm/1mV (for in-band signal); -4dBm/160mV (for signal at 15kHz offset); 19dBm/2V (for signal at 100kHz offset or more)
+- Digitally switchable RF front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**
+- This firmware is compatible with an unmodified QCX, partial modified QCX (e.g. SSB mod, or DSP mod), or fully modified QCX (SSB + SDR mod, as described below)
+- SDR implementation simplifies the receiver heaviliy and **shaves off roughly 30% of the components** from the original QCX design while adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
+- Probably the most cost effective and easiest to build standalone SDR transceiver that you can find. More versatile and easier to build than the original QCX (less components, no transformer windings, no alignment procedure)
 
 
 ## Revision History:
@@ -52,16 +53,16 @@ Below the schematic after the modification is applied, components are left out a
 
 
 ## Installation:
-To make the SDR+SSB modification, you need to remove 9 and change 8 components, install 10 wires, upload firmware and connect a microphone. In addition on a newly to be build QCX, 37 components can be left out.
+To make the SDR+SSB modification, you need to remove 9 and change 8 components, install 10 wires, upload firmware and connect a microphone. On a newly to be build QCX, 46 components can be left out.
 
-**Note: Click here if you would like to apply the [original modification] without SDR. This firmware supports the original modification, optionally a DSP audio processing feature can be enabled by disconnecting R59 and hooking up a speaker on pin15/U2 (via 10uF capacitor), similar as shown above.**
+**Note: Click here for the [original QCX-SSB modification]. The orginal mod is supported by the latest firmware and optionally a DSP audio processing feature can be enabled by disconnecting R59 and hooking up a speaker on pin15/U2 (via 10uF capacitor, similar as shown above).**
 
 Change the following component values (and type of component in some cases), and wire the following component pins on the backside PCB (some pins must be disconnected from the pad):
 
 1. To implement the SDR receiver: R11,12,17,24,27,29,59,IC10 (remove); IC7-9,R13,R18-20,R25,R28-40,R60,C9,C11,C13-24,C52-53,D5,Q7 (omit on new builds); C10 (.1uF); R16,23 (120k); wire IC10(pin7) to IC6(pin7); wire R27(pin2) to IC6(pin1); wire IC2(pin15) to IC10(pin1); disconnect R50-5V and R52-5V and both wire to R57-DVM(pin3); disconnect R21-IC6(pin7) and R22-IC6(pin7) and both wire to R7-IC5(pin1).
 2. To implement the SSB transmitter: D4,R21,R56 (10k); R58 (.22uF); C32 (10uF); C31 (remove); wire IC2-pin21 to R57-DVM(pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58;
-3. To implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] chapter 3.56, p.53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish.
-4. Upload the hex firmware-file to existing or new ATMEGA328/328P chip (click on top green download button for zip). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>).
+3. To implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] page 53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish.
+4. Upload the hex firmware-file to existing or new ATMEGA328/328P chip (click on top green download button for zip). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>). You can safely switch between this/original QCX firmware without any issues.
 5. Connect an electret microphone pins (+) to tip and (-) to sleeve of paddle-jack; PTT-switch pins to ring and sleeve (see [X1M-mic]).
 
 
@@ -85,7 +86,7 @@ Currently, the following functions have been assigned to the buttons:
 | CENTER double-press | Select Band                                             |
 | CENTER long-press   | Select (larger) frequency step                          |
 | CENTER turn         | Tune frequency                                          |
-| CENTER push + turn  | Volume & Power-off                                      |
+| CENTER push + turn  | Volume & Power-off/on                                   |
 | RIGHT single-press  | LSB/USB/CW-mode                                         | 
 | RIGHT double-press  | Filter Bandwidth                                        |
 | RIGHT long-press    | VOX mode (for full-break-in or digital modes)           |
@@ -139,7 +140,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 ### Notes:
 1. <a name="note1"/>Firmware upload variations:
-- [AVRDudess] tool or avrdude CLI can be used for uploading the firmware via the ISP connector on the QCX. Follow [Arduino as ISP] instructions if you have a Arduino UNO board available; or [USBasp] instructions if you have a USBasp programmer; but many other ISP programmers can be used in similar manner such as USBTiny from Adafruit or AVRisp mkII. During ISP, mic should be disconnected, power supply should be connected; in tool do not set: erase, EEPROM; valid fuse settings are: E=FD H=D1 L=F7.
+- [AVRDudess] tool or avrdude CLI can be used for uploading the firmware via the ISP connector on the QCX. Follow [Arduino as ISP] instructions if you have a Arduino UNO board available (tip: use female-to-male breadboard cables to connect Arduino to QCX ISP jumper); or [USBasp] instructions if you have a USBasp programmer, alternatively use [USPasp ExtremeBurner]; but many other ISP programmers can be used in similar manner such as [USBtiny] or AVRisp mkII. During ISP, mic should be disconnected, power supply should be connected; in tool do not erase, program EEPROM or set fuse settings (they are by default ok: E=FD H=D1 L=F7).
 - Alternatively, in case you have an ATMEGA328P chip with Arduino bootloader, you can place the chip in an Arduino UNO board and upload directly (without the need for a ISP cable and QCX) by specifying 'arduino' programmer and baudrate 115200.
 - Alternatively, in case you have an [Arduino] environment installed, you can upload the [QCX-SSB Sketch] directly from the Arduino environment (without using AVRDudess and firmware file); make sure "Tools > Board > Arduino/Genuino Uno",  "Tools > Port > /dev/ttyUSB0 or ttyACM0", and then "Sketch > Upload" is selected, while the ATMEGA328P chip is placed in the Arduino UNO socket. It is also possible to use [Arduino as ISP] method: upload this variation of [ArduinoISP] to the Arduino board and select "Tools > Programmer > Arduino as ISP", and "Sketch > Upload Using Programmer".
 2. <a name="note2"/>The occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to half a unit-circle _UA/2 (equivalent to 180 degrees)). The sensitivity of the VOX switching can be set with parameter VOX_THRESHOLD. Audio-input can be attenuated by increasing parameter MIC_ATTEN (6dB per step).
@@ -159,11 +160,15 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 [QCX-SSB Sketch]: QCX-SSB.ino
 
-[original modification]: https://github.com/threeme3/QCX-SSB/tree/26c4e97a034d367e1325c5587a56a7c2a43c69f3
+[original QCX-SSB modification]: https://github.com/threeme3/QCX-SSB/tree/26c4e97a034d367e1325c5587a56a7c2a43c69f3
 
 [standard QCX firmware upload procedure]: https://www.qrp-labs.com/qcx/qcxfirmware.html
 
 [USBasp]: https://sites.google.com/site/g4zfqradio/qrplabs_program_chip_with_USBasp
+
+[USPasp ExtremeBurner]: https://groups.io/g/QRPLabs/topic/57461404#40024
+
+[USBtiny]: https://groups.io/g/QRPLabs/attachment/40315/0/QCX%20Firmware%20Update%20Instructions.pdf
 
 [Arduino as ISP]: https://qrp-labs.com/images/qcx/HowToUpdateTheFirmwareOnTheQCXusingAnArduinoUNOandAVRDUDESS.pdf
 
