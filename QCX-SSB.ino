@@ -413,7 +413,7 @@ volatile bool change = true;
 volatile int32_t freq = 7074000;
 volatile bool ptt = false;
 volatile uint8_t tx = 0;
-volatile bool vox_enable = false;
+volatile bool vox = false;
 enum dsp_cap_t { ANALOG, DSP, SDR };
 static uint8_t dsp_cap = 0;
 static uint8_t ssb_cap = 0;
@@ -439,15 +439,15 @@ inline void txen(bool en)
       pinMode(AUDIO2, INPUT);  // prevent RX leakage into AREF
       digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-      lcd.setCursor(15, 1); lcd.print((vox_enable) ? "V" : "R");
+      lcd.setCursor(15, 1); lcd.print((vox) ? "V" : "R");
   }
 }
 
-inline void vox(bool trigger)
+inline void _vox(bool trigger)
 {
   if(trigger){
     if(!tx) txen(true);
-    tx = (vox_enable) ? 255 : 1; // hangtime = 255 / 4402 = 58ms (the time that TX at least stays on when not triggered again)
+    tx = (vox) ? 255 : 1; // hangtime = 255 / 4402 = 58ms (the time that TX at least stays on when not triggered again)
   } else {
     if(tx){
       tx--;
@@ -500,10 +500,10 @@ inline int16_t ssb(int16_t in)
   uint16_t _amp = magn(i, q);
 
 #define VOX_THRESHOLD (1 << (2))  // 2*6dB above ADC noise level
-  if(vox_enable) vox(_amp > VOX_THRESHOLD);
-  else vox(ptt);
+  if(vox) _vox(_amp > VOX_THRESHOLD);
+  else _vox(ptt);
 //  else txen(ptt);
-//  vox((ptt) || ((vox_enable) && (_amp > VOX_THRESHOLD)) );
+//  vox((ptt) || ((vox) && (_amp > VOX_THRESHOLD)) );
 
   _amp = _amp << (drive);
 #ifdef CONSTANT_AMP
@@ -532,7 +532,7 @@ inline int16_t ssb(int16_t in)
 }
 
 #define MIC_ATTEN  0  // 0*6dB attenuation (note that the LSB bits are quite noisy)
-//volatile int8_t mon = 0;
+volatile int8_t mox = 0;
 
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
@@ -546,7 +546,9 @@ void dsp_tx()
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
   numSamples++;
-  //if(mon) OCR1AL = (adc << (mon-1)) + 128;  // TX audio monitoring
+  
+  if(!mox) return;
+  OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
 }
 
 volatile int16_t p_sin = 0;   // initialized with A*sin(t), where t=0
@@ -1464,7 +1466,7 @@ public:
   
   void start_rx()
   {
-  //if(!vox_enable) txen(false);
+  //if(!vox) txen(false);
     timer2_stop();
     timer1_stop();
     adc_stop();
@@ -1495,7 +1497,7 @@ public:
     adc_start(2, true, F_ADC_CONV);
     timer2_start(F_SAMP_TX);
     timer1_start(78125);
-    //if(!vox_enable) txen(true);
+    //if(!vox) txen(true);
   }
 
   int8_t prev_bandval = 2;
@@ -1636,7 +1638,7 @@ volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects
 volatile int8_t menu = 0;  // current parameter id selected in menu
 const char* offon_label[] = {"OFF", "ON"};
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, SMETER, CWDEC, VOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, SMETER, CWDEC, VOX, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 #define N_PARAMS 15   // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 uint8_t eeprom_version;
@@ -1658,7 +1660,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* stepsize_label[10] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
   switch(id){
     // Visible parameters
-    case VOLUME: paramAction(action, volume, F("A1"), F("Volume"), NULL, -1, 32, false, ((dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0)); break;
+    case VOLUME: paramAction(action, volume, F("A1"), F("Volume"), NULL, -1, 16, false, ((dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0)); break;
     case MODE:   paramAction(action, mode, F("A2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
     case FILTER: paramAction(action, filt, F("A3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
     case BAND:   paramAction(action, qcx.bandval, F("A4"), F("Band"), qcx.band_label, 0, sizeof(qcx.band_label)/sizeof(char*) - 1, false, 1); break;
@@ -1668,8 +1670,9 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case ATT:    paramAction(action, att, F("A8"), F("ATT"), att_label, 0, 7, false, 0); break;
     case SMETER: paramAction(action, qcx.smode, F("A9"), F("S-meter"), qcx.smode_label, 0, sizeof(qcx.smode_label)/sizeof(char*) - 1, false, 1); break;
     case CWDEC:  paramAction(action, cwdec, F("B1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
-    case VOX:    paramAction(action, vox_enable, F("C1"), F("VOX"), offon_label, 0, 1, false, false); break;
-    case DRIVE:  paramAction(action, drive, F("C2"), F("TX Drive"), NULL, 0, 8, false, 4); break;
+    case VOX:    paramAction(action, vox, F("C1"), F("VOX"), offon_label, 0, 1, false, false); break;
+    case MOX:    paramAction(action, mox, F("C2"), F("MOX"), NULL, 0, 4, false, false); break;
+    case DRIVE:  paramAction(action, drive, F("C3"), F("TX Drive"), NULL, 0, 8, false, 4); break;
     case PARAM_A: paramAction(action, param_a, F("D1"), F("Param A"), NULL, 0, 65535, false, 0); break;
     case PARAM_B: paramAction(action, param_b, F("D2"), F("Param B"), NULL, -32768, 32767, false, 0); break;
     case PARAM_C: paramAction(action, param_c, F("D3"), F("Param C"), NULL, -32768, 32767, false, 0); break;
@@ -1917,9 +1920,10 @@ void loop()
     delay(1);
     qcx.start_rx();
   }
-  enum event_t { BL=0x10, BR=0x20, BE=0x40, SC=0x00, DC=0x01, PL=0x02, PT=0x04|0x02 }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
+  enum event_t { BL=0x10, BR=0x20, BE=0x40, SC=0x00, DC=0x01, PL=0x02, PT=0x04 }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(!digitalRead(BUTTONS)) event = 0; // no buttons pressed: reset event
   if(digitalRead(BUTTONS) && !(event&PL)){ // Left-/Right-/Rotary-button (while not already pressed)
+  //if(digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
     uint16_t v = analogSafeRead(BUTTONS);
     event = SC;
     int32_t t0 = millis();
@@ -1994,12 +1998,12 @@ void loop()
         change = true; // refresh display
         break;
       case BR|PL:
-        vox_enable = true;
+        vox = true;
         qcx.start_tx();
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
           wdt_reset();  // until 2nd press
         }
-        vox_enable = false;
+        vox = false;
         delay(100);
         qcx.start_rx();
         delay(100);
