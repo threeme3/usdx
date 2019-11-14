@@ -1630,6 +1630,8 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
   }
 }
 
+volatile uint8_t event;
+
 volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile int8_t menu = 0;  // current parameter id selected in menu
 const char* offon_label[] = {"OFF", "ON"};
@@ -1915,10 +1917,11 @@ void loop()
     delay(1);
     qcx.start_rx();
   }
-  if(digitalRead(BUTTONS)){ // Left-/Right-/Rotary-button
+  enum event_t { BL=0x10, BR=0x20, BE=0x40, SC=0x00, DC=0x01, PL=0x02, PT=0x04|0x02 }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
+  if(!digitalRead(BUTTONS)) event = 0; // no buttons pressed: reset event
+  if(digitalRead(BUTTONS) && !(event&PL)){ // Left-/Right-/Rotary-button (while not already pressed)
     uint16_t v = analogSafeRead(BUTTONS);
-    enum event_t { BL=0x00, BR=0x10, BE=0x20, SC=0x00, DC=0x01, PL=0x02, PT=0x03 }; // button-left, button-right and button-encoder; single-click, double-click, press-long, press-and-turn
-    uint8_t event = SC;
+    event = SC;
     int32_t t0 = millis();
     for(; digitalRead(BUTTONS);){ // until released or long-press
       if((millis() - t0) > 300){ event = PL; break; }
@@ -1950,7 +1953,7 @@ void loop()
         int8_t _menumode;
         if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short left-click while in default screen: enter menu mode
         if(menumode == 1){ _menumode = 2; }                          // short left-click while in menu: enter value selection screen
-        if(menumode == 2){ _menumode = 0; qcx.show_banner(); change = true; paramAction(SAVE, menu); } // short left-click while in value selection screen: return menu to default screen
+        if(menumode == 2){ _menumode = 0; qcx.show_banner(); change = true; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
         menumode = _menumode;
         break;
       case BL|DC:
@@ -1962,16 +1965,21 @@ void loop()
         }*/
         break;
       case BR|SC:
-        encoder_val = 1;
-        paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*), true);
-        if(mode != CW) qcx.stepsize = qcx.STEP_1k; else qcx.stepsize = qcx.STEP_100;
-        //if(mode > FM) mode = LSB;
-        if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
-        if(mode == CW) filt = 4; else filt = 0;
-        paramAction(SAVE, MODE); 
-        paramAction(SAVE, FILTER);
-        si5351.prev_pll_freq = 0;  // enforce PLL reset
-        change = true;
+        if(!menumode){
+          encoder_val = 1;
+          paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*), true);
+          if(mode != CW) qcx.stepsize = qcx.STEP_1k; else qcx.stepsize = qcx.STEP_100;
+          //if(mode > FM) mode = LSB;
+          if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
+          if(mode == CW) filt = 4; else filt = 0;
+          paramAction(SAVE, MODE); 
+          paramAction(SAVE, FILTER);
+          si5351.prev_pll_freq = 0;  // enforce PLL reset
+          change = true;
+        } else {
+          if(menumode == 1){ menumode = 0; qcx.show_banner(); change = true; }  // short right-click while in menu: enter value selection screen
+          if(menumode == 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
+        }
         break;
       case BR|DC:
         //encoder_val = 1; paramAction(UPDATE, drive, NULL, F("Drive"), NULL, 0, 8, true);
@@ -1997,7 +2005,16 @@ void loop()
         delay(100);
         break;
       case BR|PT: break;
-      case BE|SC: qcx.stepsize_change(+1); break;
+      case BE|SC:
+        if(!menumode)
+          qcx.stepsize_change(+1);
+        else {
+          int8_t _menumode;
+          if(menumode == 1){ _menumode = 2; }  // short encoder-click while in menu: enter value selection screen
+          if(menumode == 2){ _menumode = 1; change = true; paramAction(SAVE, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
+          menumode = _menumode;
+        }
+        break;
       case BE|DC:
         delay(100);
         qcx.bandval++;
