@@ -4,12 +4,11 @@
 
 #define VERSION   "1.01m"
 
-/*
+/* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
 in func_ptr for different mode types
 agc based on rms256, agc/smeter after filter
 vox by sampling mic port in sdr_rx?
-tx mox in menu
 noisefree integrator (rx audio out) in lower range
 raised cosine tx amp for cw
 auto paddle
@@ -18,6 +17,11 @@ cw tx message/cw encoder
 menu back (right button), menu enter (rotary button)
 dynamic range cw
 att extended agc
+profiling nsamples, cpu load idle in menu
+configuarable F_CPU, F_XTAL
+CW-R/CW-L offset
+VFO-A/B+split
+OLED display support
 */
 
 // QCX pin defintion
@@ -418,6 +422,7 @@ enum dsp_cap_t { ANALOG, DSP, SDR };
 static uint8_t dsp_cap = 0;
 static uint8_t ssb_cap = 0;
 volatile uint8_t att = 0;
+volatile uint8_t att2 = 0;
 const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
 //#define PROFILING  1
 #ifdef PROFILING
@@ -793,7 +798,7 @@ volatile uint8_t admux[3];
 volatile uint8_t _init;
 volatile int16_t ocomb, i, q, qh;
 #undef  R  // Decimating 2nd Order CIC filter
-#define R 4  // Rate change from 52.083/2 kSPS to 6510.4SPS, providing 12dB gain
+#define R 4  // Rate change from 62500/2 kSPS to 7812.5SPS, providing 12dB gain
 
 volatile uint16_t adc_a, adc_b, adc_c, adc_d;
 
@@ -864,7 +869,7 @@ void sdr_rx()
       {
         // post processing I and Q (down-sampled) results
         static int16_t v[8];
-        v[7] = ac2;
+        v[7] = ac2 >> att2;
         
         i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7];  // Delay to match Hilbert transform on Q branch
             
@@ -965,7 +970,7 @@ void sdr_rx_2()
       {
         // Process Q (down-sampled) samples
         static int16_t v[16];
-        v[15] = ac2;
+        v[15] = ac2 >> att2;
 
         for(uint8_t j = 0; j != 15; j++) v[j] = v[j + 1];
         q = v[7];
@@ -1595,8 +1600,8 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
-      if(continuous && ((int)value + encoder_val) < _min) value = _max; else
-      value += encoder_val;
+      if(((int)value + encoder_val) < _min) value = (continuous) ? _max : _min; 
+      else value += encoder_val;
       encoder_val = 0;
       if(continuous) value = (value % (_max+1));
       value = max(_min, min((int)value, _max));
@@ -1637,9 +1642,10 @@ volatile uint8_t event;
 volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile int8_t menu = 0;  // current parameter id selected in menu
 const char* offon_label[] = {"OFF", "ON"};
+static unsigned long schedule_time = 0;
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, SMETER, CWDEC, VOX, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
-#define N_PARAMS 15   // number of (visible) parameters
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+#define N_PARAMS 17   // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 uint8_t eeprom_version;
 #define EEPROM_OFFSET 0x150  // avoids collision with QCX settings, overwrites text settings though
@@ -1660,22 +1666,23 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* stepsize_label[10] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
   switch(id){
     // Visible parameters
-    case VOLUME: paramAction(action, volume, F("A1"), F("Volume"), NULL, -1, 16, false, ((dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0)); break;
-    case MODE:   paramAction(action, mode, F("A2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
-    case FILTER: paramAction(action, filt, F("A3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
-    case BAND:   paramAction(action, qcx.bandval, F("A4"), F("Band"), qcx.band_label, 0, sizeof(qcx.band_label)/sizeof(char*) - 1, false, 1); break;
-    case STEP:   paramAction(action, qcx.stepsize, F("A5"), F("Tuning step"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
-    case AGC:    paramAction(action, agc, F("A6"), F("AGC"), offon_label, 0, 1, false, true); break;
-    case NR:     paramAction(action, nr, F("A7"), F("NR"), NULL, 0, 8, false, 0); break;
-    case ATT:    paramAction(action, att, F("A8"), F("ATT"), att_label, 0, 7, false, 0); break;
-    case SMETER: paramAction(action, qcx.smode, F("A9"), F("S-meter"), qcx.smode_label, 0, sizeof(qcx.smode_label)/sizeof(char*) - 1, false, 1); break;
-    case CWDEC:  paramAction(action, cwdec, F("B1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
-    case VOX:    paramAction(action, vox, F("C1"), F("VOX"), offon_label, 0, 1, false, false); break;
-    case MOX:    paramAction(action, mox, F("C2"), F("MOX"), NULL, 0, 4, false, false); break;
-    case DRIVE:  paramAction(action, drive, F("C3"), F("TX Drive"), NULL, 0, 8, false, 4); break;
-    case PARAM_A: paramAction(action, param_a, F("D1"), F("Param A"), NULL, 0, 65535, false, 0); break;
-    case PARAM_B: paramAction(action, param_b, F("D2"), F("Param B"), NULL, -32768, 32767, false, 0); break;
-    case PARAM_C: paramAction(action, param_c, F("D3"), F("Param C"), NULL, -32768, 32767, false, 0); break;
+    case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false, ((dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0)); break;
+    case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
+    case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
+    case BAND:    paramAction(action, qcx.bandval, F("1.4"), F("Band"), qcx.band_label, 0, sizeof(qcx.band_label)/sizeof(char*) - 1, false, 1); break;
+    case STEP:    paramAction(action, qcx.stepsize, F("1.5"), F("Tuning step"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
+    case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false, true); break;
+    case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false, 0); break;
+    case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false, 0); break;
+    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false, 0); break;
+    case SMETER:  paramAction(action, qcx.smode, F("1.10"), F("S-meter"), qcx.smode_label, 0, sizeof(qcx.smode_label)/sizeof(char*) - 1, false, 1); break;
+    case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
+    case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false, false); break;
+    case MOX:     paramAction(action, mox, F("3.2"), F("MOX"), NULL, 0, 4, false, false); break;
+    case DRIVE:   paramAction(action, drive, F("3.3"), F("TX Drive"), NULL, 0, 8, false, 4); break;
+    case PARAM_A: paramAction(action, param_a, F("9.1"), F("Param A"), NULL, 0, 65535, false, 0); break;
+    case PARAM_B: paramAction(action, param_b, F("9.2"), F("Param B"), NULL, -32768, 32767, false, 0); break;
+    case PARAM_C: paramAction(action, param_c, F("9.3"), F("Param C"), NULL, -32768, 32767, false, 0); break;
     // Invisible parameters
     case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false, 7074000); break;
     case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false, get_version_id()); break;
@@ -1920,27 +1927,29 @@ void loop()
     delay(1);
     qcx.start_rx();
   }
-  enum event_t { BL=0x10, BR=0x20, BE=0x40, SC=0x00, DC=0x01, PL=0x02, PT=0x04 }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
-  if(!digitalRead(BUTTONS)) event = 0; // no buttons pressed: reset event
-  if(digitalRead(BUTTONS) && !(event&PL)){ // Left-/Right-/Rotary-button (while not already pressed)
-  //if(digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
-    uint16_t v = analogSafeRead(BUTTONS);
-    event = SC;
-    int32_t t0 = millis();
-    for(; digitalRead(BUTTONS);){ // until released or long-press
-      if((millis() - t0) > 300){ event = PL; break; }
-      wdt_reset();
+  enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
+  if(digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
+    if(!(event & PL)){  // hack: if there was long-push before, then fast forward
+      uint16_t v = analogSafeRead(BUTTONS);
+      event = SC;
+      int32_t t0 = millis();
+      for(; digitalRead(BUTTONS);){ // until released or long-press
+        if((millis() - t0) > 300){ event = PL; break; }
+        wdt_reset();
+      }
+      delay(10); //debounce
+      for(; (event != PL) && ((millis() - t0) < 500);){ // until 2nd press or timeout
+        if(digitalRead(BUTTONS)){ event = DC; break; }
+        wdt_reset();
+      }
+      for(; digitalRead(BUTTONS);){ // until released, or encoder is turned while longpress
+        if(encoder_val && event == PL){ event = PT; break; }
+        wdt_reset();
+      }
+      event |= (v < 862) ? BL : (v < 1023) ? BR : BE; // determine which button pressed based on threshold levels
+    } else {  // hack: fast forward handling
+      event = (event&0xf0) | ((encoder_val) ? PT : PL);  // only alternate bewteen push-long/turn when applicable
     }
-    delay(10); //debounce
-    for(; (event != PL) && ((millis() - t0) < 500);){ // until 2nd press or timeout
-      if(digitalRead(BUTTONS)){ event = DC; break; }
-      wdt_reset();
-    }
-    for(; digitalRead(BUTTONS);){ // until released, or encoder is turned while longpress
-      if(encoder_val && event == PL){ event = PT; break; }
-      wdt_reset();
-    }
-    event |= (v < 862) ? BL : (v < 1023) ? BR : BE; // determine which button pressed based on threshold levels
     switch(event){
       case BL|PL:  // Called when menu button released
         menumode = 2;
@@ -2039,12 +2048,12 @@ void loop()
         change = true; // refresh display
         break;
     }
-  }
+  } else event = 0;  // no button pressed: reset event
 
   if(menumode == 1){
     menu += encoder_val;   // Navigate through menu of parameters and values
     encoder_val = 0;
-    menu = max(0, min(menu, N_PARAMS));
+    menu = max(1 /* 0 */, min(menu, N_PARAMS));
   }
 
   if(menumode != 0){  // Show parameter and value
@@ -2065,11 +2074,11 @@ void loop()
       }
       if(menu == ATT){ // post-handling ATT parameter
         if(dsp_cap == SDR){
-          adc_start(0, !(att & 0x01), F_ADC_CONV); admux[0] = ADMUX;
+          adc_start(0, !(att & 0x01), F_ADC_CONV); admux[0] = ADMUX;  // att bit 0 ON: attenuate -13dB by changing ADC AREF (full-scale range) from 1V1 to 5V
           adc_start(1, !(att & 0x01), F_ADC_CONV); admux[1] = ADMUX;
         }
-        digitalWrite(RX, !(att & 0x02)); // RX (enable RX when attenuator not on), otherwise keep Q5 off (attenuate)
-        pinMode(AUDIO1, (att & 0x04) ? OUTPUT : INPUT);
+        digitalWrite(RX, !(att & 0x02)); // att bit 1 ON: attenuate -20dB by disabling RX line, switching Q5 (antenna input switch) into 100k resistence
+        pinMode(AUDIO1, (att & 0x04) ? OUTPUT : INPUT); // att bit 2 ON: attenuate -40dB by terminating ADC inputs with 10R
         pinMode(AUDIO2, (att & 0x04) ? OUTPUT : INPUT);
       }
     }
@@ -2086,7 +2095,7 @@ void loop()
   if(change){
     change = false;
     if(qcx.prev_bandval != qcx.bandval){ freq = qcx.band[qcx.bandval]; qcx.prev_bandval = qcx.bandval; }
-    paramAction(SAVE, FREQ);
+    schedule_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
  
     if(menumode == 0){
       uint32_t n = freq / 1000000;  // lcd.print(f) with commas
@@ -2115,6 +2124,12 @@ void loop()
       si5351.freq(freq, 90, 0);  // RX in LSB
     else
       si5351.freq(freq, 0, 90);  // RX in USB
+  }
+  
+  if((schedule_time) && (millis() > schedule_time)){  // save freq when time has reached schedule
+    paramAction(SAVE, FREQ);  // save freq changes
+    schedule_time = 0;
+    //lcd.setCursor(15, 1); lcd.print("S"); delay(100); lcd.setCursor(15, 1); lcd.print("R");
   }
   
   wdt_reset();
