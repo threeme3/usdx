@@ -1,4 +1,4 @@
-// QCX-SSB.ino Arduino Sketch
+// QCX-SSB.ino Arduino SketchD
 //
 // https://github.com/threeme3/QCX-SSB
 
@@ -371,7 +371,7 @@ public:
       prev_divider = divider;
       SendRegister(SI_PLL_RESET, 0xA0);
     }
-    //SendRegister(24, 0b00000000); // CLK3-0 Disable State: CLK2=0 (BE CAREFUL TO CHANGE THIS!!!), CLK1,0=00 -> IC4-X0 selected -> 2,5V on IC5A/3(+) -> 12V on IC5A/1, IC6A/2(-) -> 0V on IC6A/1, AUDIO2
+    //SendRegister(24, 0b00000000); // CLK3-0 Disable State: CLK2=0 (BE CAREFUL TO CHANGE THIS!!!), CLK1/0=00 -> IC4-X0 selected -> 2,5V on IC5A/3(+), when IC5/2(-) leaks down below 2.5V -> 12V on IC5A/1, IC6A/2(-) -> 0V on IC6A/1, AUDIO2
   }
   void alt_clk2(uint32_t freq)
   {
@@ -392,7 +392,7 @@ public:
   }
   void powerDown()
   {
-    SendRegister(SI_CLK0_CONTROL, 0b11000000);  // Conserve power when output is dsiabled
+    SendRegister(SI_CLK0_CONTROL, 0b11000000);  // Conserve power when output is disabled
     SendRegister(SI_CLK1_CONTROL, 0b11000000);
     SendRegister(SI_CLK2_CONTROL, 0b11000000);
     SendRegister(19, 0b11000000);
@@ -412,6 +412,7 @@ volatile int16_t param_c = 0;
 
 enum mode_t { LSB, USB, CW, AM, FM };
 volatile int8_t mode = USB;
+volatile uint8_t halt;
 const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
 volatile bool change = true;
 volatile int32_t freq = 7074000;
@@ -437,26 +438,26 @@ inline void txen(bool en)
       lcd.setCursor(15, 1); lcd.print("T");
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
       digitalWrite(RX, LOW);  // TX
-      pinMode(AUDIO1, OUTPUT);  // prevent RX leakage into AREF
-      pinMode(AUDIO2, OUTPUT);  // prevent RX leakage into AREF
+      pinMode(AUDIO1, OUTPUT);  // prevent RX leakage into AREF (by shorten audio inputs)
+      pinMode(AUDIO2, OUTPUT);  // prevent RX leakage into AREF (by shorten audio inputs)
   } else {
-      pinMode(AUDIO1, INPUT);  // prevent RX leakage into AREF
-      pinMode(AUDIO2, INPUT);  // prevent RX leakage into AREF
+      pinMode(AUDIO1, INPUT);  // restore (audio inputs)
+      pinMode(AUDIO2, INPUT);  // restore (audio inputs)
       digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
       lcd.setCursor(15, 1); lcd.print((vox) ? "V" : "R");
   }
 }
 
-inline void _vox(bool trigger)
+inline void _vox(uint8_t trigger)
 {
   if(trigger){
-    if(!tx) txen(true);
+    if(!tx){ txen(true); }
     tx = (vox) ? 255 : 1; // hangtime = 255 / 4402 = 58ms (the time that TX at least stays on when not triggered again)
   } else {
     if(tx){
       tx--;
-      if(!tx) txen(false);
+      if(!tx){ txen(false); }
     }
   }
 }
@@ -493,6 +494,7 @@ inline int16_t ssb(int16_t in)
   int16_t i, q;
   uint8_t j;
   static int16_t v[16];
+
   for(j = 0; j != 15; j++) v[j] = v[j + 1];
 
   dc += (in - dc) / 2;
@@ -507,8 +509,7 @@ inline int16_t ssb(int16_t in)
 #define VOX_THRESHOLD (1 << (2))  // 2*6dB above ADC noise level
   if(vox) _vox(_amp > VOX_THRESHOLD);
   else _vox(ptt);
-//  else txen(ptt);
-//  vox((ptt) || ((vox) && (_amp > VOX_THRESHOLD)) );
+//  _vox((ptt) || ((vox) && (_amp > VOX_THRESHOLD)) );
 
   _amp = _amp << (drive);
 #ifdef CONSTANT_AMP
@@ -520,6 +521,7 @@ inline int16_t ssb(int16_t in)
 
   static int16_t prev_phase;
   int16_t phase = arctan3(q, i);
+
   int16_t dp = phase - prev_phase;  // phase difference and restriction
   prev_phase = phase;
 
@@ -644,12 +646,7 @@ static char out[] = "                ";
 volatile bool cw_event = false;
 
 //#define F_SAMP_RX 78125
-//#define DUPLEX 1
-#ifdef DUPLEX
-#define F_SAMP_RX (2*62500)  //overrun; sample rate of 55500 can be obtained
-#else
 #define F_SAMP_RX 62500  //overrun; sample rate of 55500 can be obtained
-#endif
 //#define F_SAMP_RX 52083
 //#define F_SAMP_RX 44643
 //#define F_SAMP_RX 39062
@@ -661,6 +658,7 @@ volatile bool cw_event = false;
 volatile int8_t volume = 8;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
+volatile uint8_t _init;
 
 //static uint32_t gain = 1024;
 static int16_t gain = 1024;
@@ -795,33 +793,11 @@ volatile func_t func_ptr;
 static uint32_t absavg256 = 0;
 volatile uint32_t _absavg256 = 0;
 volatile uint8_t admux[3];
-volatile uint8_t _init;
 volatile int16_t ocomb, i, q, qh;
 #undef  R  // Decimating 2nd Order CIC filter
 #define R 4  // Rate change from 62500/2 kSPS to 7812.5SPS, providing 12dB gain
 
-volatile uint16_t adc_a, adc_b, adc_c, adc_d;
-
-void sdr_rx_a()
-{
-  //ADMUX = admux[2];  // set MUX for next conversion
-  adc_a = ADC;
-  //ADCSRA |= (1 << ADSC);    // start next ADC conversion
-  func_ptr = sdr_rx_2;    // processing function for next conversion
-}
-
-void sdr_rx_b()
-{
-  DDRC |= 0x03; // mute RX inputs
-  ADMUX = admux[2];  // set MUX for next conversion
-  adc_b = ADC;
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion
-  func_ptr = sdr_rx;    // processing function for next conversion
-
-  delayMicroseconds(5);
-  DDRC &= ~0x03; // undo mute RX inputs
-
-}
+volatile uint16_t adc_c;
 
 // Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
 // H1(z) = (1 + z^-1)^2 = 1 + 2*z^-1 + z^-2 = (1 + z^-2) + (2) * z^-1 = FA(z) + FB(z) * z^-1;
@@ -829,21 +805,14 @@ void sdr_rx_b()
 // source: Lyons Understanding Digital Signal Processing 3rd edition 13.24.1
 void sdr_rx()
 {
-  static int16_t zi1, zi2, zd1, zd2;
   // process I for even samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
-#ifdef DUPLEX
-  adc_c = ADC;
   ADMUX = admux[1];  // set MUX for next conversion
-  int16_t adc = adc_b - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
-  func_ptr = sdr_rx_a;    // processing function for next conversion
-#else
-  ADMUX = admux[1];  // set MUX for next conversion
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion
   func_ptr = sdr_rx_2;    // processing function for next conversion
-#endif
   sdr_rx_common();
+  
+  static int16_t zi1, zi2, zd1, zd2;
 
   // Only for I: correct I/Q sample delay by means of linear interpolation
   static int16_t prev_adc;
@@ -938,19 +907,11 @@ void sdr_rx()
 void sdr_rx_2()
 {
   // process Q for odd samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
-#ifdef DUPLEX
-  //DDRC &= ~0x03; // undo mute RX inputs
-  adc_d = ADC;
   ADMUX = admux[0];  // set MUX for next conversion
-  int16_t adc = adc_a - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
-  func_ptr = sdr_rx_b;    // processing function for next conversion
-#else
-  ADMUX = admux[0];  // set MUX for next conversion
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion
   func_ptr = sdr_rx;    // processing function for next conversion
-#endif
+  //sdr_rx_common();
 
   static int16_t dc;
   dc += (adc - dc) / 2;
@@ -981,7 +942,8 @@ void sdr_rx_2()
 #endif
     } else _z1 = _ac * 2;
   } else z1 = ac * 2;
-  
+
+
   numSamples++;
 }
 
@@ -1000,7 +962,6 @@ inline void sdr_rx_common()
 
 ISR(TIMER2_COMPA_vect)  // Timer2 COMPA interrupt
 {
-  //interrupts();
   func_ptr();
 }
 
@@ -1223,6 +1184,20 @@ int analogSafeRead(uint8_t pin)
   return val;
 }
 
+void analogSampleMic()
+{
+  noInterrupts();
+  digitalWrite(RX, LOW);  // enable RF input
+  //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
+  ADMUX = admux[2];  // set MUX for next conversion
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion
+  for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
+  digitalWrite(RX, HIGH);  // disable RF input
+  //si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  adc_c = ADC;
+  interrupts();
+}
+
 class QCX {
 public:
   QCX(){
@@ -1253,7 +1228,8 @@ public:
 
   int8_t smode = 1;
   const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
-  
+
+  float dbm_max;
   float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
   {
     if(smode == 0){ // none, no s-meter
@@ -1263,7 +1239,6 @@ public:
     if(dsp_cap == SDR) rms = (float)rms * 1.1 / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
     else               rms = (float)rms * 5.0 / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
     float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
-    static float dbm_max;
     dbm_max = max(dbm_max, dbm);
     static uint8_t cnt;
     cnt++;
@@ -1282,13 +1257,8 @@ public:
       int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
       lcd.setCursor(12, 0); 
       char tmp[5];
-      tmp[0] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-      tmp[1] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-      tmp[2] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-      tmp[3] = (char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05); s = s - 3;
-      tmp[4] = 0;
+      for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
       lcd.print(tmp);
-      //for(i = 0; i != 4; i++){ lcd.print((char)(s<1?0x02:s<2?0x03:s<3?0x04:0x05)); s = s - 3; }
     }
     return dbm;
   }
@@ -1471,12 +1441,11 @@ public:
   
   void start_rx()
   {
-  //if(!vox) txen(false);
     timer2_stop();
     timer1_stop();
     adc_stop();
-    tx = 1;  // transit from TX to RX
-    _init = 1;  
+    //tx = 0;
+    _init = 1;
     numSamples = 0;
     func_ptr = sdr_rx;  //enable RX DSP/SDR
     adc_start(2, true, F_ADC_CONV); admux[2] = ADMUX;
@@ -1486,8 +1455,8 @@ public:
     } else { // ANALOG, DSP
       adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
     }
-    timer2_start(F_SAMP_RX);
     timer1_start(78125);
+    timer2_start(F_SAMP_RX);
   }
   
   void start_tx()
@@ -1500,9 +1469,8 @@ public:
     func_ptr = (mode == CW) ? dsp_tx_cw : dsp_tx;
     amp = 0;  // initialize
     adc_start(2, true, F_ADC_CONV);
-    timer2_start(F_SAMP_TX);
     timer1_start(78125);
-    //if(!vox) txen(true);
+    timer2_start(F_SAMP_TX);
   }
 
   int8_t prev_bandval = 2;
@@ -1905,7 +1873,7 @@ void setup()
 }
 
 void loop()
-{
+{ 
   delay(10);
   //delay(100);
 
@@ -1916,10 +1884,10 @@ void loop()
     cw_event = false;
     lcd.setCursor(0, 1); lcd.print(out);
   }
-  
+
   if(!digitalRead(DIT)){
-    ptt = true;
     qcx.start_tx();
+    ptt = true;   // needs to be true AFTER start_tx !
     for(; !digitalRead(DIT);){ //until released
       wdt_reset();
     }
@@ -2007,14 +1975,50 @@ void loop()
         change = true; // refresh display
         break;
       case BR|PL:
-        vox = true;
-        qcx.start_tx();
+        //vox = true;
+      { //int16_t x = 0;
+        lcd.setCursor(15, 1); lcd.print("V");
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
-          wdt_reset();  // until 2nd press
+          analogSampleMic();
+          int16_t in = adc_c - 512;
+          static int16_t dc;
+        
+          int16_t i, q;
+          uint8_t j;
+          static int16_t v[16];
+          for(j = 0; j != 15; j++) v[j] = v[j + 1];
+        
+          dc += (in - dc) / 2;
+          v[15] = in - dc;     // DC decoupling
+          //dc = in;  // this is actually creating a low-pass filter
+        
+          i = v[7];
+          q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+        
+          uint16_t _amp = magn(i, q);
+          //x = max(x, abs(v[15]) );
+          //lcd.setCursor(0, 1); lcd.print(x); lcd_blanks();
+          //lcd.setCursor(0, 1); lcd.print(_amp); lcd_blanks();
+
+          if(_amp > VOX_THRESHOLD){            // workaround for RX noise leakage to AREF  
+            for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
+            qcx.start_tx(); // start tx
+            ptt = 1; // kick
+            delay(1);
+            vox = 1; ptt = 0;
+            for(; /*vox*/ tx; ) wdt_reset(); // while in tx triggered by vox
+            //delay(1);
+            qcx.start_rx();       // stop tx
+            delay(1);
+            vox = 0;
+            continue;  // skip the rest for the moment
+          }
+          //qcx.smeter();
+          wdt_reset();
         }
-        vox = false;
-        delay(100);
-        qcx.start_rx();
+      }
+        lcd.setCursor(15, 1); lcd.print("R");
+        //vox = 0; tx = 1; _vox(false);
         delay(100);
         break;
       case BR|PT: break;
