@@ -416,7 +416,7 @@ volatile uint8_t halt;
 const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
 volatile bool change = true;
 volatile int32_t freq = 7074000;
-volatile bool ptt = false;
+//volatile bool ptt = false;
 volatile uint8_t tx = 0;
 volatile bool vox = false;
 enum dsp_cap_t { ANALOG, DSP, SDR };
@@ -438,11 +438,11 @@ inline void txen(bool en)
       lcd.setCursor(15, 1); lcd.print("T");
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
       digitalWrite(RX, LOW);  // TX
-      pinMode(AUDIO1, OUTPUT);  // prevent RX leakage into AREF (by shorten audio inputs)
-      pinMode(AUDIO2, OUTPUT);  // prevent RX leakage into AREF (by shorten audio inputs)
+      //pinMode(AUDIO1, OUTPUT);  // prevent RX leakage into AREF (by shorten audio inputs)
+      //pinMode(AUDIO2, OUTPUT);  // prevent RX leakage into AREF (by shorten audio inputs)
   } else {
-      pinMode(AUDIO1, INPUT);  // restore (audio inputs)
-      pinMode(AUDIO2, INPUT);  // restore (audio inputs)
+      //pinMode(AUDIO1, INPUT);  // restore (audio inputs)
+      //pinMode(AUDIO2, INPUT);  // restore (audio inputs)
       digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
       lcd.setCursor(15, 1); lcd.print((vox) ? "V" : "R");
@@ -452,12 +452,12 @@ inline void txen(bool en)
 inline void _vox(uint8_t trigger)
 {
   if(trigger){
-    if(!tx){ txen(true); }
+    //if(!tx){ txen(true); }
     tx = (vox) ? 255 : 1; // hangtime = 255 / 4402 = 58ms (the time that TX at least stays on when not triggered again)
   } else {
     if(tx){
       tx--;
-      if(!tx){ txen(false); }
+      //if(!tx){ txen(false); }
     }
   }
 }
@@ -508,7 +508,7 @@ inline int16_t ssb(int16_t in)
 
 #define VOX_THRESHOLD (1 << (2))  // 2*6dB above ADC noise level
   if(vox) _vox(_amp > VOX_THRESHOLD);
-  else _vox(ptt);
+//  else _vox(ptt);
 //  _vox((ptt) || ((vox) && (_amp > VOX_THRESHOLD)) );
 
   _amp = _amp << (drive);
@@ -1459,7 +1459,7 @@ public:
     timer2_start(F_SAMP_RX);
   }
   
-  void start_tx()
+  /*void start_tx()
   {
     timer2_stop();
     timer1_stop();
@@ -1471,6 +1471,24 @@ public:
     adc_start(2, true, F_ADC_CONV);
     timer1_start(78125);
     timer2_start(F_SAMP_TX);
+  }*/
+
+  void fast_rxtx(uint8_t tx_enable){
+    TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
+    //delay(1);
+    noInterrupts();
+    func_ptr = (tx_enable) ? ((mode == CW) ? dsp_tx_cw : dsp_tx) : sdr_rx;
+    interrupts();
+    if(tx_enable) ADMUX = admux[2];
+    else _init = 1;
+    numSamples = 0;
+    txen(tx_enable);
+    //tx = tx_enable;
+    if(tx_enable)
+      OCR2A = (((float)F_CPU / (float)64) / (float)F_SAMP_TX + 0.5) - 1;
+    else
+      OCR2A = (((float)F_CPU / (float)64) / (float)F_SAMP_RX + 0.5) - 1;
+    TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
   }
 
   int8_t prev_bandval = 2;
@@ -1886,6 +1904,7 @@ void loop()
   }
 
   if(!digitalRead(DIT)){
+/*
     qcx.start_tx();
     ptt = true;   // needs to be true AFTER start_tx !
     for(; !digitalRead(DIT);){ //until released
@@ -1894,6 +1913,12 @@ void loop()
     ptt = false;
     delay(1);
     qcx.start_rx();
+*/
+    qcx.fast_rxtx(1);
+    for(; !digitalRead(DIT);){ //until released
+      wdt_reset();
+    }
+    qcx.fast_rxtx(0);
   }
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
@@ -2000,19 +2025,34 @@ void loop()
           //lcd.setCursor(0, 1); lcd.print(x); lcd_blanks();
           //lcd.setCursor(0, 1); lcd.print(_amp); lcd_blanks();
 
-          if(_amp > VOX_THRESHOLD){            // workaround for RX noise leakage to AREF  
+          /*if(_amp > VOX_THRESHOLD){            // workaround for RX noise leakage to AREF  
             for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
             qcx.start_tx(); // start tx
             ptt = 1; // kick
             delay(1);
             vox = 1; ptt = 0;
-            for(; /*vox*/ tx; ) wdt_reset(); // while in tx triggered by vox
+            for(; tx; ) wdt_reset(); // while in tx triggered by vox
             //delay(1);
             qcx.start_rx();       // stop tx
             delay(1);
             vox = 0;
             continue;  // skip the rest for the moment
-          }
+          }*/
+          if(_amp > VOX_THRESHOLD){            // workaround for RX noise leakage to AREF  
+            for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
+            qcx.fast_rxtx(1);
+            //ptt = 1; // kick
+            //delay(1);
+            //vox = 1; ptt = 0;
+            vox = 1; tx = 255; //kick
+            delay(1);
+            for(; /*vox*/ tx; ) wdt_reset(); // while in tx triggered by vox
+            //delay(1);
+            qcx.fast_rxtx(0);
+            delay(1);
+            vox = 0;
+            continue;  // skip the rest for the moment
+          }    
           //qcx.smeter();
           wdt_reset();
         }
