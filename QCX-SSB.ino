@@ -486,6 +486,7 @@ inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 
 uint8_t lut[256];
 volatile uint8_t amp;
+volatile uint8_t vox_gain = (1 << 2);
 
 inline int16_t ssb(int16_t in)
 {
@@ -506,10 +507,9 @@ inline int16_t ssb(int16_t in)
 
   uint16_t _amp = magn(i, q);
 
-#define VOX_THRESHOLD (1 << (2))  // 2*6dB above ADC noise level
-  if(vox) _vox(_amp > VOX_THRESHOLD);
-//  else _vox(ptt);
-//  _vox((ptt) || ((vox) && (_amp > VOX_THRESHOLD)) );
+//#define VOX_THRESHOLD (1 << (2))  // 2*6dB above ADC noise level
+//  if(vox) _vox(_amp > VOX_THRESHOLD);
+  if(vox) _vox(_amp > vox_gain);
 
   _amp = _amp << (drive);
 #ifdef CONSTANT_AMP
@@ -1630,8 +1630,8 @@ volatile int8_t menu = 0;  // current parameter id selected in menu
 const char* offon_label[] = {"OFF", "ON"};
 static unsigned long schedule_time = 0;
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
-#define N_PARAMS 17   // number of (visible) parameters
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+#define N_PARAMS 18   // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 uint8_t eeprom_version;
 #define EEPROM_OFFSET 0x150  // avoids collision with QCX settings, overwrites text settings though
@@ -1664,8 +1664,9 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SMETER:  paramAction(action, qcx.smode, F("1.10"), F("S-meter"), qcx.smode_label, 0, sizeof(qcx.smode_label)/sizeof(char*) - 1, false, 1); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false, false); break;
-    case MOX:     paramAction(action, mox, F("3.2"), F("MOX"), NULL, 0, 4, false, false); break;
-    case DRIVE:   paramAction(action, drive, F("3.3"), F("TX Drive"), NULL, 0, 8, false, 4); break;
+    case VOXGAIN: paramAction(action, vox_gain, F("3.2"), F("VOX gain"), NULL, 0, 255, false, (1<<2) ); break;
+    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false, false); break;
+    case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false, 4); break;
     case PARAM_A: paramAction(action, param_a, F("9.1"), F("Param A"), NULL, 0, 65535, false, 0); break;
     case PARAM_B: paramAction(action, param_b, F("9.2"), F("Param B"), NULL, -32768, 32767, false, 0); break;
     case PARAM_C: paramAction(action, param_c, F("9.3"), F("Param C"), NULL, -32768, 32767, false, 0); break;
@@ -2038,7 +2039,7 @@ void loop()
             vox = 0;
             continue;  // skip the rest for the moment
           }*/
-          if(_amp > VOX_THRESHOLD){            // workaround for RX noise leakage to AREF  
+          if(_amp > vox_gain){            // workaround for RX noise leakage to AREF  
             for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
             qcx.fast_rxtx(1);
             //ptt = 1; // kick
@@ -2046,7 +2047,7 @@ void loop()
             //vox = 1; ptt = 0;
             vox = 1; tx = 255; //kick
             delay(1);
-            for(; /*vox*/ tx; ) wdt_reset(); // while in tx triggered by vox
+            for(; /*vox*/ tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
             //delay(1);
             qcx.fast_rxtx(0);
             delay(1);
