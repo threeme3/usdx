@@ -48,7 +48,7 @@ pe1nnz@amsat.org
 
 
 ## Schematic:
-Below the schematic after the modification is applied, components are left out and changed (marked in red) (link to [original schematic]):
+Below the schematic after the modification is applied, unused components are left out and changed components are marked in red (click to zoom & download) (link to [original schematic]):
 ![schematic](schematic.png)
 
 
