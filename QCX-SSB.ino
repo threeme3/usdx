@@ -25,26 +25,27 @@ OLED display support
 */
 
 // QCX pin defintion
-#define LCD_D4  0
-#define LCD_D5  1
-#define LCD_D6  2
-#define LCD_D7  3
-#define LCD_EN  4
-#define ROT_A   6
-#define ROT_B   7
-#define RX      8
-#define SIDETONE 9
-#define KEY_OUT 10
-#define SIG_OUT 11
-#define DAH     12
-#define DIT     13
-#define AUDIO1  PIN_A0
-#define AUDIO2  PIN_A1
-#define DVM     PIN_A2
-#define BUTTONS PIN_A3
-#define LCD_RS  18
-#define SDA     18 //shared with LCD_RS
-#define SCL     19
+#define LCD_D4  0         //PD0
+#define LCD_D5  1         //PD1
+#define LCD_D6  2         //PD2
+#define LCD_D7  3         //PD3
+#define LCD_EN  4         //PD4
+#define FREQCNT 5         //PD5
+#define ROT_A   6         //PD6
+#define ROT_B   7         //PD7
+#define RX      8         //PB0
+#define SIDETONE 9        //PB1
+#define KEY_OUT 10        //PB2
+#define SIG_OUT 11        //PB3
+#define DAH     12        //PB4
+#define DIT     13        //PB5
+#define AUDIO1  PIN_A0    //PC0
+#define AUDIO2  PIN_A1    //PC1
+#define DVM     PIN_A2    //PC2
+#define BUTTONS PIN_A3    //PC3
+#define LCD_RS  18        //shared with SDA
+#define SDA     18        //PC4
+#define SCL     19        //PC5
 
 #include <inttypes.h>
 #include <avr/sleep.h>
@@ -55,10 +56,78 @@ OLED display support
 #define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
 #define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
 
+class LCD : public Print {
+public:  // HD44780 2-line LCD display in 4-bit mode, RS can be shared; is pull-up and kept low in order to prevent display write RFI
+  // Pin definitions
+  const int data = 0;    // PD0 to PD3 connect to D4 to D7 on the display
+  const int en = 4;      // PD4
+  const int rs = 4;      // PC4  // should have pull-up resistor
+/*
+  void begin(uint8_t x, uint8_t y){                // Send command
+    DDRD = DDRD | 0xF << data | 1 << en;           // Make data EN and RS pins outputs
+    PORTC = PORTC | 1 << rs;                       // RS high
+    PORTC = PORTC & ~(1 << rs);                    // RS low
+    cmd(0x33);                                     // Ensures display is in 8-bit mode
+    cmd(0x32);                                     // Puts display in 4-bit mode
+    cmd(0x0e);                                     // Display and cursor on
+    cmd(0x01);                                     // Clear display
+  }
+  void cmd(uint8_t c){
+    PORTC = PORTC & ~(1 << rs);                    // RS low
+    write(c);
+    PORTC = PORTC | 1 << rs;                       // RS high
+    delay(1);                                      // Allow to execute on display
+  }
+  size_t write(uint8_t b){ nib(b >> 4); nib(b & 0xf); return 1; }
+  void nib(uint8_t n) {                            // Send four bit nibble to display
+    PORTD = (PORTD & ~(0xf << data)) | n << data | 1 << en; // Send data and enable high
+    PORTD = PORTD & ~(1 << en);                    // EN low
+    delay(1);                                      // Allow data to execute on display
+  }
+*/
+  void begin(uint8_t x, uint8_t y){                // Send command
+    DDRD = DDRD | 0xF << data | 1 << en;           // Make data EN and RS pins outputs
+    PORTC = PORTC & ~(1 << rs);                    // Set RS low in case to support pull-down when DDRC is output
+    DDRC |= 1 << rs;                               // RS low (pull-down), (RS set as output)
+    cmd(0x33);                                     // Ensures display is in 8-bit mode
+    cmd(0x32);                                     // Puts display in 4-bit mode
+    cmd(0x0e);                                     // Display and cursor on
+    cmd(0x01);                                     // Clear display
+    delay(3);                                      // Allow to execute on display TcycE [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
+  }
+  void nib(uint8_t n){                             // Send four bit nibble to display
+    PORTD = (PORTD & ~(0xf << data)) | n << data | 1 << en; // Send data and enable high
+    PORTD = PORTD & ~(1 << en);                    // EN low
+    delayMicroseconds(60);//40
+  }
+  void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
+  size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
+    uint8_t nibh = (PORTD & ~(0xf << data)) | (b >>  4) << data | 1 << en; // high nibble data and enable high
+    uint8_t nibl = (PORTD & ~(0xf << data)) | (b & 0xf) << data | 1 << en; // low nibble data and enable high
+    PORTD = nibh;                                  // Send high nibble data and enable high
+    DDRC &= ~(1 << rs);                            // RS high (pull-up)
+    PORTD &= ~(1 << en);                           // EN low
+    PORTD = nibl;                                  // Send low nibble data and enable high
+    DDRC |= 1 << rs;                               // RS low (pull-down)
+    DDRC &= ~(1 << rs);                            // RS high (pull-up)
+    PORTD &= ~(1 << en);                           // EN low
+    DDRC |= 1 << rs;                               // RS low (pull-down)
+    delayMicroseconds(60);//30
+    return 1;
+  }
+  void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
+  void cursor(){ cmd(0x0e); }
+  void noCursor(){ cmd(0x0c); }
+  void noDisplay(){ cmd(0x08); }
+  void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
+};
+LCD lcd;
+
+/*
 #include <LiquidCrystal.h>
-class QCXLiquidCrystal : public LiquidCrystal {  // this class resolves the QCX SDA/RS pin sharing issue for LCD writes; it ensures that RS line does not exceed the 3V3 pull-up level and attempts to reduce RFI by using a short RS pulse
-public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
-  QCXLiquidCrystal() : LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7){ };
+class LCD : public LiquidCrystal {  // this class resolves the QCX SDA/RS pin sharing issue for LCD writes; it ensures that RS line does not exceed the 3V3 pull-up level and attempts to reduce RFI by using a short RS pulse
+public: // LCD extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
+  LCD() : LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7){ };
 #define FAST_RS  1
 #ifdef FAST_RS  // RFI quiet transfer (LCD_RS pull-up is causing RFI). Assumes LCD_D4..LCD_D7, LCD_EN are connected to PD0..PD4 and LCD_RS to PC4
   virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
@@ -74,7 +143,7 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
     DDRC = rshi; //0x00;      // LCD_RS=1 pullup    //PORTC = 0x10; // LCD_RS=1
     PORTD &= ~0x10;   // LCD_EN=0
     DDRC = rslo; //0x10;      // LCD_RS=0 pulldown  //PORTC = 0x00; // LCD_RS=0
-    delayMicroseconds(60);  // tcycE [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, figure 25]
+    delayMicroseconds(60);  // tcycE [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
     return 1;
   }
 #else
@@ -96,7 +165,8 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
   }
 #endif
 };
-QCXLiquidCrystal lcd;
+LCD lcd;
+*/
 
 class I2C {
 public:
@@ -1656,7 +1726,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
     case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
     case BAND:    paramAction(action, qcx.bandval, F("1.4"), F("Band"), qcx.band_label, 0, sizeof(qcx.band_label)/sizeof(char*) - 1, false, 1); break;
-    case STEP:    paramAction(action, qcx.stepsize, F("1.5"), F("Tuning step"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
+    case STEP:    paramAction(action, qcx.stepsize, F("1.5"), F("Tuning Step"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false, true); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false, 0); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false, 0); break;
@@ -1664,7 +1734,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SMETER:  paramAction(action, qcx.smode, F("1.10"), F("S-meter"), qcx.smode_label, 0, sizeof(qcx.smode_label)/sizeof(char*) - 1, false, 1); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false, false); break;
-    case VOXGAIN: paramAction(action, vox_gain, F("3.2"), F("VOX gain"), NULL, 0, 255, false, (1<<2) ); break;
+    case VOXGAIN: paramAction(action, vox_gain, F("3.2"), F("VOX Gain"), NULL, 0, 255, false, (1<<2) ); break;
     case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false, false); break;
     case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false, 4); break;
     case PARAM_A: paramAction(action, param_a, F("9.1"), F("Param A"), NULL, 0, 65535, false, 0); break;
