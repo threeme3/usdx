@@ -56,37 +56,14 @@ OLED display support
 #define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
 #define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
 
-class LCD : public Print {
-public:  // HD44780 2-line LCD display in 4-bit mode, RS can be shared; is pull-up and kept low in order to prevent display write RFI
+class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
+public:  // LCD1602 display in 4-bit mode, RS can be shared; is pull-up and kept low in order to prevent display write RFI
   // Pin definitions
   const int data = 0;    // PD0 to PD3 connect to D4 to D7 on the display
   const int en = 4;      // PD4
   const int rs = 4;      // PC4  // should have pull-up resistor
-/*
   void begin(uint8_t x, uint8_t y){                // Send command
-    DDRD = DDRD | 0xF << data | 1 << en;           // Make data EN and RS pins outputs
-    PORTC = PORTC | 1 << rs;                       // RS high
-    PORTC = PORTC & ~(1 << rs);                    // RS low
-    cmd(0x33);                                     // Ensures display is in 8-bit mode
-    cmd(0x32);                                     // Puts display in 4-bit mode
-    cmd(0x0e);                                     // Display and cursor on
-    cmd(0x01);                                     // Clear display
-  }
-  void cmd(uint8_t c){
-    PORTC = PORTC & ~(1 << rs);                    // RS low
-    write(c);
-    PORTC = PORTC | 1 << rs;                       // RS high
-    delay(1);                                      // Allow to execute on display
-  }
-  size_t write(uint8_t b){ nib(b >> 4); nib(b & 0xf); return 1; }
-  void nib(uint8_t n) {                            // Send four bit nibble to display
-    PORTD = (PORTD & ~(0xf << data)) | n << data | 1 << en; // Send data and enable high
-    PORTD = PORTD & ~(1 << en);                    // EN low
-    delay(1);                                      // Allow data to execute on display
-  }
-*/
-  void begin(uint8_t x, uint8_t y){                // Send command
-    DDRD = DDRD | 0xF << data | 1 << en;           // Make data EN and RS pins outputs
+    DDRD |= 0xF << data | 1 << en;                 // Make data EN and RS pins outputs
     PORTC = PORTC & ~(1 << rs);                    // Set RS low in case to support pull-down when DDRC is output
     DDRC |= 1 << rs;                               // RS low (pull-down), (RS set as output)
     cmd(0x33);                                     // Ensures display is in 8-bit mode
@@ -98,7 +75,7 @@ public:  // HD44780 2-line LCD display in 4-bit mode, RS can be shared; is pull-
   void nib(uint8_t n){                             // Send four bit nibble to display
     PORTD = (PORTD & ~(0xf << data)) | n << data | 1 << en; // Send data and enable high
     PORTD = PORTD & ~(1 << en);                    // EN low
-    delayMicroseconds(60);//40
+    delayMicroseconds(37);                         // Execution time
   }
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
@@ -112,9 +89,21 @@ public:  // HD44780 2-line LCD display in 4-bit mode, RS can be shared; is pull-
     DDRC &= ~(1 << rs);                            // RS high (pull-up)
     PORTD &= ~(1 << en);                           // EN low
     DDRC |= 1 << rs;                               // RS low (pull-down)
-    delayMicroseconds(60);//30
+    delayMicroseconds(41);                         // Execution time
     return 1;
   }
+/*void cmd(uint8_t b){
+    PORTC &= ~(1 << rs);                           // RS low
+    write(b);
+    PORTC |= 1 << rs;                              // RS high
+    delay(1);                                      // Allow to execute on display
+  }
+  size_t write(uint8_t b){ nib(b >> 4); nib(b & 0xf); return 1; }
+  void nib(uint8_t n) {                            // Send four bit nibble to display
+    PORTD &= ~(0xf << data)) | n << data | 1 << en;// Send data and enable high
+    PORTD &= ~(1 << en);                           // EN low
+    delay(1);                                      // Allow data to execute on display
+  }*/
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
   void cursor(){ cmd(0x0e); }
   void noCursor(){ cmd(0x0c); }
@@ -122,51 +111,6 @@ public:  // HD44780 2-line LCD display in 4-bit mode, RS can be shared; is pull-
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
 };
 LCD lcd;
-
-/*
-#include <LiquidCrystal.h>
-class LCD : public LiquidCrystal {  // this class resolves the QCX SDA/RS pin sharing issue for LCD writes; it ensures that RS line does not exceed the 3V3 pull-up level and attempts to reduce RFI by using a short RS pulse
-public: // LCD extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
-  LCD() : LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7){ };
-#define FAST_RS  1
-#ifdef FAST_RS  // RFI quiet transfer (LCD_RS pull-up is causing RFI). Assumes LCD_D4..LCD_D7, LCD_EN are connected to PD0..PD4 and LCD_RS to PC4
-  virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
-    uint8_t rshi = DDRC & ~(0x10);
-    uint8_t rslo = DDRC | 0x10;
-    uint8_t hi = (PORTD & 0xe0) | 0x10 | (value >> 4);
-    uint8_t lo = (PORTD & 0xe0) | 0x10 | (value & 0x0f);
-    PORTD = hi;       // LCD_D4..D7=value, LCD_EN=1  enable pulse must at least 100ns
-    DDRC = rshi; //0x00;      // LCD_RS=1 pullup    //PORTC = 0x10; // LCD_RS=1
-    PORTD &= ~0x10;   // LCD_EN=0
-    PORTD = lo;       // LCD_D4..D7=value (connecting to PD0..PD4), LCD_EN=1  enable pulse must at least 100ns
-    DDRC = rslo; //0x10;      // LCD_RS=0 pulldown  //PORTC = 0x00; // LCD_RS=0
-    DDRC = rshi; //0x00;      // LCD_RS=1 pullup    //PORTC = 0x10; // LCD_RS=1
-    PORTD &= ~0x10;   // LCD_EN=0
-    DDRC = rslo; //0x10;      // LCD_RS=0 pulldown  //PORTC = 0x00; // LCD_RS=0
-    delayMicroseconds(60);  // tcycE [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
-    return 1;
-  }
-#else
-  virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
-    pinMode(LCD_RS, INPUT);  // pull-up LCD_RS
-    write4bits(value >> 4);
-    write4bits(value);
-    pinMode(LCD_RS, OUTPUT); // restore LCD_RS as output, so that potential command writes can be handled
-    return 1;
-  }
-  void write4bits(uint8_t value){
-    digitalWrite(LCD_D4, (value >> 0) & 0x01);
-    digitalWrite(LCD_D5, (value >> 1) & 0x01);
-    digitalWrite(LCD_D6, (value >> 2) & 0x01);
-    digitalWrite(LCD_D7, (value >> 3) & 0x01);
-    digitalWrite(LCD_EN, LOW);  //delayMicroseconds(1);  // pulseEnable
-    digitalWrite(LCD_EN, HIGH); //delayMicroseconds(1);  // enable pulse must be >450ns
-    digitalWrite(LCD_EN, LOW);  //delayMicroseconds(50); // commands need > 37us to settle
-  }
-#endif
-};
-LCD lcd;
-*/
 
 class I2C {
 public:
@@ -401,7 +345,7 @@ public:
   }
   void freq(uint32_t freq, uint8_t i, uint8_t q)
   { // Fout = Fvco / (R * [MSx_a + MSx_b/MSx_c]),  Fvco = Fxtal * [MSPLLx_a + MSPLLx_b/MSPLLx_c]; MSx as integer reduce spur
-    uint8_t r_div = (freq > (SI_PLL_FREQ/1800/1)) ? 1 : (freq > (SI_PLL_FREQ/1800/32)) ? 32 : 128; // helps divider to be in range
+    uint8_t r_div = (freq > (SI_PLL_FREQ/256/1)) ? 1 : (freq > (SI_PLL_FREQ/256/32)) ? 32 : 128; // helps divider to be in range
     freq *= r_div;  // take r_div into account, now freq is in the range 1MHz to 150MHz
     raw_freq = freq;   // cache frequency generated by PLL and MS stages (excluding R divider stage); used by freq_calc_fast()
   
