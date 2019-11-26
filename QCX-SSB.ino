@@ -1,6 +1,7 @@
-// QCX-SSB.ino Arduino SketchD
-//
-// https://github.com/threeme3/QCX-SSB
+/*  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
+ *  
+ *  Copyright 2019 pe1nnz@amsat.org
+ */
 
 #define VERSION   "1.01m"
 
@@ -64,17 +65,17 @@ public:  // LCD1602 display in 4-bit mode, RS can be shared; is pull-up and kept
   const int rs = 4;      // PC4  // should have pull-up resistor
   void begin(uint8_t x, uint8_t y){                // Send command
     DDRD |= 0xF << data | 1 << en;                 // Make data EN and RS pins outputs
-    PORTC = PORTC & ~(1 << rs);                    // Set RS low in case to support pull-down when DDRC is output
+    PORTC &= ~(1 << rs);                           // Set RS low in case to support pull-down when DDRC is output
     DDRC |= 1 << rs;                               // RS low (pull-down), (RS set as output)
     cmd(0x33);                                     // Ensures display is in 8-bit mode
     cmd(0x32);                                     // Puts display in 4-bit mode
     cmd(0x0e);                                     // Display and cursor on
     cmd(0x01);                                     // Clear display
-    delay(3);                                      // Allow to execute on display TcycE [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
+    delay(3);                                      // Allow to execute on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
   }
   void nib(uint8_t n){                             // Send four bit nibble to display
     PORTD = (PORTD & ~(0xf << data)) | n << data | 1 << en; // Send data and enable high
-    PORTD = PORTD & ~(1 << en);                    // EN low
+    PORTD &= ~(1 << en);                           // EN low
     delayMicroseconds(37);                         // Execution time
   }
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
@@ -1113,9 +1114,9 @@ void encoder_setup()
 char blanks[] = "        ";
 #define lcd_blanks() lcd.print(blanks);
 
-#define N_FONTS  5
+#define N_FONTS  8
 const byte font[][8] PROGMEM = {
-{ 0b01000,  // 0; logo
+{ 0b01000,  // 1; logo
   0b00100,
   0b01010,
   0b00101,
@@ -1123,7 +1124,7 @@ const byte font[][8] PROGMEM = {
   0b00100,
   0b01000,
   0b00000 },
-{ 0b00000,  // 1; s-meter, 0 bars
+{ 0b00000,  // 2; s-meter, 0 bars
   0b00000,
   0b00000,
   0b00000,
@@ -1131,7 +1132,7 @@ const byte font[][8] PROGMEM = {
   0b00000,
   0b00000,
   0b00000 },
-{ 0b10000,  // 2; s-meter, 1 bars
+{ 0b10000,  // 3; s-meter, 1 bars
   0b10000,
   0b10000,
   0b10000,
@@ -1139,7 +1140,7 @@ const byte font[][8] PROGMEM = {
   0b10000,
   0b10000,
   0b10000 },
-{ 0b10000,  // 3; s-meter, 2 bars
+{ 0b10000,  // 4; s-meter, 2 bars
   0b10000,
   0b10100,
   0b10100,
@@ -1147,7 +1148,7 @@ const byte font[][8] PROGMEM = {
   0b10100,
   0b10100,
   0b10100 },
-{ 0b10000,  // 4; s-meter, 3 bars
+{ 0b10000,  // 5; s-meter, 3 bars
   0b10000,
   0b10101,
   0b10101,
@@ -1155,7 +1156,7 @@ const byte font[][8] PROGMEM = {
   0b10101,
   0b10101,
   0b10101 },
-{ 0b01100,  // 5; vfo-a
+{ 0b01100,  // 6; vfo-a
   0b10010,
   0b11110,
   0b10010,
@@ -1163,11 +1164,19 @@ const byte font[][8] PROGMEM = {
   0b00000,
   0b00000,
   0b00000 },
-{ 0b11100,  // 6; vfo-b
+{ 0b11100,  // 7; vfo-b
   0b10010,
   0b11100,
   0b10010,
   0b11100,
+  0b00000,
+  0b00000,
+  0b00000 },
+{ 0b00000,  // 8; tbd
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
   0b00000,
   0b00000,
   0b00000 }
@@ -1527,7 +1536,7 @@ public:
   
   void stepsize_showcursor()
   {
-    lcd.setCursor(stepsize, 1);  // display stepsize with cursor
+    lcd.setCursor(stepsize+1, 1);  // display stepsize with cursor
     lcd.cursor();
   }
   
@@ -1670,7 +1679,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
     case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
     case BAND:    paramAction(action, qcx.bandval, F("1.4"), F("Band"), qcx.band_label, 0, sizeof(qcx.band_label)/sizeof(char*) - 1, false, 1); break;
-    case STEP:    paramAction(action, qcx.stepsize, F("1.5"), F("Tuning Step"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
+    case STEP:    paramAction(action, qcx.stepsize, F("1.5"), F("Tune Rate"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false, true); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false, 0); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false, 0); break;
@@ -1910,8 +1919,11 @@ void loop()
   delay(10);
   //delay(100);
 
-  if(menumode == 0)
+  if(menumode == 0){
+    //lcd.noCursor();
     qcx.smeter();
+    if(mode != CW) qcx.stepsize_showcursor();
+  }
 
   if(mode == CW && cw_event){
     cw_event = false;
@@ -2015,23 +2027,19 @@ void loop()
         change = true; // refresh display
         break;
       case BR|PL:
-        //vox = true;
       { //int16_t x = 0;
         lcd.setCursor(15, 1); lcd.print("V");
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
           analogSampleMic();
           int16_t in = adc_c - 512;
           static int16_t dc;
-        
           int16_t i, q;
           uint8_t j;
           static int16_t v[16];
           for(j = 0; j != 15; j++) v[j] = v[j + 1];
-        
           dc += (in - dc) / 2;
           v[15] = in - dc;     // DC decoupling
           //dc = in;  // this is actually creating a low-pass filter
-        
           i = v[7];
           q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
         
@@ -2039,30 +2047,12 @@ void loop()
           //x = max(x, abs(v[15]) );
           //lcd.setCursor(0, 1); lcd.print(x); lcd_blanks();
           //lcd.setCursor(0, 1); lcd.print(_amp); lcd_blanks();
-
-          /*if(_amp > VOX_THRESHOLD){            // workaround for RX noise leakage to AREF  
-            for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
-            qcx.start_tx(); // start tx
-            ptt = 1; // kick
-            delay(1);
-            vox = 1; ptt = 0;
-            for(; tx; ) wdt_reset(); // while in tx triggered by vox
-            //delay(1);
-            qcx.start_rx();       // stop tx
-            delay(1);
-            vox = 0;
-            continue;  // skip the rest for the moment
-          }*/
           if(_amp > vox_gain){            // workaround for RX noise leakage to AREF  
             for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
             qcx.fast_rxtx(1);
-            //ptt = 1; // kick
-            //delay(1);
-            //vox = 1; ptt = 0;
             vox = 1; tx = 255; //kick
             delay(1);
-            for(; /*vox*/ tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
-            //delay(1);
+            for(; tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
             qcx.fast_rxtx(0);
             delay(1);
             vox = 0;
@@ -2073,8 +2063,6 @@ void loop()
         }
       }
         lcd.setCursor(15, 1); lcd.print("R");
-        //vox = 0; tx = 1; _vox(false);
-        delay(100);
         break;
       case BR|PT: break;
       case BE|SC:
@@ -2148,7 +2136,6 @@ void loop()
       qcx.process_encoder_tuning_step(encoder_val);
       encoder_val = 0;
     }
-    qcx.stepsize_showcursor();
   }
 
   if(change){
@@ -2157,11 +2144,13 @@ void loop()
     schedule_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
  
     if(menumode == 0){
+      lcd.setCursor(0, 1);
+      lcd.print('\x06');  // VFO
       uint32_t n = freq / 1000000;  // lcd.print(f) with commas
       uint32_t n2 = freq % 1000000;
       uint32_t scale = 1000000;
       char buf[16];
-      sprintf(buf, "%2u", n); lcd.setCursor(0, 1); lcd.print(buf);
+      sprintf(buf, "%2u", n); lcd.print(buf);
       while(scale != 1){
         scale /= 1000;
         n = n2 / scale;
