@@ -1,7 +1,9 @@
-/*  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
- *  
- *  Copyright 2019 pe1nnz@amsat.org
- */
+//  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
+//  
+//  Copyright 2019 pe1nnz@amsat.org
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 
 #define VERSION   "1.01m"
 
@@ -21,8 +23,11 @@ att extended agc
 profiling nsamples, cpu load idle in menu
 configuarable F_CPU, F_XTAL
 CW-R/CW-L offset
-VFO-A/B+split
+VFO-A/B+split+RIT
 OLED display support
+VOX integration in main loop
+auto-bias for AUDIO1+2 inputs
+crystal freqs in menu
 */
 
 // QCX pin defintion
@@ -51,20 +56,15 @@ OLED display support
 #include <inttypes.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
-#undef F_CPU
-#define F_CPU 20008440   // myqcx1:20008440   // Actual crystal frequency of XTAL1 20000000
-#define log2(n) (log(n) / log(2))
-#define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
-#define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
-public:  // LCD1602 display in 4-bit mode, RS can be shared; is pull-up and kept low in order to prevent display write RFI
+public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
   // Pin definitions
   const int data = 0;    // PD0 to PD3 connect to D4 to D7 on the display
   const int en = 4;      // PD4
   const int rs = 4;      // PC4  // should have pull-up resistor
   void begin(uint8_t x, uint8_t y){                // Send command
-    DDRD |= 0xF << data | 1 << en;                 // Make data EN and RS pins outputs
+    DDRD |= 0xf << data | 1 << en;                 // Make data EN and RS pins outputs
     PORTC &= ~(1 << rs);                           // Set RS low in case to support pull-down when DDRC is output
     DDRC |= 1 << rs;                               // RS low (pull-down), (RS set as output)
     cmd(0x33);                                     // Ensures display is in 8-bit mode
@@ -112,6 +112,35 @@ public:  // LCD1602 display in 4-bit mode, RS can be shared; is pull-up and kept
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
 };
 LCD lcd;
+
+volatile int8_t encoder_val = 0;
+volatile int8_t encoder_step = 0;
+static uint8_t last_state;
+ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
+  noInterrupts();
+  switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
+//#define ENCODER_ENHANCED_RESOLUTION  1
+#ifdef ENCODER_ENHANCED_RESOLUTION // Option: enhance encoder from 24 to 96 steps/revolution, see: appendix 1, https://www.sdr-kits.net/documents/PA0KLT_Manual.pdf
+    case 0x31: case 0x10: case 0x02: case 0x23: encoder_val++; break;
+    case 0x32: case 0x20: case 0x01: case 0x13: encoder_val--; break;
+#else
+    case 0x31: case 0x10: case 0x02: case 0x23: if(encoder_step < 0) encoder_step = 0; encoder_step++; if(encoder_step >  3){ encoder_step = 0; encoder_val++; } break;
+    case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;  
+#endif
+  }
+  interrupts();
+}
+void encoder_setup()
+{
+  pinMode(ROT_A, INPUT_PULLUP);
+  pinMode(ROT_B, INPUT_PULLUP);
+  *digitalPinToPCMSK(ROT_A) |= (1<<digitalPinToPCMSKbit(ROT_A));  // PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
+  *digitalPinToPCMSK(ROT_B) |= (1<<digitalPinToPCMSKbit(ROT_B));
+  *digitalPinToPCICR(ROT_A) |= (1<<digitalPinToPCICRbit(ROT_A));  // PCICR |= (1 << PCIE2); 
+  *digitalPinToPCICR(ROT_B) |= (1<<digitalPinToPCICRbit(ROT_B));
+  last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
+  interrupts();
+}
 
 class I2C {
 public:
@@ -214,6 +243,8 @@ public:
 
 class SI5351 : public I2C {
 public:
+  #define log2(n) (log(n) / log(2))
+
   #define SI_I2C_ADDR 0x60  // SI5351A I2C address: 0x60 for SI5351A-B-GT; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
   #define SI_CLK_OE 3     // Register definitions
   #define SI_CLK0_CONTROL 16
@@ -271,18 +302,6 @@ public:
     SendByte(data);
     stop();
   }
-  inline void SendPLLBRegisterBulk()  // fast freq change of PLLB, takes about [ 2 + 7*(8+1) + 2 ] / 840000 = 80 uS
-  {
-    start();
-    SendByte(SI_I2C_ADDR << 1);
-    SendByte(SI_SYNTH_PLL_B + 3);  // Skip the first three pll_data bytes (first two always 0xFF and third not often changing
-    SendByte(pll_data[3]);
-    SendByte(pll_data[4]);
-    SendByte(pll_data[5]);
-    SendByte(pll_data[6]);
-    SendByte(pll_data[7]);
-    stop();
-  }
   // Set up MultiSynth for register reg=MSNA, MNSB, MS0-5 with fractional divider, num and denom and R divider (for MSn, not for MSNA, MSNB)
   // divider is 15..90 for MSNA, MSNB,  divider is 8..900 (and in addition 4,6 for integer mode) for MS[0-5]
   // num is 0..1,048,575 (0xFFFFF)
@@ -309,6 +328,18 @@ public:
     SendRegister(reg + 5, ((P3 & 0x000F0000) >> 12) | ((P2 & 0x000F0000) >> 16));
     SendRegister(reg + 6, (P2 & 0x0000FF00) >> 8);
     SendRegister(reg + 7, (P2 & 0x000000FF));
+  }
+  inline void SendPLLBRegisterBulk()  // fast freq change of PLLB, takes about [ 2 + 7*(8+1) + 2 ] / 840000 = 80 uS
+  {
+    start();
+    SendByte(SI_I2C_ADDR << 1);
+    SendByte(SI_SYNTH_PLL_B + 3);  // Skip the first three pll_data bytes (first two always 0xFF and third not often changing
+    SendByte(pll_data[3]);
+    SendByte(pll_data[4]);
+    SendByte(pll_data[5]);
+    SendByte(pll_data[6]);
+    SendByte(pll_data[7]);
+    stop();
   }
   // this function relies on cached (global) variables: divider, mult, raw_freq, pll_data
   inline void freq_calc_fast(int16_t freq_offset)
@@ -418,28 +449,22 @@ public:
     SendRegister(SI_CLK_OE, 0b11111111); // Disable all CLK outputs
   }
 };
-
 static SI5351 si5351;
 
-volatile uint16_t param_a = 0;
+#undef F_CPU
+#define F_CPU 20008440   // myqcx1:20008440   // Actual crystal frequency of XTAL1 20000000
+
+volatile uint16_t param_a = 0;  // registers for debugging, testing and experimental purposes
 volatile int16_t param_b = 0;
 volatile int16_t param_c = 0;
 
 enum mode_t { LSB, USB, CW, AM, FM };
 volatile int8_t mode = USB;
-volatile uint8_t halt;
-const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
-volatile bool change = true;
-volatile int32_t freq = 7074000;
 //volatile bool ptt = false;
 volatile uint8_t tx = 0;
 volatile bool vox = false;
-enum dsp_cap_t { ANALOG, DSP, SDR };
-static uint8_t dsp_cap = 0;
-static uint8_t ssb_cap = 0;
 volatile uint8_t att = 0;
 volatile uint8_t att2 = 0;
-const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
 //#define PROFILING  1
 #ifdef PROFILING
 volatile uint32_t numSamples = 0;
@@ -477,7 +502,6 @@ inline void _vox(uint8_t trigger)
   }
 }
 
-volatile uint8_t drive = 4;
 //#define F_SAMP_TX 4402
 #define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #define _UA  (F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
@@ -502,6 +526,7 @@ inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 uint8_t lut[256];
 volatile uint8_t amp;
 volatile uint8_t vox_gain = (1 << 2);
+volatile uint8_t drive = 4;
 
 inline int16_t ssb(int16_t in)
 {
@@ -753,7 +778,6 @@ void junk()
 
 #define N_FILT 6
 volatile int8_t filt = 0;
-const char* filt_label[] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
 
 inline int16_t filt_var(int16_t v)
 { 
@@ -811,8 +835,6 @@ volatile uint8_t admux[3];
 volatile int16_t ocomb, i, q, qh;
 #undef  R  // Decimating 2nd Order CIC filter
 #define R 4  // Rate change from 62500/2 kSPS to 7812.5SPS, providing 12dB gain
-
-volatile uint16_t adc_c;
 
 // Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
 // H1(z) = (1 + z^-1)^2 = 1 + 2*z^-1 + z^-2 = (1 + z^-2) + (2) * z^-1 = FA(z) + FB(z) * z^-1;
@@ -971,7 +993,6 @@ inline void sdr_rx_common()
   ozi1 = ocomb + ozi1;
 #ifndef PROFILING
   if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
-  //OCR1AL = adc_c;
 #endif  
 }
 
@@ -1082,34 +1103,10 @@ void timer1_stop()
   OCR1BL = 0x00;
 }
 
-volatile int8_t encoder_val = 0;
-volatile int8_t encoder_step = 0;
-static uint8_t last_state;
-ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
-  noInterrupts();
-  switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
-//#define ENCODER_ENHANCED_RESOLUTION  1
-#ifdef ENCODER_ENHANCED_RESOLUTION // Option: enhance encoder from 24 to 96 steps/revolution, see: appendix 1, https://www.sdr-kits.net/documents/PA0KLT_Manual.pdf
-    case 0x31: case 0x10: case 0x02: case 0x23: encoder_val++; break;
-    case 0x32: case 0x20: case 0x01: case 0x13: encoder_val--; break;
-#else
-    case 0x31: case 0x10: case 0x02: case 0x23: if(encoder_step < 0) encoder_step = 0; encoder_step++; if(encoder_step >  3){ encoder_step = 0; encoder_val++; } break;
-    case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;  
-#endif
-  }
-  interrupts();
-}
-void encoder_setup()
-{
-  pinMode(ROT_A, INPUT_PULLUP);
-  pinMode(ROT_B, INPUT_PULLUP);
-  *digitalPinToPCMSK(ROT_A) |= (1<<digitalPinToPCMSKbit(ROT_A));  // PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
-  *digitalPinToPCMSK(ROT_B) |= (1<<digitalPinToPCMSKbit(ROT_B));
-  *digitalPinToPCICR(ROT_A) |= (1<<digitalPinToPCICRbit(ROT_A));  // PCICR |= (1 << PCIE2); 
-  *digitalPinToPCICR(ROT_B) |= (1<<digitalPinToPCICRbit(ROT_B));
-  last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
-  interrupts();
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Below a radio-specific implementation based on the above components (seperation of concerns)
+//
+// Feel free to replace it with your own custom radio implementation :-)
 
 char blanks[] = "        ";
 #define lcd_blanks() lcd.print(blanks);
@@ -1182,13 +1179,6 @@ const byte font[][8] PROGMEM = {
   0b00000 }
 };
 
-const char* cap_label[] = { "SSB", "DSP", "SDR" };
-
-void customDelay(uint32_t _micros)  //_micros=100000 is 132052us delay
-{
-  uint32_t i; for(i = 0; i != _micros * 3; i++) wdt_reset();
-}
-
 void(* resetFunc)(void) = 0; // declare reset function @ address 0
 
 int analogSafeRead(uint8_t pin)
@@ -1207,8 +1197,9 @@ int analogSafeRead(uint8_t pin)
   return val;
 }
 
-void analogSampleMic()
+uint16_t analogSampleMic()
 {
+  uint16_t adc;
   noInterrupts();
   digitalWrite(RX, LOW);  // enable RF input
   //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
@@ -1217,9 +1208,17 @@ void analogSampleMic()
   for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
   digitalWrite(RX, HIGH);  // disable RF input
   //si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-  adc_c = ADC;
+  adc = ADC;
   interrupts();
+  return adc;
 }
+
+enum dsp_cap_t { ANALOG, DSP, SDR };
+static uint8_t dsp_cap = 0;
+static uint8_t ssb_cap = 0;
+
+volatile bool change = true;
+volatile int32_t freq = 7074000;
 
 class QCX {
 public:
@@ -1244,13 +1243,10 @@ public:
     digitalWrite(AUDIO1, LOW);  // when used as output, help can mute RX leakage into AREF
     digitalWrite(AUDIO2, LOW);
     pinMode(AUDIO1, INPUT);
-    pinMode(AUDIO2, INPUT);
-
-  
+    pinMode(AUDIO2, INPUT);  
   }
 
   int8_t smode = 1;
-  const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
 
   float dbm_max;
   float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
@@ -1518,11 +1514,9 @@ public:
   int8_t bandval = 2;
   #define N_BANDS 11
   uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000/*, 144125000*/ };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
-  const char* band_label[N_BANDS] = { /*"600", "160m",*/ "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" /*, "2m"*/};
   
   enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
   int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
-  //const char* stepsize_label[11] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1"};  // Warning: inserting this, impacts performance
   volatile int8_t stepsize = STEP_1k;
   
   void process_encoder_tuning_step(int8_t steps)
@@ -1593,13 +1587,29 @@ public:
   }
 
   void show_banner(){
-    lcd.setCursor(0, 0); 
-    lcd.print(F("QCX")); 
+    lcd.setCursor(0, 0);
+    lcd.print(F("QCX"));
+    const char* cap_label[] = { "SSB", "DSP", "SDR" };
     if(ssb_cap || dsp_cap){ lcd.print(F("-")); lcd.print(cap_label[dsp_cap]); }
     lcd.print(F("\x01 ")); lcd_blanks();
   }
 };
 QCX qcx;
+
+volatile uint8_t event;
+volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
+volatile int8_t menu = 0;  // current parameter id selected in menu
+static unsigned long schedule_time = 0;
+
+#define N_PARAMS 18   // number of (visible) parameters
+#define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
+uint8_t eeprom_version;
+#define EEPROM_OFFSET 0x150  // avoids collision with QCX settings, overwrites text settings though
+#define EEPROM_SUPPORT  1
+
+#define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
+#define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
+
 
 int eeprom_addr;
 
@@ -1646,19 +1656,12 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
   }
 }
 
-volatile uint8_t event;
-
-volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
-volatile int8_t menu = 0;  // current parameter id selected in menu
 const char* offon_label[] = {"OFF", "ON"};
-static unsigned long schedule_time = 0;
+const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
+const char* filt_label[] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
+const char* band_label[N_BANDS] = { /*"600", "160m",*/ "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" /*, "2m"*/};
 
 enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
-#define N_PARAMS 18   // number of (visible) parameters
-#define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
-uint8_t eeprom_version;
-#define EEPROM_OFFSET 0x150  // avoids collision with QCX settings, overwrites text settings though
-#define EEPROM_SUPPORT  1
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -1673,18 +1676,20 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   if(id == ALL) for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
   
   const char* stepsize_label[10] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
+  const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
+  const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
   switch(id){
     // Visible parameters
     case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false, ((dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0)); break;
     case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
     case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
-    case BAND:    paramAction(action, qcx.bandval, F("1.4"), F("Band"), qcx.band_label, 0, sizeof(qcx.band_label)/sizeof(char*) - 1, false, 1); break;
+    case BAND:    paramAction(action, qcx.bandval, F("1.4"), F("Band"), band_label, 0, sizeof(band_label)/sizeof(char*) - 1, false, 1); break;
     case STEP:    paramAction(action, qcx.stepsize, F("1.5"), F("Tune Rate"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false, true); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false, 0); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false, 0); break;
     case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false, 0); break;
-    case SMETER:  paramAction(action, qcx.smode, F("1.10"), F("S-meter"), qcx.smode_label, 0, sizeof(qcx.smode_label)/sizeof(char*) - 1, false, 1); break;
+    case SMETER:  paramAction(action, qcx.smode, F("1.10"), F("S-meter"), smode_label, 0, sizeof(smode_label)/sizeof(char*) - 1, false, 1); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false, false); break;
     case VOXGAIN: paramAction(action, vox_gain, F("3.2"), F("VOX Gain"), NULL, 0, 255, false, (1<<2) ); break;
@@ -1702,8 +1707,6 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #define SAFE  1
 void setup()
 {
-  init();
-
 #ifdef SAFE
   // Benchmark dsp_tx() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
   numSamples = 0;
@@ -2030,8 +2033,8 @@ void loop()
       { //int16_t x = 0;
         lcd.setCursor(15, 1); lcd.print("V");
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
-          analogSampleMic();
-          int16_t in = adc_c - 512;
+          
+          int16_t in = analogSampleMic() - 512;
           static int16_t dc;
           int16_t i, q;
           uint8_t j;
