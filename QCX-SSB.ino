@@ -1108,11 +1108,13 @@ void timer1_stop()
 //
 // Feel free to replace it with your own custom radio implementation :-)
 
+void(* resetFunc)(void) = 0; // declare reset function @ address 0
+
 char blanks[] = "        ";
 #define lcd_blanks() lcd.print(blanks);
 
 #define N_FONTS  8
-const byte font[][8] PROGMEM = {
+const byte font[N_FONTS][8] PROGMEM = {
 { 0b01000,  // 1; logo
   0b00100,
   0b01010,
@@ -1179,8 +1181,6 @@ const byte font[][8] PROGMEM = {
   0b00000 }
 };
 
-void(* resetFunc)(void) = 0; // declare reset function @ address 0
-
 int analogSafeRead(uint8_t pin)
 {  // performs classical analogRead with default Arduino sample-rate and analog reference setting; restores previous settings
   noInterrupts();
@@ -1214,392 +1214,365 @@ uint16_t analogSampleMic()
 }
 
 enum dsp_cap_t { ANALOG, DSP, SDR };
-static uint8_t dsp_cap = 0;
-static uint8_t ssb_cap = 0;
+uint8_t dsp_cap = 0;
+uint8_t ssb_cap = 0;
 
 volatile bool change = true;
 volatile int32_t freq = 7074000;
 
-class QCX {
-public:
-  QCX(){
-  }
-  void setup(){  
-    // initialize
-    digitalWrite(SIG_OUT, LOW);
-    digitalWrite(RX, HIGH);
-    digitalWrite(KEY_OUT, LOW);
-    digitalWrite(SIDETONE, LOW);
-  
-    // pins
-    pinMode(SIDETONE, OUTPUT);
-    pinMode(SIG_OUT, OUTPUT);
-    pinMode(RX, OUTPUT);
-    pinMode(KEY_OUT, OUTPUT);
-    pinMode(BUTTONS, INPUT);  // L/R/rotary button
-    pinMode(DIT, INPUT_PULLUP);
-    pinMode(DAH, INPUT);  //pinMode(DAH, INPUT_PULLUP); // Could this replace D4?
-  
-    digitalWrite(AUDIO1, LOW);  // when used as output, help can mute RX leakage into AREF
-    digitalWrite(AUDIO2, LOW);
-    pinMode(AUDIO1, INPUT);
-    pinMode(AUDIO2, INPUT);  
-  }
 
-  int8_t smode = 1;
+int8_t smode = 1;
 
-  float dbm_max;
-  float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
-  {
-    if(smode == 0){ // none, no s-meter
-      return 0;
-    }
-    float rms = _absavg256 / 256; //sqrt(256.0);
-    if(dsp_cap == SDR) rms = (float)rms * 1.1 / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-    else               rms = (float)rms * 5.0 / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
-    float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
-    dbm_max = max(dbm_max, dbm);
-    static uint8_t cnt;
-    cnt++;
-    if((cnt % 8) == 0){
+float dbm_max;
+float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
+{
+  if(smode == 0){ // none, no s-meter
+    return 0;
+  }
+  float rms = _absavg256 / 256; //sqrt(256.0);
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  else               rms = (float)rms * 5.0 / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
+  float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
+  dbm_max = max(dbm_max, dbm);
+  static uint8_t cnt;
+  cnt++;
+  if((cnt % 8) == 0){
 
-      if(smode == 1){ // dBm meter
-        lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print(F("dBm   "));
-      }
-      if(smode == 2){ // S-meter
-        uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
-        lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s); 
-      }
-      dbm_max = -174.0 + 34.0;
+    if(smode == 1){ // dBm meter
+      lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print(F("dBm   "));
     }
-    if(smode == 3){ // S-bar
-      int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
-      lcd.setCursor(12, 0); 
-      char tmp[5];
-      for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
-      lcd.print(tmp);
+    if(smode == 2){ // S-meter
+      uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
+      lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s); 
     }
-    return dbm;
+    dbm_max = -174.0 + 34.0;
   }
-  
-  uint32_t sample_amp(uint8_t pin, uint16_t osr)
-  {
-    uint16_t avg = 1024 / 2;
-    uint32_t rms = 0;
-    uint16_t i;
-    for(i = 0; i != 16; i++){
-      uint16_t adc = analogRead(pin);
-      avg = (avg + adc) / 2;
-    }
-    for(i = 0; i != osr; i++){ // 128 overampling is 42dB gain => with 10-bit ADC resulting in a total of 102dB DR
-      uint16_t adc = analogRead(pin);
-      avg = (avg + adc) / 2;  // average
-      rms += ((adc > avg) ? 1 : -1) * (adc - avg);  // rectify based
-      wdt_reset();
-    }
-    return rms;
+  if(smode == 3){ // S-bar
+    int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
+    lcd.setCursor(12, 0); 
+    char tmp[5];
+    for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
+    lcd.print(tmp);
   }
-  
-  float dbmeter(float ref = 0.0)
-  {
-    float rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-    float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
-    lcd.setCursor(9, 0); lcd.print(dbm); lcd.print(F("dB    "));
-    delay(300);
-    return dbm;
+  return dbm;
+}
+
+uint32_t sample_amp(uint8_t pin, uint16_t osr)
+{
+  uint16_t avg = 1024 / 2;
+  uint32_t rms = 0;
+  uint16_t i;
+  for(i = 0; i != 16; i++){
+    uint16_t adc = analogRead(pin);
+    avg = (avg + adc) / 2;
   }
-  
-  // RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
-  void calibrate_iq()
-  {
-    lcd.setCursor(9, 0); lcd_blanks();
-    digitalWrite(SIG_OUT, true); // loopback on
-    si5351.prev_pll_freq = 0;  //enforce PLL reset
-    si5351.freq(freq, 0, 90);  // RX in USB
-    float dbc;
-    si5351.alt_clk2(freq + 700);
-    dbc = dbmeter();
-    si5351.alt_clk2(freq - 700);
-    lcd.setCursor(0, 1); lcd.print(F("I-Q bal. (700 Hz)")); lcd_blanks();
-    for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-    si5351.alt_clk2(freq + 600);
-    dbc = dbmeter();
-    si5351.alt_clk2(freq - 600);
-    lcd.setCursor(0, 1); lcd.print(F("Phase Lo (600 Hz)")); lcd_blanks();
-    for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-    si5351.alt_clk2(freq + 800);
-    dbc = dbmeter();
-    si5351.alt_clk2(freq - 800);
-    lcd.setCursor(0, 1); lcd.print(F("Phase Hi (800 Hz)")); lcd_blanks();
-    for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-  /*
-    for(uint32_t offset = 0; offset < 3000; offset += 100){
-      si5351.alt_clk2(freq + offset);
-      dbc = dbmeter();
-      si5351.alt_clk2(freq - offset);
-      lcd.setCursor(0, 1); lcd.print(offset); lcd.print(F(" Hz")); lcd_blanks();
-      wdt_reset(); dbmeter(dbc); delay(500); wdt_reset(); 
-    }
-  */
-    lcd.setCursor(9, 0); lcd_blanks();  // cleanup dbmeter
-    digitalWrite(SIG_OUT, false); // loopback off
-    si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-    change = true;  //restore original frequency setting
-  
-  }
-  
-  void powermeter()
-  {
-    lcd.setCursor(9, 0); lcd_blanks();
-    si5351.prev_pll_freq = 0;  //enforce PLL reset
-    si5351.freq(freq, 0, 90);  // RX in USB
-    si5351.alt_clk2(freq + 1000); // si5351.freq_clk2(freq + 1000);
-    si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
-    digitalWrite(KEY_OUT, HIGH); //OCR1BL = 0xFF;
-    digitalWrite(RX, LOW);  // TX
-  
-    //if(dsp_cap != SDR){ adc_start(1, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX; }
-    wdt_reset(); delay(100); 
-  
-    float rms;
-    rms = ((float)sample_amp(AUDIO2, 128)) * 5.0 / (1024.0 * 128.0 * 100.0 / 10000.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * rx/tx switch attenuation]
-    //if(dsp_cap == SDR) rms = (float)rms256 * 1.1 / (1024.0 * (float)R * 256.0 * 100.0 * 50.0 / 10000);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-    //else               rms = (float)rms256 * 5.0 / (1024.0 * (float)R * 256.0 * 100.0 / 10000);
-    float w = (rms * rms) / 50.0;
-    float dbm = 10.0 * log10(w) + 30.0; //from rmsV to dBm at 50R
-  
-    lcd.setCursor(9, 0); lcd.print(F("  ")); lcd.print(w); lcd.print(F("W   "));
-    //lcd.setCursor(9, 0); lcd.print(F(" +")); lcd.print((int16_t)dbm ); lcd.print(F("dBm   "));
-  
-    digitalWrite(KEY_OUT, LOW); //OCR1BL = 0x00;
-    digitalWrite(RX, HIGH);  // RX
-    si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-    change = true;  //restore original frequency setting
-    delay(1000);
-  }
-  
-  void test_tx_amp()
-  {
-    lcd.setCursor(9, 0); lcd_blanks();
-    TCCR1A = 0;   // Timer 1: PWM mode
-    TCCR1B = 0;
-    TCCR1A |= (1 << COM1B1); // Clear OC1A/OC1B on Compare Match when upcounting. Set OC1A/OC1B on Compare Match when downcounting.
-    TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
-    ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
-    ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
-    OCR1BH = 0x00;
-    OCR1BL = 0x00;  // PWM duty-cycle (span set by ICR).
-  
-    si5351.prev_pll_freq = 0;  // enforce PLL reset
-    si5351.freq(freq, 0, 90);  // RX in USB
-    si5351.alt_clk2(freq);
-    si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
-    digitalWrite(RX, LOW);  // TX
-    uint16_t i;
-    for(i = 0; i != 256; i++)
-    {
-      OCR1BL = lut[i];
-      si5351.alt_clk2(freq + i * 10);
-      wdt_reset();
-      lcd.setCursor(0, 1); lcd.print(F("SWEEP(")); lcd.print(i); lcd.print(F(")=")); lcd.print(lut[i]); lcd_blanks();
-      delay(200);
-    }
-  
-    OCR1BL = 0;
-    delay(500);
-    digitalWrite(RX, HIGH);  // RX
-    si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-    change = true;  //restore original frequency setting
-  }
-  
-  void calibrate_predistortion()
-  {
-    lcd.setCursor(9, 0); lcd_blanks();
-    TCCR1A = 0;   // Timer 1: PWM mode
-    TCCR1B = 0;
-    TCCR1A |= (1 << COM1B1); // Clear OC1A/OC1B on Compare Match when upcounting. Set OC1A/OC1B on Compare Match when downcounting.
-    TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
-    ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
-    ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
-    OCR1BH = 0x00;
-    OCR1BL = 0x00;  // PWM duty-cycle (span set by ICR).
-  
-    si5351.prev_pll_freq = 0;  //enforce PLL reset
-    si5351.freq(freq, 0, 90);  // RX in USB
-    si5351.alt_clk2(freq + 1000); // si5351.freq_clk2(freq + 1000);
-    si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
-    digitalWrite(RX, LOW);  // TX
-    OCR1BL = 0xFF; // Max power to determine scale
-    delay(200);
-    float scale = sample_amp(AUDIO2, 128);
+  for(i = 0; i != osr; i++){ // 128 overampling is 42dB gain => with 10-bit ADC resulting in a total of 102dB DR
+    uint16_t adc = analogRead(pin);
+    avg = (avg + adc) / 2;  // average
+    rms += ((adc > avg) ? 1 : -1) * (adc - avg);  // rectify based
     wdt_reset();
-    uint8_t amp[256];
-    int16_t i, j;
-    for(i = 127; i >= 0; i--) // determine amp for pwm value i
-    {
-      OCR1BL = i;
-      wdt_reset();
-      delay(100);
-  
-      amp[i] = min(255, (float)sample_amp(AUDIO2, 128) * 255.0 / scale);
-      lcd.setCursor(0, 1); lcd.print(F("CALIB(")); lcd.print(i); lcd.print(F(")=")); lcd.print(amp[i]); lcd_blanks();
-    }
-    OCR1BL = 0xFF; // Max power to determine scale
+  }
+  return rms;
+}
+
+float dbmeter(float ref = 0.0)
+{
+  float rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
+  lcd.setCursor(9, 0); lcd.print(dbm); lcd.print(F("dB    "));
+  delay(300);
+  return dbm;
+}
+
+// RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
+void calibrate_iq()
+{
+  lcd.setCursor(9, 0); lcd_blanks();
+  digitalWrite(SIG_OUT, true); // loopback on
+  si5351.prev_pll_freq = 0;  //enforce PLL reset
+  si5351.freq(freq, 0, 90);  // RX in USB
+  float dbc;
+  si5351.alt_clk2(freq + 700);
+  dbc = dbmeter();
+  si5351.alt_clk2(freq - 700);
+  lcd.setCursor(0, 1); lcd.print(F("I-Q bal. (700 Hz)")); lcd_blanks();
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  si5351.alt_clk2(freq + 600);
+  dbc = dbmeter();
+  si5351.alt_clk2(freq - 600);
+  lcd.setCursor(0, 1); lcd.print(F("Phase Lo (600 Hz)")); lcd_blanks();
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  si5351.alt_clk2(freq + 800);
+  dbc = dbmeter();
+  si5351.alt_clk2(freq - 800);
+  lcd.setCursor(0, 1); lcd.print(F("Phase Hi (800 Hz)")); lcd_blanks();
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+/*
+  for(uint32_t offset = 0; offset < 3000; offset += 100){
+    si5351.alt_clk2(freq + offset);
+    dbc = dbmeter();
+    si5351.alt_clk2(freq - offset);
+    lcd.setCursor(0, 1); lcd.print(offset); lcd.print(F(" Hz")); lcd_blanks();
+    wdt_reset(); dbmeter(dbc); delay(500); wdt_reset(); 
+  }
+*/
+  lcd.setCursor(9, 0); lcd_blanks();  // cleanup dbmeter
+  digitalWrite(SIG_OUT, false); // loopback off
+  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  change = true;  //restore original frequency setting
+
+}
+
+void powermeter()
+{
+  lcd.setCursor(9, 0); lcd_blanks();
+  si5351.prev_pll_freq = 0;  //enforce PLL reset
+  si5351.freq(freq, 0, 90);  // RX in USB
+  si5351.alt_clk2(freq + 1000); // si5351.freq_clk2(freq + 1000);
+  si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
+  digitalWrite(KEY_OUT, HIGH); //OCR1BL = 0xFF;
+  digitalWrite(RX, LOW);  // TX
+
+  //if(dsp_cap != SDR){ adc_start(1, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX; }
+  wdt_reset(); delay(100); 
+
+  float rms;
+  rms = ((float)sample_amp(AUDIO2, 128)) * 5.0 / (1024.0 * 128.0 * 100.0 / 10000.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * rx/tx switch attenuation]
+  //if(dsp_cap == SDR) rms = (float)rms256 * 1.1 / (1024.0 * (float)R * 256.0 * 100.0 * 50.0 / 10000);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  //else               rms = (float)rms256 * 5.0 / (1024.0 * (float)R * 256.0 * 100.0 / 10000);
+  float w = (rms * rms) / 50.0;
+  float dbm = 10.0 * log10(w) + 30.0; //from rmsV to dBm at 50R
+
+  lcd.setCursor(9, 0); lcd.print(F("  ")); lcd.print(w); lcd.print(F("W   "));
+  //lcd.setCursor(9, 0); lcd.print(F(" +")); lcd.print((int16_t)dbm ); lcd.print(F("dBm   "));
+
+  digitalWrite(KEY_OUT, LOW); //OCR1BL = 0x00;
+  digitalWrite(RX, HIGH);  // RX
+  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  change = true;  //restore original frequency setting
+  delay(1000);
+}
+
+void test_tx_amp()
+{
+  lcd.setCursor(9, 0); lcd_blanks();
+  TCCR1A = 0;   // Timer 1: PWM mode
+  TCCR1B = 0;
+  TCCR1A |= (1 << COM1B1); // Clear OC1A/OC1B on Compare Match when upcounting. Set OC1A/OC1B on Compare Match when downcounting.
+  TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
+  ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
+  ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
+  OCR1BH = 0x00;
+  OCR1BL = 0x00;  // PWM duty-cycle (span set by ICR).
+
+  si5351.prev_pll_freq = 0;  // enforce PLL reset
+  si5351.freq(freq, 0, 90);  // RX in USB
+  si5351.alt_clk2(freq);
+  si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
+  digitalWrite(RX, LOW);  // TX
+  uint16_t i;
+  for(i = 0; i != 256; i++)
+  {
+    OCR1BL = lut[i];
+    si5351.alt_clk2(freq + i * 10);
+    wdt_reset();
+    lcd.setCursor(0, 1); lcd.print(F("SWEEP(")); lcd.print(i); lcd.print(F(")=")); lcd.print(lut[i]); lcd_blanks();
     delay(200);
-    for(j = 0; j != 256; j++){
-      for(i = 0; i != 255 && amp[i] < j; i++) ; //lookup pwm i for amp[i] >= j
-      if(j == 255) i = 255; // do not use PWM for peak RF
-      lut[j] = i;
-    }
-  
-    OCR1BL = 0x00;
-    digitalWrite(RX, HIGH);  // RX
-    si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-    change = true;  //restore original frequency setting
-  }
-  
-  void start_rx()
-  {
-    timer2_stop();
-    timer1_stop();
-    adc_stop();
-    //tx = 0;
-    _init = 1;
-    numSamples = 0;
-    func_ptr = sdr_rx;  //enable RX DSP/SDR
-    adc_start(2, true, F_ADC_CONV); admux[2] = ADMUX;
-    if(dsp_cap == SDR){
-      adc_start(0, !(att == 1)/*true*/, F_ADC_CONV); admux[0] = ADMUX;
-      adc_start(1, !(att == 1)/*true*/, F_ADC_CONV); admux[1] = ADMUX;
-    } else { // ANALOG, DSP
-      adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
-    }
-    timer1_start(78125);
-    timer2_start(F_SAMP_RX);
-  }
-  
-  /*void start_tx()
-  {
-    timer2_stop();
-    timer1_stop();
-    adc_stop();  //disable RX DSP
-    tx = 0;  // transit from RX to TX
-    numSamples = 0;
-    func_ptr = (mode == CW) ? dsp_tx_cw : dsp_tx;
-    amp = 0;  // initialize
-    adc_start(2, true, F_ADC_CONV);
-    timer1_start(78125);
-    timer2_start(F_SAMP_TX);
-  }*/
-
-  void fast_rxtx(uint8_t tx_enable){
-    TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
-    //delay(1);
-    noInterrupts();
-    func_ptr = (tx_enable) ? ((mode == CW) ? dsp_tx_cw : dsp_tx) : sdr_rx;
-    interrupts();
-    if(tx_enable) ADMUX = admux[2];
-    else _init = 1;
-    numSamples = 0;
-    txen(tx_enable);
-    //tx = tx_enable;
-    if(tx_enable)
-      OCR2A = (((float)F_CPU / (float)64) / (float)F_SAMP_TX + 0.5) - 1;
-    else
-      OCR2A = (((float)F_CPU / (float)64) / (float)F_SAMP_RX + 0.5) - 1;
-    TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
   }
 
-  int8_t prev_bandval = 2;
-  int8_t bandval = 2;
-  #define N_BANDS 11
-  uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000/*, 144125000*/ };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
-  
-  enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
-  int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
-  volatile int8_t stepsize = STEP_1k;
-  
-  void process_encoder_tuning_step(int8_t steps)
+  OCR1BL = 0;
+  delay(500);
+  digitalWrite(RX, HIGH);  // RX
+  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  change = true;  //restore original frequency setting
+}
+
+void calibrate_predistortion()
+{
+  lcd.setCursor(9, 0); lcd_blanks();
+  TCCR1A = 0;   // Timer 1: PWM mode
+  TCCR1B = 0;
+  TCCR1A |= (1 << COM1B1); // Clear OC1A/OC1B on Compare Match when upcounting. Set OC1A/OC1B on Compare Match when downcounting.
+  TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
+  ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
+  ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
+  OCR1BH = 0x00;
+  OCR1BL = 0x00;  // PWM duty-cycle (span set by ICR).
+
+  si5351.prev_pll_freq = 0;  //enforce PLL reset
+  si5351.freq(freq, 0, 90);  // RX in USB
+  si5351.alt_clk2(freq + 1000); // si5351.freq_clk2(freq + 1000);
+  si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
+  digitalWrite(RX, LOW);  // TX
+  OCR1BL = 0xFF; // Max power to determine scale
+  delay(200);
+  float scale = sample_amp(AUDIO2, 128);
+  wdt_reset();
+  uint8_t amp[256];
+  int16_t i, j;
+  for(i = 127; i >= 0; i--) // determine amp for pwm value i
   {
-    int32_t stepval = stepsizes[stepsize];
-    //if(stepsize < STEP_100) freq %= 1000; // when tuned and stepsize > 100Hz then forget fine-tuning details
-    freq += steps * stepval;
-    //freq = max(1, min(99999999, freq));
-    change = true;
+    OCR1BL = i;
+    wdt_reset();
+    delay(100);
+
+    amp[i] = min(255, (float)sample_amp(AUDIO2, 128) * 255.0 / scale);
+    lcd.setCursor(0, 1); lcd.print(F("CALIB(")); lcd.print(i); lcd.print(F(")=")); lcd.print(amp[i]); lcd_blanks();
   }
-  
-  void stepsize_showcursor()
-  {
-    lcd.setCursor(stepsize+1, 1);  // display stepsize with cursor
-    lcd.cursor();
-  }
-  
-  void stepsize_change(int8_t val)
-  {
-    stepsize += val;
-    if(stepsize < STEP_1M) stepsize = STEP_10;
-    if(stepsize > STEP_10) stepsize = STEP_1M;
-    if(stepsize == STEP_10k || stepsize == STEP_500k) stepsize += val;
-    stepsize_showcursor();
-  }
-  
-  void powerDown()
-  { // Reduces power from 110mA to 70mA (back-light on) or 30mA (back-light off), remaining current is probably opamp quiescent current
-    lcd.setCursor(0, 1); lcd.print(F("Power-off 73 :-)")); lcd_blanks();
-  
-    MCUSR = ~(1<<WDRF);  // fix: wdt_disable() bug
-    wdt_disable();
-  
-    timer2_stop();
-    timer1_stop();
-    adc_stop();
-  
-    si5351.powerDown();
-  
-    delay(1500);
-  
-    // Disable external interrupts INT0, INT1, Pin Change
-    PCICR = 0;
-    PCMSK0 = 0;
-    PCMSK1 = 0;
-    PCMSK2 = 0;
-    // Disable internal interrupts
-    TIMSK0 = 0;
-    TIMSK1 = 0;
-    TIMSK2 = 0;
-    WDTCSR = 0;
-    // Enable BUTTON Pin Change interrupt
-    *digitalPinToPCMSK(BUTTONS) |= (1<<digitalPinToPCMSKbit(BUTTONS));
-    *digitalPinToPCICR(BUTTONS) |= (1<<digitalPinToPCICRbit(BUTTONS));
-  
-    // Power-down sub-systems
-    PRR = 0xff;
-  
-    lcd.noDisplay();
-  
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    sleep_enable();
-    sleep_bod_disable();
-    interrupts();
-    sleep_cpu();  // go to sleep mode, wake-up by either INT0, INT1, Pin Change, TWI Addr Match, WDT, BOD
-    sleep_disable();
-    resetFunc();
+  OCR1BL = 0xFF; // Max power to determine scale
+  delay(200);
+  for(j = 0; j != 256; j++){
+    for(i = 0; i != 255 && amp[i] < j; i++) ; //lookup pwm i for amp[i] >= j
+    if(j == 255) i = 255; // do not use PWM for peak RF
+    lut[j] = i;
   }
 
-  void show_banner(){
-    lcd.setCursor(0, 0);
-    lcd.print(F("QCX"));
-    const char* cap_label[] = { "SSB", "DSP", "SDR" };
-    if(ssb_cap || dsp_cap){ lcd.print(F("-")); lcd.print(cap_label[dsp_cap]); }
-    lcd.print(F("\x01 ")); lcd_blanks();
+  OCR1BL = 0x00;
+  digitalWrite(RX, HIGH);  // RX
+  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  change = true;  //restore original frequency setting
+}
+
+void start_rx()
+{
+  timer2_stop();
+  timer1_stop();
+  adc_stop();
+  //tx = 0;
+  _init = 1;
+  numSamples = 0;
+  func_ptr = sdr_rx;  //enable RX DSP/SDR
+  adc_start(2, true, F_ADC_CONV); admux[2] = ADMUX;
+  if(dsp_cap == SDR){
+    adc_start(0, !(att == 1)/*true*/, F_ADC_CONV); admux[0] = ADMUX;
+    adc_start(1, !(att == 1)/*true*/, F_ADC_CONV); admux[1] = ADMUX;
+  } else { // ANALOG, DSP
+    adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
   }
-};
-QCX qcx;
+  timer1_start(78125);
+  timer2_start(F_SAMP_RX);
+}
+
+/*void start_tx()
+{
+  timer2_stop();
+  timer1_stop();
+  adc_stop();  //disable RX DSP
+  tx = 0;  // transit from RX to TX
+  numSamples = 0;
+  func_ptr = (mode == CW) ? dsp_tx_cw : dsp_tx;
+  amp = 0;  // initialize
+  adc_start(2, true, F_ADC_CONV);
+  timer1_start(78125);
+  timer2_start(F_SAMP_TX);
+}*/
+
+void fast_rxtx(uint8_t tx_enable){
+  TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
+  //delay(1);
+  noInterrupts();
+  func_ptr = (tx_enable) ? ((mode == CW) ? dsp_tx_cw : dsp_tx) : sdr_rx;
+  interrupts();
+  if(tx_enable) ADMUX = admux[2];
+  else _init = 1;
+  numSamples = 0;
+  txen(tx_enable);
+  //tx = tx_enable;
+  if(tx_enable)
+    OCR2A = (((float)F_CPU / (float)64) / (float)F_SAMP_TX + 0.5) - 1;
+  else
+    OCR2A = (((float)F_CPU / (float)64) / (float)F_SAMP_RX + 0.5) - 1;
+  TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
+}
+
+int8_t prev_bandval = 2;
+int8_t bandval = 2;
+#define N_BANDS 11
+uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000/*, 144125000*/ };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
+
+enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
+int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
+volatile int8_t stepsize = STEP_1k;
+
+void process_encoder_tuning_step(int8_t steps)
+{
+  int32_t stepval = stepsizes[stepsize];
+  //if(stepsize < STEP_100) freq %= 1000; // when tuned and stepsize > 100Hz then forget fine-tuning details
+  freq += steps * stepval;
+  //freq = max(1, min(99999999, freq));
+  change = true;
+}
+
+void stepsize_showcursor()
+{
+  lcd.setCursor(stepsize+1, 1);  // display stepsize with cursor
+  lcd.cursor();
+}
+
+void stepsize_change(int8_t val)
+{
+  stepsize += val;
+  if(stepsize < STEP_1M) stepsize = STEP_10;
+  if(stepsize > STEP_10) stepsize = STEP_1M;
+  if(stepsize == STEP_10k || stepsize == STEP_500k) stepsize += val;
+  stepsize_showcursor();
+}
+
+void powerDown()
+{ // Reduces power from 110mA to 70mA (back-light on) or 30mA (back-light off), remaining current is probably opamp quiescent current
+  lcd.setCursor(0, 1); lcd.print(F("Power-off 73 :-)")); lcd_blanks();
+
+  MCUSR = ~(1<<WDRF);  // fix: wdt_disable() bug
+  wdt_disable();
+
+  timer2_stop();
+  timer1_stop();
+  adc_stop();
+
+  si5351.powerDown();
+
+  delay(1500);
+
+  // Disable external interrupts INT0, INT1, Pin Change
+  PCICR = 0;
+  PCMSK0 = 0;
+  PCMSK1 = 0;
+  PCMSK2 = 0;
+  // Disable internal interrupts
+  TIMSK0 = 0;
+  TIMSK1 = 0;
+  TIMSK2 = 0;
+  WDTCSR = 0;
+  // Enable BUTTON Pin Change interrupt
+  *digitalPinToPCMSK(BUTTONS) |= (1<<digitalPinToPCMSKbit(BUTTONS));
+  *digitalPinToPCICR(BUTTONS) |= (1<<digitalPinToPCICRbit(BUTTONS));
+
+  // Power-down sub-systems
+  PRR = 0xff;
+
+  lcd.noDisplay();
+
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();
+  sleep_bod_disable();
+  interrupts();
+  sleep_cpu();  // go to sleep mode, wake-up by either INT0, INT1, Pin Change, TWI Addr Match, WDT, BOD
+  sleep_disable();
+  resetFunc();
+}
+
+void show_banner(){
+  lcd.setCursor(0, 0);
+  lcd.print(F("QCX"));
+  const char* cap_label[] = { "SSB", "DSP", "SDR" };
+  if(ssb_cap || dsp_cap){ lcd.print(F("-")); lcd.print(cap_label[dsp_cap]); }
+  lcd.print(F("\x01 ")); lcd_blanks();
+}
 
 volatile uint8_t event;
 volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile int8_t menu = 0;  // current parameter id selected in menu
-static unsigned long schedule_time = 0;
+unsigned long schedule_time = 0;
 
 #define N_PARAMS 18   // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
@@ -1656,9 +1629,9 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
   }
 }
 
-const char* offon_label[] = {"OFF", "ON"};
-const char* mode_label[] = { "LSB", "USB", "CW ", "AM ", "FM " };
-const char* filt_label[] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
+const char* offon_label[2] = {"OFF", "ON"};
+const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
+const char* filt_label[7] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
 const char* band_label[N_BANDS] = { /*"600", "160m",*/ "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" /*, "2m"*/};
 
 enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
@@ -1683,13 +1656,13 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false, ((dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0)); break;
     case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
     case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
-    case BAND:    paramAction(action, qcx.bandval, F("1.4"), F("Band"), band_label, 0, sizeof(band_label)/sizeof(char*) - 1, false, 1); break;
-    case STEP:    paramAction(action, qcx.stepsize, F("1.5"), F("Tune Rate"), /*qcx.*/stepsize_label, 0, sizeof(/*qcx.*/stepsize_label)/sizeof(char*) - 1, false, qcx.STEP_1k); break;
+    case BAND:    paramAction(action, bandval, F("1.4"), F("Band"), band_label, 0, sizeof(band_label)/sizeof(char*) - 1, false, 1); break;
+    case STEP:    paramAction(action, stepsize, F("1.5"), F("Tune Rate"), stepsize_label, 0, sizeof(stepsize_label)/sizeof(char*) - 1, false, STEP_1k); break;
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false, true); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false, 0); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false, 0); break;
     case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false, 0); break;
-    case SMETER:  paramAction(action, qcx.smode, F("1.10"), F("S-meter"), smode_label, 0, sizeof(smode_label)/sizeof(char*) - 1, false, 1); break;
+    case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, sizeof(smode_label)/sizeof(char*) - 1, false, 1); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false, false); break;
     case VOXGAIN: paramAction(action, vox_gain, F("3.2"), F("VOX Gain"), NULL, 0, 255, false, (1<<2) ); break;
@@ -1702,6 +1675,28 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false, 7074000); break;
     case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false, get_version_id()); break;
   }
+}
+
+void initPins(){  
+  // initialize
+  digitalWrite(SIG_OUT, LOW);
+  digitalWrite(RX, HIGH);
+  digitalWrite(KEY_OUT, LOW);
+  digitalWrite(SIDETONE, LOW);
+
+  // pins
+  pinMode(SIDETONE, OUTPUT);
+  pinMode(SIG_OUT, OUTPUT);
+  pinMode(RX, OUTPUT);
+  pinMode(KEY_OUT, OUTPUT);
+  pinMode(BUTTONS, INPUT);  // L/R/rotary button
+  pinMode(DIT, INPUT_PULLUP);
+  pinMode(DAH, INPUT);  //pinMode(DAH, INPUT_PULLUP); // Could this replace D4?
+
+  digitalWrite(AUDIO1, LOW);  // when used as output, help can mute RX leakage into AREF
+  digitalWrite(AUDIO2, LOW);
+  pinMode(AUDIO1, INPUT);
+  pinMode(AUDIO2, INPUT);  
 }
 
 #define SAFE  1
@@ -1747,7 +1742,7 @@ void setup()
 
   encoder_setup();
 
-  qcx.setup();
+  initPins();
 
   lcd.begin(16, 2);  // Init LCD
   for(i = 0; i != N_FONTS; i++){  // Init fonts
@@ -1792,7 +1787,7 @@ void setup()
   // Test if QCX has SSB capability: DVM is biased
   ssb_cap = analogRead(DVM) > 369;
 
-  qcx.show_banner();
+  show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
 
 #ifdef SAFE
@@ -1900,12 +1895,12 @@ void setup()
   }
   si5351.prev_pll_freq = 0;  // enforce PLL reset
   change = true;
-  qcx.prev_bandval = qcx.bandval;
+  prev_bandval = bandval;
 
 
   //delay(800); wdt_reset();  // Display banner
   //lcd.setCursor(7, 0); lcd.print(F("\x01")); lcd_blanks();  // remove release number
-  qcx.show_banner();  // remove release number
+  show_banner();  // remove release number
 
   if(!dsp_cap) volume = 0;  // keep volume disabled for analog rig
 
@@ -1913,7 +1908,7 @@ void setup()
   // volume = (dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0;
   // mode = (ssb_cap) ? USB : CW;
   //if(mode == CW) filt = 4;
-  qcx.start_rx();
+  start_rx();
 
 }
 
@@ -1924,8 +1919,8 @@ void loop()
 
   if(menumode == 0){
     //lcd.noCursor();
-    qcx.smeter();
-    if(mode != CW) qcx.stepsize_showcursor();
+    smeter();
+    if(mode != CW) stepsize_showcursor();
   }
 
   if(mode == CW && cw_event){
@@ -1935,20 +1930,20 @@ void loop()
 
   if(!digitalRead(DIT)){
 /*
-    qcx.start_tx();
+    start_tx();
     ptt = true;   // needs to be true AFTER start_tx !
     for(; !digitalRead(DIT);){ //until released
       wdt_reset();
     }
     ptt = false;
     delay(1);
-    qcx.start_rx();
+    start_rx();
 */
-    qcx.fast_rxtx(1);
+    fast_rxtx(1);
     for(; !digitalRead(DIT);){ //until released
       wdt_reset();
     }
-    qcx.fast_rxtx(0);
+    fast_rxtx(0);
   }
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
@@ -1977,7 +1972,7 @@ void loop()
       case BL|PL:  // Called when menu button released
         menumode = 2;
         //calibrate_predistortion();
-        //qcx.powermeter();
+        //powermeter();
         //test_tx_amp();
         break;
       case BL|PT:
@@ -1989,11 +1984,11 @@ void loop()
         int8_t _menumode;
         if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short left-click while in default screen: enter menu mode
         if(menumode == 1){ _menumode = 2; }                          // short left-click while in menu: enter value selection screen
-        if(menumode == 2){ _menumode = 0; qcx.show_banner(); change = true; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
+        if(menumode == 2){ _menumode = 0; show_banner(); change = true; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
         menumode = _menumode;
         break;
       case BL|DC:
-        //qcx.powerDown();
+        //powerDown();
         /*lcd.setCursor(0, 1); lcd.print(F("Pause")); lcd_blanks();
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
           wdt_reset();  // until 2nd press
@@ -2004,7 +1999,7 @@ void loop()
         if(!menumode){
           encoder_val = 1;
           paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*), true);
-          if(mode != CW) qcx.stepsize = qcx.STEP_1k; else qcx.stepsize = qcx.STEP_100;
+          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_100;
           //if(mode > FM) mode = LSB;
           if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
           if(mode == CW) filt = 4; else filt = 0;
@@ -2013,7 +2008,7 @@ void loop()
           si5351.prev_pll_freq = 0;  // enforce PLL reset
           change = true;
         } else {
-          if(menumode == 1){ menumode = 0; qcx.show_banner(); change = true; }  // short right-click while in menu: enter value selection screen
+          if(menumode == 1){ menumode = 0; show_banner(); change = true; }  // short right-click while in menu: enter value selection screen
           if(menumode == 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
         }
         break;
@@ -2052,16 +2047,16 @@ void loop()
           //lcd.setCursor(0, 1); lcd.print(_amp); lcd_blanks();
           if(_amp > vox_gain){            // workaround for RX noise leakage to AREF  
             for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
-            qcx.fast_rxtx(1);
+            fast_rxtx(1);
             vox = 1; tx = 255; //kick
             delay(1);
             for(; tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
-            qcx.fast_rxtx(0);
+            fast_rxtx(0);
             delay(1);
             vox = 0;
             continue;  // skip the rest for the moment
           }    
-          //qcx.smeter();
+          //smeter();
           wdt_reset();
         }
       }
@@ -2070,7 +2065,7 @@ void loop()
       case BR|PT: break;
       case BE|SC:
         if(!menumode)
-          qcx.stepsize_change(+1);
+          stepsize_change(+1);
         else {
           int8_t _menumode;
           if(menumode == 1){ _menumode = 2; }  // short encoder-click while in menu: enter value selection screen
@@ -2080,19 +2075,19 @@ void loop()
         break;
       case BE|DC:
         delay(100);
-        qcx.bandval++;
-        if(qcx.bandval >= N_BANDS) qcx.bandval = 0;
-        qcx.stepsize = qcx.STEP_1k;
+        bandval++;
+        if(bandval >= N_BANDS) bandval = 0;
+        stepsize = STEP_1k;
         change = true;
         break;
-      case BE|PL: qcx.stepsize_change(-1); break;
+      case BE|PL: stepsize_change(-1); break;
       case BE|PT:
           for(; digitalRead(BUTTONS);){ // process encoder changes until released
           wdt_reset();
           if(dsp_cap && encoder_val){
             paramAction(UPDATE, VOLUME);
             paramAction(SAVE, VOLUME);
-            if(volume < 0) qcx.powerDown();  // powerDown when volume < 0
+            if(volume < 0) powerDown();  // powerDown when volume < 0
           }
         }
         change = true; // refresh display
@@ -2110,7 +2105,7 @@ void loop()
     if(menu != 0){
       paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
     } else {
-      menumode = 0; qcx.show_banner();  // while scrolling through menu: menu item 0 goes back to main console
+      menumode = 0; show_banner();  // while scrolling through menu: menu item 0 goes back to main console
       change = true; // refresh freq display (when menu = 0)
     }
     if(menumode == 2){
@@ -2119,7 +2114,7 @@ void loop()
         change = true;
         si5351.prev_pll_freq = 0;  // enforce PLL reset
         // make more generic: 
-        if(mode != CW) qcx.stepsize = qcx.STEP_1k; else qcx.stepsize = qcx.STEP_100;
+        if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_100;
         if(mode == CW) filt = 4; else filt = 0;
       }
       if(menu == ATT){ // post-handling ATT parameter
@@ -2136,14 +2131,14 @@ void loop()
 
   if(menumode == 0){
     if(encoder_val){  // process encoder tuning steps
-      qcx.process_encoder_tuning_step(encoder_val);
+      process_encoder_tuning_step(encoder_val);
       encoder_val = 0;
     }
   }
 
   if(change){
     change = false;
-    if(qcx.prev_bandval != qcx.bandval){ freq = qcx.band[qcx.bandval]; qcx.prev_bandval = qcx.bandval; }
+    if(prev_bandval != bandval){ freq = band[bandval]; prev_bandval = bandval; }
     schedule_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
  
     if(menumode == 0){
@@ -2184,4 +2179,12 @@ void loop()
   }
   
   wdt_reset();
+}  
+
+#ifndef ARDUINO
+void main()
+{
+  setup();
+  for(;;) loop();
 }
+#endif
