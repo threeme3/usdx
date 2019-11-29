@@ -5,7 +5,7 @@
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#define VERSION   "1.01m"
+#define VERSION   "1.01n"
 
 /* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
@@ -60,51 +60,43 @@ crystal freqs in menu
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
   // Pin definitions
-  const int data = 0;    // PD0 to PD3 connect to D4 to D7 on the display
-  const int en = 4;      // PD4
-  const int rs = 4;      // PC4  // should have pull-up resistor
+  #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
+  #define _en  4      // PD4
+  #define _rs  4      // PC4 - MUST have pull-up resistor
+  #define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
+  #define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
+  #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
+  #define LCD_PREP_NIBBLE(b) ((PORTD & ~(0xf << _dn)) | b << _dn | 1 << _en) // Send data and enable high
   void begin(uint8_t x, uint8_t y){                // Send command
-    DDRD |= 0xf << data | 1 << en;                 // Make data EN and RS pins outputs
-    PORTC &= ~(1 << rs);                           // Set RS low in case to support pull-down when DDRC is output
-    DDRC |= 1 << rs;                               // RS low (pull-down), (RS set as output)
+    DDRD |= 0xf << _dn | 1 << _en;                 // Make data EN and RS pins outputs
+    PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
+    LCD_RS_LO();
     cmd(0x33);                                     // Ensures display is in 8-bit mode
     cmd(0x32);                                     // Puts display in 4-bit mode
     cmd(0x0e);                                     // Display and cursor on
     cmd(0x01);                                     // Clear display
     delay(3);                                      // Allow to execute on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
   }
-  void nib(uint8_t n){                             // Send four bit nibble to display
-    PORTD = (PORTD & ~(0xf << data)) | n << data | 1 << en; // Send data and enable high
-    PORTD &= ~(1 << en);                           // EN low
+  void nib(uint8_t b){                             // Send four bit nibble to display
+    PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
+    LCD_EN_LO();
     delayMicroseconds(37);                         // Execution time
   }
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
-    uint8_t nibh = (PORTD & ~(0xf << data)) | (b >>  4) << data | 1 << en; // high nibble data and enable high
-    uint8_t nibl = (PORTD & ~(0xf << data)) | (b & 0xf) << data | 1 << en; // low nibble data and enable high
+    uint8_t nibh = LCD_PREP_NIBBLE(b >>  4);       // Prepare high nibble data and enable high
+    uint8_t nibl = LCD_PREP_NIBBLE(b & 0xf);       // Prepare low nibble data and enable high
     PORTD = nibh;                                  // Send high nibble data and enable high
-    DDRC &= ~(1 << rs);                            // RS high (pull-up)
-    PORTD &= ~(1 << en);                           // EN low
+    LCD_RS_HI();
+    LCD_EN_LO();
     PORTD = nibl;                                  // Send low nibble data and enable high
-    DDRC |= 1 << rs;                               // RS low (pull-down)
-    DDRC &= ~(1 << rs);                            // RS high (pull-up)
-    PORTD &= ~(1 << en);                           // EN low
-    DDRC |= 1 << rs;                               // RS low (pull-down)
+    LCD_RS_LO();
+    LCD_RS_HI();
+    LCD_EN_LO();
+    LCD_RS_LO();
     delayMicroseconds(41);                         // Execution time
     return 1;
   }
-/*void cmd(uint8_t b){
-    PORTC &= ~(1 << rs);                           // RS low
-    write(b);
-    PORTC |= 1 << rs;                              // RS high
-    delay(1);                                      // Allow to execute on display
-  }
-  size_t write(uint8_t b){ nib(b >> 4); nib(b & 0xf); return 1; }
-  void nib(uint8_t n) {                            // Send four bit nibble to display
-    PORTD &= ~(0xf << data)) | n << data | 1 << en;// Send data and enable high
-    PORTD &= ~(1 << en);                           // EN low
-    delay(1);                                      // Allow data to execute on display
-  }*/
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
   void cursor(){ cmd(0x0e); }
   void noCursor(){ cmd(0x0c); }
@@ -1011,12 +1003,7 @@ void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
   ADMUX = 0;              // clear ADMUX register
   ADMUX |= (adcpin & 0x0f);    // set analog input pin
   ADMUX |= ((ref1v1) ? (1 << REFS1) : 0) | (1 << REFS0);  // set AREF=1.1V (Internal ref); otherwise AREF=AVCC=(5V)
-  //ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // 128 prescaler for 9.6kHz*1.25
-  //ADCSRA |= (1 << ADPS2) | (1 << ADPS1);    // 64 prescaler for 19.2kHz*1.25
-  //ADCSRA |= (1 << ADPS2) | (1 << ADPS0);    // 32 prescaler for 38.5kHz*1.25  (this seems to contain more precision and gain compared to 153.8kHz*1.25
-  //ADCSRA |= (1 << ADPS2);                   // 16 prescaler for 76.9kHz*1.25
-  //ADCSRA |= (1 << ADPS1) | (1 << ADPS0);      // --> ADPS=011: 8 prescaler for 153.8kHz*1.25;  sampling rate is [ADC clock] / [prescaler] / [conversion clock cycles]  for Arduino Uno ADC clock is 20 MHz and a conversion takes 13 clock cycles: ADPS=011: 8 prescaler for 153.8 KHz, ADPS=100: 16 prescaler for 76.9 KHz; ADPS=101: 32 prescaler for 38.5 KHz; ADPS=110: 64 prescaler for 19.2kHz; // ADPS=111: 128 prescaler for 9.6kHz
-  ADCSRA |= ((uint8_t)log2((uint8_t)(F_CPU / 13 / fs))) & 0x07;  // ADC Prescaler (for normal conversions non-auto-triggered): ADPS = log2(F_CPU / 13 / Fs) - 1
+  ADCSRA |= ((uint8_t)log2((uint8_t)(F_CPU / 13 / fs))) & 0x07;  // ADC Prescaler (for normal conversions non-auto-triggered): ADPS = log2(F_CPU / 13 / Fs) - 1   ADPS=0..7 => { 1536, 768, 384, 192, 96, 48, 24, 12} kHz conversion-rate (for F_CPU=20M)
   //ADCSRA |= (1 << ADIE);  // enable interrupts when measurement complete
   ADCSRA |= (1 << ADEN);  // enable ADC
   //ADCSRA |= (1 << ADSC);  // start ADC measurements
@@ -1106,7 +1093,7 @@ void timer1_stop()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Below a radio-specific implementation based on the above components (seperation of concerns)
 //
-// Feel free to replace it with your own custom radio implementation :-)
+// Implement here your own custom radio implementation :-)
 
 void(* resetFunc)(void) = 0; // declare reset function @ address 0
 
@@ -1488,7 +1475,7 @@ void fast_rxtx(uint8_t tx_enable){
 int8_t prev_bandval = 2;
 int8_t bandval = 2;
 #define N_BANDS 11
-uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000/*, 144125000*/ };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
+uint32_t band[N_BANDS] = { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000 };
 
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
@@ -1632,7 +1619,7 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
 const char* offon_label[2] = {"OFF", "ON"};
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
 const char* filt_label[7] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
-const char* band_label[N_BANDS] = { /*"600", "160m",*/ "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" /*, "2m"*/};
+const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" };
 
 enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
