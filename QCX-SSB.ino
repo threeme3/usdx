@@ -1,11 +1,10 @@
 //  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
 //  
-//  Copyright 2019 pe1nnz@amsat.org
+//  Copyright 2019   Guido PE1NNZ <pe1nnz@amsat.org>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-#define VERSION   "1.01p"
+#define VERSION   "1.01q"
 
 /* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
@@ -27,7 +26,7 @@ VFO-A/B+split+RIT
 OLED display support
 VOX integration in main loop
 auto-bias for AUDIO1+2 inputs
-crystal freqs in menu
+K2/TS480 CAT
 */
 
 // QCX pin defintion
@@ -59,7 +58,6 @@ crystal freqs in menu
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
-  // Pin definitions
   #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
   #define _en  4      // PC4 - MUST have pull-up resistor
   #define _rs  4      // PC4 - MUST have pull-up resistor
@@ -270,7 +268,7 @@ public:
   #define SI_CLK_IDRV_8MA 0b00000011
   #define SI_CLK_INV 0b00010000
   #define SI_PLL_FREQ 400000000  //900000000, with 400MHz PLL freq, usable range is 3.2..100MHz
-  volatile uint32_t fxtal = 27004900;  //#define fxtal 27004900  myqcx1:27003847 myqcx2:27004900  Measured crystal frequency of XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
+  volatile uint32_t fxtal = 27004300;  //myqcx1:27003847 myqcx2:27004900  Actual crystal frequency of 27MHz XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
 
   volatile uint8_t prev_divider;
   volatile int32_t raw_freq;
@@ -456,7 +454,7 @@ public:
 static SI5351 si5351;
 
 #undef F_CPU
-#define F_CPU 20008440   // myqcx1:20008440   // Actual crystal frequency of XTAL1 20000000
+#define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1
 
 volatile uint16_t param_a = 0;  // registers for debugging, testing and experimental purposes
 volatile int16_t param_b = 0;
@@ -678,13 +676,13 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 34722
 //#define F_SAMP_RX 31250
 //#define F_SAMP_RX 28409
-#define F_ADC_CONV 192307
+#define F_ADC_CONV (192307/1)
 
 volatile int8_t volume = 0;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
-volatile uint8_t att2 = 0;
+volatile uint8_t att2 = 2;
 volatile uint8_t _init;
 
 //static uint32_t gain = 1024;
@@ -865,11 +863,11 @@ void sdr_rx()
         v[7] = ac2 >> att2;
         
         i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7];  // Delay to match Hilbert transform on Q branch
-            
+
         int16_t ac = i + qh;
         static uint8_t absavg256cnt;
         if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);
-    
+
         if(mode == AM) { // (12%CPU for the mode selection etc)
           { static int16_t dc;
             dc += (i - dc) / 2;
@@ -917,9 +915,14 @@ void sdr_rx()
         // Output stage
         static int16_t ozd1, ozd2;
         if(_init){ ac = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
+//#define SECOND_ORDER_DUC  1
+#ifdef SECOND_ORDER_DUC
         int16_t od1 = ac - ozd1; // Comb section
         ocomb = od1 - ozd2;
         ozd2 = od1;
+#else
+        ocomb = ac - ozd1; // Comb section
+#endif
         ozd1 = ac;
       }
     } else _z1 = _ac * 2;
@@ -935,7 +938,9 @@ void sdr_rx_2()
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   func_ptr = sdr_rx;    // processing function for next conversion
-  //sdr_rx_common();
+#ifdef SECOND_ORDER_DUC
+  sdr_rx_common();  //necessary? YES!
+#endif
 
   static int16_t dc;
   dc += (adc - dc) / 2;
@@ -976,10 +981,16 @@ inline void sdr_rx_common()
   static int16_t ozi1, ozi2;
   if(_init){ ocomb=0; ozi1 = 0; ozi2 = 0; } // hack
   // Output stage [25% CPU@R=4;Fs=62.5k]
-  ozi2 = ozi1 + ozi2;          // Integrator section 
+#ifdef SECOND_ORDER_DUC
+  ozi2 = ozi1 + ozi2;          // Integrator section
+#endif
   ozi1 = ocomb + ozi1;
 #ifndef PROFILING
+#ifdef SECOND_ORDER_DUC
   if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+#else
+  if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+#endif
 #endif  
 }
 
@@ -1209,7 +1220,7 @@ float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
   if(smode == 0){ // none, no s-meter
     return 0;
   }
-  float rms = _absavg256 / 256; //sqrt(256.0);
+  float rms = _absavg256 / 256.0; //sqrt(256.0);
   if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
@@ -1548,8 +1559,8 @@ uint8_t eeprom_version;
 int eeprom_addr;
 
 // Support functions for parameter and menu handling
-enum action_t { UPDATE, UPDATE_MENU, LOAD, SAVE, SKIP, INIT };
-template<typename T> void paramAction(uint8_t action, T& value, const __FlashStringHelper* menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous, int32_t init_val){
+enum action_t { UPDATE, UPDATE_MENU, LOAD, SAVE, SKIP };
+template<typename T> void paramAction(uint8_t action, T& value, const __FlashStringHelper* menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
@@ -1584,16 +1595,15 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
     case SKIP:
       eeprom_addr += sizeof(value);
       break;
-    case INIT:
-      value = init_val;
-      break;
   }
 }
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
 const char* filt_label[7] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
-const char* band_label[N_BANDS] = { /*"600", "160m",*/ "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" /*, "2m"*/};
+const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" };
+
+#define _N(a) sizeof(a)/sizeof(a[0])
 
 #define N_PARAMS 19  // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
@@ -1613,28 +1623,28 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
   switch(id){
     // Visible parameters
-    case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false, ((dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0)); break;
-    case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*) - 1, true, USB); break;
-    case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, sizeof(filt_label)/sizeof(char*) - 1, false, 0); break;
-    case BAND:    paramAction(action, bandval, F("1.4"), F("Band"), band_label, 0, sizeof(band_label)/sizeof(char*) - 1, false, 1); break;
-    case STEP:    paramAction(action, stepsize, F("1.5"), F("Tune Rate"), stepsize_label, 0, sizeof(stepsize_label)/sizeof(char*) - 1, false, STEP_1k); break;
-    case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false, true); break;
-    case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false, 0); break;
-    case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false, 0); break;
-    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false, 2); break;
-    case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, sizeof(smode_label)/sizeof(char*) - 1, false, 1); break;
-    case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
-    case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false, false); break;
-    case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false, (1<<2) ); break;
-    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false, false); break;
-    case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false, 4); break;
-    case SIFXTAL: paramAction(action, si5351.fxtal, F("9.1"), F("Ref freq"), NULL, 24000000, 28000000, false, 27004000); break;
-    case PARAM_A: paramAction(action, param_a, F("9.2"), F("Param A"), NULL, 0, 65535, false, 0); break;
-    case PARAM_B: paramAction(action, param_b, F("9.3"), F("Param B"), NULL, -32768, 32767, false, 0); break;
-    case PARAM_C: paramAction(action, param_c, F("9.4"), F("Param C"), NULL, -32768, 32767, false, 0); break;
+    case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false); break;
+    case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, _N(mode_label) - 1, true); break;
+    case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, _N(filt_label) - 1, false); break;
+    case BAND:    paramAction(action, bandval, F("1.4"), F("Band"), band_label, 0, _N(band_label) - 1, false); break;
+    case STEP:    paramAction(action, stepsize, F("1.5"), F("Tune Rate"), stepsize_label, 0, _N(stepsize_label) - 1, false); break;
+    case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false); break;
+    case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false); break;
+    case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false); break;
+    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false); break;
+    case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
+    case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
+    case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false); break;
+    case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
+    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
+    case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false); break;
+    case SIFXTAL: paramAction(action, si5351.fxtal, F("9.1"), F("Ref freq"), NULL, 24000000, 28000000, false); break;
+    case PARAM_A: paramAction(action, param_a, F("9.2"), F("Param A"), NULL, 0, 65535, false); break;
+    case PARAM_B: paramAction(action, param_b, F("9.3"), F("Param B"), NULL, -32768, 32767, false); break;
+    case PARAM_C: paramAction(action, param_c, F("9.4"), F("Param C"), NULL, -32768, 32767, false); break;
     // Invisible parameters
-    case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false, 7074000); break;
-    case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false, get_version_id()); break;
+    case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false); break;
+    case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false); break;
   }
 }
 
@@ -1843,14 +1853,17 @@ void setup()
     delay(1500); wdt_reset();
   }
 #endif
+  volume = (dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0;  // default volume: keep volume disabled for analog rig
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
-  paramAction(LOAD);
-  if(get_version_id() != eeprom_version){
-    paramAction(INIT);
+  paramAction(LOAD, VERS);
+  if(eeprom_version == get_version_id()){  // version signature in EEPROM corresponds with this firmware?
+    paramAction(LOAD);  // load all parameters
+  } else {
+    eeprom_version = get_version_id();
     //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
     //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
-    paramAction(SAVE);
+    paramAction(SAVE);  // save default parfameter values
     lcd.setCursor(0, 1); lcd.print(F("Reset settings.."));
     delay(500); wdt_reset();
   }
@@ -1860,18 +1873,16 @@ void setup()
 
   show_banner();  // remove release number
 
-  if(!dsp_cap) volume = 0;  // keep volume disabled for analog rig
-
   start_rx();
 }
 
 void loop()
-{ 
+{
   delay(10);
 
   if(menumode == 0){
     smeter();
-    if(mode != CW) stepsize_showcursor();
+    if(!((mode == CW) && cw_event)) stepsize_showcursor();
   }
 
   if(mode == CW && cw_event){
@@ -1939,7 +1950,7 @@ void loop()
       case BR|SC:
         if(!menumode){
           encoder_val = 1;
-          paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, sizeof(mode_label)/sizeof(char*), true);
+          paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, _N(mode_label), true);
           if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_100;
           //if(mode > FM) mode = LSB;
           if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)

@@ -32,18 +32,18 @@ pe1nnz@amsat.org
 - An **pre-distorion** algorithm that cancels out the amplitude errors of non-linearities in the PA voltage regulated PWM supply; a lookup table is used that can be calibrated with an internal PA amplitude measurement
 - Possibility to extend the QCX analog phasing stage with a **DSP stage**
 - Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**
-- A theoretical **digital receiver dynamic range of 78dB** at 2.4kHz BW.  (1 dB) Compression point (at -126dBm sensitivity): -44dBm/1mV (for in-band signal); -4dBm/160mV (for signal at 15kHz offset); 19dBm/2V (for signal at 100kHz offset or more)
+- **Receiver MDS of -118dBm @2.4kHz BW; dynamic range of 78dB**.  Blocking (after reducing gain IC6A/B-stage to 10dB!!): -48dBm@5kHz, -8dBm@15kHz
 - Digitally switchable RF front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**
 - This firmware is compatible with an unmodified QCX, partial modified QCX (e.g. SSB mod, or DSP mod), or fully modified QCX (SSB + SDR mod, as described below)
-- SDR implementation simplifies the receiver heaviliy and **shaves off roughly 30% of the components** from the original QCX design while adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
+- SDR implementation simplifies the receiver heaviliy; **the original QCX PCB is now half empty** by moving the analog processing into the microcontroller and adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
 - Probably the most cost effective and easiest to build standalone SDR transceiver that you can find. More versatile and easier to build than the original QCX (less components, no transformer windings, no alignment procedure)
 
 
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 (current) | 2019-09-01 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings. |
-| R1.01 | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. |
+| R1.02 (**this**) | 2019-09-01 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings. |
+| R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. |
 | R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
 
 
@@ -66,10 +66,10 @@ Change the following component values (and type of component in some cases), and
 5. Connect an electret microphone pins (+) to tip and (-) to sleeve of paddle-jack; PTT-switch pins to ring and sleeve (see [X1M-mic]).
 
 
-Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components must either be removed or may be omitted (see above):
+Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted and some must be remove (see above):
 ![layout](layout.png)
 
-Below the wires that needs to be installed on the bottom PCB; a circle indicates that the component pin is disconnected from the pad and connected to another pad via a wire (feed through the PCB, or wired on the top side):
+Below the wires that needs to be installed on the bottom PCB; a circle indicates that the component pin is disconnected from the PCB pad and directly wired to another pad (the wire may be fed through the PCB hole or wired on the top side):
 ![pcb](pcb.png)
 
 
@@ -78,7 +78,7 @@ Currently, the following functions have been assigned to the buttons:
 
 | Button              | Function                                                |
 | ------------------- | ------------------------------------------------------- |
-| LEFT single-press   | Select menu-item, setting or goes back                  |
+| LEFT single-press   | Selects menu-item, setting or goes back (optional: CENTER, RIGHT click)  |
 | LEFT double-press   |                                                         |
 | LEFT long-press     |                                                         |
 | LEFT push + turn    | Quick menu                                              |
@@ -147,12 +147,13 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 
 ### Credits:
-[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] stage like the famous [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] hardware modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi.
+[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] hardware modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi.
 
-
+<!---
 ### References
 - VERON association interviewed me in the [PI4AA June issue] about this project (in Dutch, starting at timestamp 15:50).
 - Rüdiger Möller, HPSDR presentation by [DJ1MR], 2018. Transmitter architectures for high efficiency amplification
+--->
 
 [original schematic]: https://qrp-labs.com/images/qcx/HiRes.png
 
