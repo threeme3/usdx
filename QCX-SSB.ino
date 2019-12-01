@@ -5,7 +5,7 @@
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#define VERSION   "1.01n"
+#define VERSION   "1.01p"
 
 /* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
@@ -21,7 +21,7 @@ menu back (right button), menu enter (rotary button)
 dynamic range cw
 att extended agc
 profiling nsamples, cpu load idle in menu
-configuarable F_CPU, F_XTAL
+configuarable F_CPU
 CW-R/CW-L offset
 VFO-A/B+split+RIT
 OLED display support
@@ -270,7 +270,7 @@ public:
   #define SI_CLK_IDRV_8MA 0b00000011
   #define SI_CLK_INV 0b00010000
   #define SI_PLL_FREQ 400000000  //900000000, with 400MHz PLL freq, usable range is 3.2..100MHz
-  #define SI_XTAL_FREQ 27004900  //myqcx1:27003847 myqcx2:27004900  Measured crystal frequency of XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
+  volatile uint32_t fxtal = 27004900;  //#define fxtal 27004900  myqcx1:27003847 myqcx2:27004900  Measured crystal frequency of XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
 
   volatile uint8_t prev_divider;
   volatile int32_t raw_freq;
@@ -348,10 +348,10 @@ public:
   // this function relies on cached (global) variables: divider, mult, raw_freq, pll_data
   inline void freq_calc_fast(int16_t freq_offset)
   { // freq_offset is relative to freq set in freq(freq)
-    // uint32_t num128 = ((divider * (raw_freq + offset)) % SI_XTAL_FREQ) * (float)(0xFFFFF * 128) / SI_XTAL_FREQ;
-    // Above definition (for SI_XTAL_FREQ=27.00491M) can be optimized by pre-calculating factor (0xFFFFF*128)/SI_XTAL_FREQ (=4.97) as integer constant (5) and
+    // uint32_t num128 = ((divider * (raw_freq + offset)) % fxtal) * (float)(0xFFFFF * 128) / fxtal;
+    // Above definition (for fxtal=27.00491M) can be optimized by pre-calculating factor (0xFFFFF*128)/fxtal (=4.97) as integer constant (5) and
     // substracting the rest error factor (0.03). Note that the latter is shifted left (0.03<<6)=2, while the other term is shifted right (>>6)
-    register int32_t z = ((divider * (raw_freq + freq_offset)) % SI_XTAL_FREQ);
+    register int32_t z = ((divider * (raw_freq + freq_offset)) % fxtal);
     register int32_t z2 = -(z >> 5);
     int32_t num128 = (z * 5) + z2;
   
@@ -387,10 +387,10 @@ public:
   
     divider = SI_PLL_FREQ / freq;  // Calculate the division ratio. 900,000,000 is the maximum internal PLL freq (official range 600..900MHz but can be pushed to 300MHz..~1200Mhz)
     if(divider % 2) divider--;  // divider in range 8.. 900 (including 4,6 for integer mode), even numbers preferred. Note that uint8 datatype is used, so 254 is upper limit
-    if( (divider * (freq - 5000) / SI_XTAL_FREQ) != (divider * (freq + 5000) / SI_XTAL_FREQ) ) divider -= 2; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+    if( (divider * (freq - 5000) / fxtal) != (divider * (freq + 5000) / fxtal) ) divider -= 2; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
     /*int32_t*/ pll_freq = divider * freq; // Calculate the pll_freq: the divider * desired output freq
     uint32_t num, denom;
-    mult = div(pll_freq, SI_XTAL_FREQ, &num, &denom); // Determine the mult to get to the required pll_freq (in the range 15..90)
+    mult = div(pll_freq, fxtal, &num, &denom); // Determine the mult to get to the required pll_freq (in the range 15..90)
   
     // Set up specified PLL with mult, num and denom: mult is 15..90, num is 0..1,048,575 (0xFFFFF), denom is 0..1,048,575 (0xFFFFF)
     // Set up PLL A and PLL B with the calculated  multiplication ratio
@@ -1543,8 +1543,6 @@ unsigned long schedule_time = 0;
 #define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
 #define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
 
-#define N_PARAMS 18   // number of (visible) parameters
-#define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 uint8_t eeprom_version;
 #define EEPROM_OFFSET 0x150  // avoid collision with QCX settings, overwrites text settings though
 int eeprom_addr;
@@ -1555,11 +1553,11 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
-      if(((int)value + encoder_val) < _min) value = (continuous) ? _max : _min; 
+      if(((int32_t)value + encoder_val) < _min) value = (continuous) ? _max : _min; 
       else value += encoder_val;
       encoder_val = 0;
       if(continuous) value = (value % (_max+1));
-      value = max(_min, min((int)value, _max));
+      value = max(_min, min((int32_t)value, _max));
       if(action == UPDATE_MENU){
         lcd.setCursor(0, 0);
         lcd.print(menuid); lcd.print(' ');
@@ -1597,7 +1595,10 @@ const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
 const char* filt_label[7] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
 const char* band_label[N_BANDS] = { /*"600", "160m",*/ "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" /*, "2m"*/};
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+#define N_PARAMS 19  // number of (visible) parameters
+#define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
+
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -1624,12 +1625,13 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, sizeof(smode_label)/sizeof(char*) - 1, false, 1); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false, false); break;
-    case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Threshold"), NULL, 0, 255, false, (1<<2) ); break;
+    case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false, (1<<2) ); break;
     case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false, false); break;
     case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false, 4); break;
-    case PARAM_A: paramAction(action, param_a, F("9.1"), F("Param A"), NULL, 0, 65535, false, 0); break;
-    case PARAM_B: paramAction(action, param_b, F("9.2"), F("Param B"), NULL, -32768, 32767, false, 0); break;
-    case PARAM_C: paramAction(action, param_c, F("9.3"), F("Param C"), NULL, -32768, 32767, false, 0); break;
+    case SIFXTAL: paramAction(action, si5351.fxtal, F("9.1"), F("Ref freq"), NULL, 24000000, 28000000, false, 27004000); break;
+    case PARAM_A: paramAction(action, param_a, F("9.2"), F("Param A"), NULL, 0, 65535, false, 0); break;
+    case PARAM_B: paramAction(action, param_b, F("9.3"), F("Param B"), NULL, -32768, 32767, false, 0); break;
+    case PARAM_C: paramAction(action, param_c, F("9.4"), F("Param C"), NULL, -32768, 32767, false, 0); break;
     // Invisible parameters
     case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false, 7074000); break;
     case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false, get_version_id()); break;
@@ -2064,6 +2066,9 @@ void loop()
         digitalWrite(RX, !(att & 0x02)); // att bit 1 ON: attenuate -20dB by disabling RX line, switching Q5 (antenna input switch) into 100k resistence
         pinMode(AUDIO1, (att & 0x04) ? OUTPUT : INPUT); // att bit 2 ON: attenuate -40dB by terminating ADC inputs with 10R
         pinMode(AUDIO2, (att & 0x04) ? OUTPUT : INPUT);
+      }
+      if(menu == SIFXTAL){
+        change = true;
       }
     }
   }
