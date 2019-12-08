@@ -1,7 +1,7 @@
 # **ⓆⒸⓍ-ⓈⓈⒷ**
 
 # QCX-SSB: SSB + SDR with your QCX transceiver
-This is a simple and experimental modification that transforms a [QCX] into a (Class-E driven) SSB transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8. It can be fully-continuous tuned through bands 160m-10m in the LSB/USB-modes with a 2400Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
+This is a simple and experimental modification that transforms a [QCX] into a (Class-E driven) SSB transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8, JS8, FT4. It can be fully-continuous tuned through bands 160m-10m in the LSB/USB-modes with a 2400Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
 
 The SSB transmit and receiver stages are implemented completely in a digital and software-based manner. At transmit the ATMEGA328P samples the input-audio and reconstructing a SSB-signal by controlling the SI5351 PLL phase (through tiny frequency changes over 800kbit/s I2C) and controlling the PA Power (through PWM on the key-shaping circuit). In this way a highly power-efficient class-E driven SSB-signal can be realized; a PWM driven class-E design keeps the SSB transceiver simple, tiny, cool, power-efficient and low-cost (ie. no need for power-inefficient and complex linear amplifier with bulky heat-sink as often is seen in SSB transceivers). At receive the ATMEGA328P over-samples the I/Q at 62.5kHz, implements a down-sampling phasing receiver in the digital domain via Hilbert transformers and digital filters, and sends the resulting signal via PWM shaping to the headphone/speaker output.
 
@@ -32,7 +32,7 @@ pe1nnz@amsat.org
 - An **pre-distorion** algorithm that cancels out the amplitude errors of non-linearities in the PA voltage regulated PWM supply; a lookup table is used that can be calibrated with an internal PA amplitude measurement
 - Possibility to extend the QCX analog phasing stage with a **DSP stage**
 - Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**
-- **Receiver MDS of -118dBm @2.4kHz BW; dynamic range of 78dB**.  Blocking (after reducing gain IC6A/B-stage to 10dB!!): -48dBm@5kHz, -8dBm@15kHz
+- Receiver Noise floor **(MDS): –130 dBm** at 24MHz (in 500Hz BW); Blocking dynamic range: 148dB (200kHz offset or greater), 118dB (20kHz offset), 78dB (2kHz offset). Blocking: 18dBm (200kHz offset or greater), -12dBm (20kHz offset), -52dBm (2kHz offset)  (IC6A/B-gain must reduce with -10dB!!); LO Phase noise: -138dBc/Hz; Front-end selectivity: Octave
 - Digitally switchable RF front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**
 - This firmware is compatible with an unmodified QCX, partial modified QCX (e.g. SSB mod, or DSP mod), or fully modified QCX (SSB + SDR mod, as described below)
 - SDR implementation simplifies the receiver heaviliy; **the original QCX PCB is now half empty** by moving the analog processing into the microcontroller and adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
@@ -144,15 +144,18 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - Alternatively, in case you have an ATMEGA328P chip with Arduino bootloader, you can place the chip in an Arduino UNO board and upload directly (without the need for a ISP cable and QCX) by specifying 'arduino' programmer and baudrate 115200.
 - Alternatively, in case you have an [Arduino] environment installed, you can upload the [QCX-SSB Sketch] directly from the Arduino environment (without using AVRDudess and firmware file); make sure "Tools > Board > Arduino/Genuino Uno",  "Tools > Port > /dev/ttyUSB0 or ttyACM0", and then "Sketch > Upload" is selected, while the ATMEGA328P chip is placed in the Arduino UNO socket. It is also possible to use [Arduino as ISP] method: upload this variation of [ArduinoISP] to the Arduino board and select "Tools > Programmer > Arduino as ISP", and "Sketch > Upload Using Programmer".
 2. <a name="note2"/>The occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to half a unit-circle _UA/2 (equivalent to 180 degrees)). The sensitivity of the VOX switching can be set with parameter VOX_THRESHOLD. Audio-input can be attenuated by increasing parameter MIC_ATTEN (6dB per step).
+3. Alternatively, the PA MOSFETs can be directly biased by the PWM envelope signal, basically making the key-shaping circuit redundant. To do so, Q6,Q4,R41,R42,C32,C31 can be removed entirely, whereby C-E pads of Q6 are wired, and where a 100nF capacitor is inserted at IC3A-pin3 and G of Q1-3, and where a 10k resistor is placed at G-D pads of Q4, a 10nF capacitor between S-D pads of Q4, and where a 10k resistor is placed between D of Q4 and G of Q1-3.
 
 
 ### Credits:
-[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] hardware modification and its Arduino [QCX-SSB Sketch] is designed by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi.
+[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] transmitter and QCX-SDR receiver stage both running on a ATMEGA328P, including its multiband front-end and direct PA biasing/envelope-generation technique; its concept, circuit, code and modification to run on a QCX are a design by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi.
 
 <!---
 ### References
 - VERON association interviewed me in the [PI4AA June issue] about this project (in Dutch, starting at timestamp 15:50).
 - Rüdiger Möller, HPSDR presentation by [DJ1MR], 2018. Transmitter architectures for high efficiency amplification
+- [Arduino PWM]
+- [Serial interface]
 --->
 
 [original schematic]: https://qrp-labs.com/images/qcx/HiRes.png
@@ -231,4 +234,5 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 [Arduino PWM]: http://interface.khm.de/index.php/lab/interfaces-advanced/arduino-dds-sinewave-generator/
 
+[Serial interface]: https://groups.io/g/QRPLabs/attachment/40706/0/connections.png
 

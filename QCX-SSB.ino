@@ -4,29 +4,29 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.01q"
+#define VERSION   "1.01r"
 
 /* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
 in func_ptr for different mode types
+refactor main()
 agc based on rms256, agc/smeter after filter
-vox by sampling mic port in sdr_rx?
 noisefree integrator (rx audio out) in lower range
 raised cosine tx amp for cw
 auto paddle
 cw tx message/cw encoder
 32 bin fft
-menu back (right button), menu enter (rotary button)
 dynamic range cw
 att extended agc
 profiling nsamples, cpu load idle in menu
-configuarable F_CPU
+configurable F_CPU
 CW-R/CW-L offset
 VFO-A/B+split+RIT
 OLED display support
 VOX integration in main loop
 auto-bias for AUDIO1+2 inputs
-K2/TS480 CAT
+K2/TS480 CAT control
+faster RX-TX switch to support CW
 */
 
 // QCX pin defintion
@@ -539,7 +539,7 @@ inline int16_t ssb(int16_t in)
   if(_amp < 4 ) return 0; //hack: for constant amplitude cases, set drive=1 for good results
   //digitalWrite(RX, (_amp < 4)); // fast on-off switching for constant amplitude case
 #endif
-  _amp = ((_amp > 255) || (drive == 8)) ? 255 : _amp; // clip or when drive=8 use max output
+  _amp = ((_amp > 255) || (drive == 8)) ? lut[255] : _amp; // clip or when drive=8 use max output
   amp = (tx) ? lut[_amp] : 0;
 
   static int16_t prev_phase;
@@ -602,6 +602,9 @@ void dsp_tx_cw()
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
   numSamples++;*/
+
+  OCR1BL = lut[255];
+  
   //if(mon) OCR1AL = (adc << (mon-1)) + 128;  // TX audio monitoring
 
   //process_minsky();
@@ -1441,6 +1444,7 @@ void start_rx()
 }
 
 void switch_rxtx(uint8_t tx_enable){
+  tx = tx_enable;
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
@@ -1454,6 +1458,7 @@ void switch_rxtx(uint8_t tx_enable){
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
       digitalWrite(RX, LOW);  // TX
   } else {
+      OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
       digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
       lcd.setCursor(15, 1); lcd.print((vox) ? "V" : "R");
@@ -1598,6 +1603,9 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
   }
 }
 
+static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed; x for biasing BS170 directly
+static uint8_t pwm_max = 255;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; x for biasing BS170 directly
+
 const char* offon_label[2] = {"OFF", "ON"};
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
 const char* filt_label[7] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
@@ -1605,10 +1613,10 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 19  // number of (visible) parameters
+#define N_PARAMS 21  // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -1639,9 +1647,11 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
     case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false); break;
     case SIFXTAL: paramAction(action, si5351.fxtal, F("9.1"), F("Ref freq"), NULL, 24000000, 28000000, false); break;
-    case PARAM_A: paramAction(action, param_a, F("9.2"), F("Param A"), NULL, 0, 65535, false); break;
-    case PARAM_B: paramAction(action, param_b, F("9.3"), F("Param B"), NULL, -32768, 32767, false); break;
-    case PARAM_C: paramAction(action, param_c, F("9.4"), F("Param C"), NULL, -32768, 32767, false); break;
+    case PWM_MIN:   paramAction(action, pwm_min, F("9.2"), F("PA Bias min"), NULL, 0, 255, false); break;
+    case PWM_MAX:   paramAction(action, pwm_max, F("9.3"), F("PA Bias max"), NULL, 0, 255, false); break;
+    case PARAM_A: paramAction(action, param_a, F("9.4"), F("Param A"), NULL, 0, 65535, false); break;
+    case PARAM_B: paramAction(action, param_b, F("9.5"), F("Param B"), NULL, -32768, 32767, false); break;
+    case PARAM_C: paramAction(action, param_c, F("9.6"), F("Param C"), NULL, -32768, 32767, false); break;
     // Invisible parameters
     case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false); break;
     case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false); break;
@@ -1720,18 +1730,6 @@ void setup()
     pgm_cache_item(font[i], 8);
     lcd.createChar(0x01 + i, /*font[i]*/_item);
   }
-
-  // initialize LUT
-  //#define C31_IS_INSTALLED  1   // Uncomment this line when C31 is installed (shaping circuit will be driven with analog signal instead of being switched digitally with PWM signal)
-#ifdef C31_IS_INSTALLED // In case of analog driven shaping circuit:
-  #define PWM_MIN  29   // The PWM value where the voltage over L4 is approaching its minimum (~0.6V)
-  #define PWM_MAX  96   // The PWM value where the voltage over L4 is approaching its maximum (~11V)
-#else                   // In case of digital driven shaping circuit:
-  #define PWM_MIN  0    // The PWM value where the voltage over L4 is its minimum (0V)
-  #define PWM_MAX  255  // The PWM value where the voltage over L4 is its maximum (12V)
-#endif
-  for(i = 0; i != 256; i++)
-    lut[i] = (float)i / ((float)255 / ((float)PWM_MAX - (float)PWM_MIN)) + PWM_MIN;
 
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0  
@@ -1870,6 +1868,9 @@ void setup()
   si5351.prev_pll_freq = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
+
+  for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
+    lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
 
   show_banner();  // remove release number
 
@@ -2080,6 +2081,10 @@ void loop()
       }
       if(menu == SIFXTAL){
         change = true;
+      }
+      if((menu == PWM_MIN) || (menu == PWM_MAX)){
+        for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
+          lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
       }
     }
   }
