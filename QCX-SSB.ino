@@ -1,10 +1,10 @@
 //  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
 //  
-//  Copyright 2019   Guido PE1NNZ <pe1nnz@amsat.org>
+//  Copyright 2019, 2020   Guido PE1NNZ <pe1nnz@amsat.org>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.01r"
+#define VERSION   "1.01s"
 
 /* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
@@ -79,7 +79,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
     delayMicroseconds(4);
     LCD_EN_LO();
-    delayMicroseconds(37);                         // Execution time
+    delayMicroseconds(60);                         // Execution time  (was: 37)
   }
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
@@ -94,6 +94,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     LCD_EN_LO();
     LCD_RS_LO();
     delayMicroseconds(41);                         // Execution time
+    PORTD |= 0x02;                                 // To support serial-interface keep LCD_D5 high, so that DVM is not pulled-down via D
     return 1;
   }
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
@@ -108,7 +109,7 @@ volatile int8_t encoder_val = 0;
 volatile int8_t encoder_step = 0;
 static uint8_t last_state;
 ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
-  noInterrupts();
+  //noInterrupts();
   switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
 //#define ENCODER_ENHANCED_RESOLUTION  1
 #ifdef ENCODER_ENHANCED_RESOLUTION // Option: enhance encoder from 24 to 96 steps/revolution, see: appendix 1, https://www.sdr-kits.net/documents/PA0KLT_Manual.pdf
@@ -119,7 +120,7 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
     case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;  
 #endif
   }
-  interrupts();
+  //interrupts();
 }
 void encoder_setup()
 {
@@ -267,8 +268,8 @@ public:
   #define SI_CLK_SRC_MS 0b00001100
   #define SI_CLK_IDRV_8MA 0b00000011
   #define SI_CLK_INV 0b00010000
-  #define SI_PLL_FREQ 400000000  //900000000, with 400MHz PLL freq, usable range is 3.2..100MHz
   volatile uint32_t fxtal = 27004300;  //myqcx1:27003847 myqcx2:27004900  Actual crystal frequency of 27MHz XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
+  #define SI_PLL_FREQ (16*fxtal)  //900000000, with 432MHz(=16*27M) PLL freq, usable range is 3.46..100MHz
 
   volatile uint8_t prev_divider;
   volatile int32_t raw_freq;
@@ -546,6 +547,7 @@ inline int16_t ssb(int16_t in)
   int16_t phase = arctan3(q, i);
 
   int16_t dp = phase - prev_phase;  // phase difference and restriction
+  //dp = (amp) ? dp : 0;  // dp = 0 when amp = 0
   prev_phase = phase;
 
   if(dp < 0) dp = dp + _UA; // make negative phase shifts positive: prevents negative frequencies and will reduce spurs on other sideband
@@ -681,7 +683,7 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 28409
 #define F_ADC_CONV (192307/1)
 
-volatile int8_t volume = 0;
+volatile int8_t volume = 8;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
@@ -1440,7 +1442,8 @@ void start_rx()
     adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
   }
   timer1_start(78125);
-  timer2_start(F_SAMP_RX);
+  timer2_start(F_SAMP_RX);  
+  TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM
 }
 
 void switch_rxtx(uint8_t tx_enable){
@@ -1454,10 +1457,15 @@ void switch_rxtx(uint8_t tx_enable){
   else _init = 1;
   numSamples = 0;
   if(tx_enable){
+      digitalWrite(RX, LOW);  // TX
       lcd.setCursor(15, 1); lcd.print("T");
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
-      digitalWrite(RX, LOW);  // TX
+      //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
+      OCR1AL = 0; // make sure SIDETONE is set to 0%
+      TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
   } else {
+      //TCCR1A |= (1 << COM1A1);  // enable SIDETONE
+      TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
       OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
       digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
@@ -1851,7 +1859,6 @@ void setup()
     delay(1500); wdt_reset();
   }
 #endif
-  volume = (dsp_cap) ? ((dsp_cap == SDR) ? 8 : 10) : 0;  // default volume: keep volume disabled for analog rig
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
@@ -1868,6 +1875,8 @@ void setup()
   si5351.prev_pll_freq = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
+
+  if(!dsp_cap) volume = 0;  // mute volume for unmodified QCX receiver
 
   for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
     lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
@@ -2125,11 +2134,13 @@ void loop()
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
-
+    
+    noInterrupts();
     if(mode == LSB)
       si5351.freq(freq, 90, 0);  // RX in LSB
     else
       si5351.freq(freq, 0, 90);  // RX in USB
+    interrupts();
   }
   
   if((schedule_time) && (millis() > schedule_time)){  // save freq when time has reached schedule

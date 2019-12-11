@@ -62,7 +62,7 @@ Change the following component values (and type of component in some cases), and
 1. To implement the SDR receiver: R11,12,17,24,27,29,59,IC10 (remove); IC7-9,R13,R18-20,R25,R28-40,R60,C9,C11,C13-24,C52-53,D5,Q7 (omit on new builds); C10 (.1uF); R16,23 (120k); wire IC10(pin7) to IC6(pin7); wire R27(pin2) to IC6(pin1); wire IC2(pin15) to IC10(pin1); disconnect R50-5V and R52-5V and both wire to R57-DVM(pin3); disconnect R21-IC6(pin7) and R22-IC6(pin7) and both wire to R7-IC5(pin1).
 2. To implement the SSB transmitter: D4,R21,R56 (10k); R58 (.22uF); C32 (10uF); C31 (remove); wire IC2-pin21 to R57-DVM(pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58;
 3. To implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] page 53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish.
-4. Upload the hex firmware-file to existing or new ATMEGA328/328P chip (click on top green download button for zip). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>). You can safely switch between this/original QCX firmware without any issues.
+4. Upload the hex firmware-file to existing or new ATMEGA328/328P chip (here is [latest released hex file] and click on "Assets" below the description). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>). You can safely switch between this/original QCX firmware without any issues.
 5. Connect an electret microphone pins (+) to tip and (-) to sleeve of paddle-jack; PTT-switch pins to ring and sleeve (see [X1M-mic]).
 
 
@@ -92,6 +92,39 @@ Currently, the following functions have been assigned to the buttons:
 | RIGHT long-press    | VOX mode (for full-break-in or digital modes)           |
 | RIGHT push + turn   |                                                         |
 | KEY                 | Push-to-talk (SSB) / Straight-key (CW)                  |
+
+
+Currently, the following functions have been assigned to buttons and menu-items:
+
+| Menu Item           | Function                                     | Button      |
+| ------------------- | -------------------------------------------- | ----------- |
+|                     | Push-to-talk (SSB) / Straight-key (CW) | **KEY** 
+|                     | Quick menu | **LEFT push + turn** |
+|                     | Menu-item | **LEFT single-press** |
+|                     | Tune frequency | **CENTER turn** |
+| 1.1 Volume          | Audio level (0..16) & power-off/on | **CENTER push + turn** |
+| 1.2 Mode            | Modulation (LSB, USB, CW, AM, FM) | **RIGHT single-press** |
+| 1.3 Filter BW       | Audio passband (Full, 300..4000, 300..2500, 300..1700, 200, 100 Hz) | **RIGHT double-press** |
+| 1.4 Band            | Band-switch to pre-defined FT8 freqs for 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m, 6m, 4m | **CENTER double-press** |
+| 1.5 Tuning Rate     | Tuning frequency step size 10M, 1M, 0.5M, 100k, 10k, 1k, 0.5k, 100, 10, 1 | **CENTER long/single-press** |
+| 1.6 AGC             | Automatic Gain Control (ON, OFF) | |
+| 1.7 NR              | Noise-reduction level (0-8), basically smooth signal and cut-off high-frequencies | |
+| 1.8 ATT             | Analog Attenuator (0, -13, -20, -33, -40, -53, -60, -73 dB) | |
+| 1.9 ATT2            | Digital Attenuator in CIC-stage (0-16) in steps of 6dB | |
+| 1.10 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
+| 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
+| 3.1 VOX             | Voice Operated Xmit (ON, OFF) | **RIGHT long-press** | |
+| 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
+| 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
+| 3.4 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
+| 9.1 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
+| 9.2 PA Bias min     | KEY_OUT PWM level (0-255) for representing   0% RF output | |
+| 9.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
+| 9.4 Param A         | for debugging, testing and experimental purpose | |
+| 9.5 Param B         | for debugging, testing and experimental purpose | |
+| 9.6 Param C         | for debugging, testing and experimental purpose | |
+
+
 
 Operating Instructions:
 
@@ -163,6 +196,8 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 [QCX-SSB]: https://github.com/threeme3/QCX-SSB
 
 [QCX-SSB Sketch]: QCX-SSB.ino
+
+[latest released hex file]: https://github.com/threeme3/QCX-SSB/releases
 
 [original QCX-SSB modification]: https://github.com/threeme3/QCX-SSB/tree/26c4e97a034d367e1325c5587a56a7c2a43c69f3
 
