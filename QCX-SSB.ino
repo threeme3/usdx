@@ -18,7 +18,6 @@ cw tx message/cw encoder
 32 bin fft
 dynamic range cw
 att extended agc
-profiling nsamples, cpu load idle in menu
 configurable F_CPU
 CW-R/CW-L offset
 VFO-A/B+split+RIT
@@ -455,20 +454,20 @@ public:
 static SI5351 si5351;
 
 #undef F_CPU
-#define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1
+#define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 
+#define DEBUG  1   // enable testing and diagnostics features
+#ifdef DEBUG
+static uint32_t sr = 0;
+static uint32_t cpu_load = 0;
 volatile uint16_t param_a = 0;  // registers for debugging, testing and experimental purposes
 volatile int16_t param_b = 0;
 volatile int16_t param_c = 0;
+#endif
 
 enum mode_t { LSB, USB, CW, AM, FM };
 volatile int8_t mode = USB;
-//#define PROFILING  1
-#ifdef PROFILING
-volatile uint32_t numSamples = 0;
-#else
-volatile uint8_t numSamples = 0;
-#endif
+volatile uint16_t numSamples = 0;
 
 volatile uint8_t tx = 0;
 volatile bool vox = false;
@@ -476,7 +475,7 @@ volatile bool vox = false;
 inline void _vox(uint8_t trigger)
 {
   if(trigger){
-    //if(!tx){ /* TX can be enabled here* / }
+    //if(!tx){ /* TX can be enabled here */ }
     tx = (vox) ? 255 : 1; // hangtime = 255 / 4402 = 58ms (the time that TX at least stays on when not triggered again)
   } else {
     if(tx){
@@ -510,7 +509,7 @@ inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 uint8_t lut[256];
 volatile uint8_t amp;
 volatile uint8_t vox_thresh = (1 << 2);
-volatile uint8_t drive = 4;
+volatile uint8_t drive = 2;   // hmm.. drive>2 impacts cpu load..why?
 
 inline int16_t ssb(int16_t in)
 {
@@ -530,10 +529,8 @@ inline int16_t ssb(int16_t in)
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
 
   uint16_t _amp = magn(i, q);
-
-//#define VOX_THRESHOLD (1 << (2))  // 2*6dB above ADC noise level
-//  if(vox) _vox(_amp > VOX_THRESHOLD);
   if(vox) _vox(_amp > vox_thresh);
+  //_amp = (_amp > vox_thresh) ? _amp : 0;   // vox_thresh = 1 is a good setting
 
   _amp = _amp << (drive);
 #ifdef CONSTANT_AMP
@@ -577,8 +574,8 @@ void dsp_tx()
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
-  numSamples++;
-  
+  //if(OCR1BL == 0){ si5351.SendRegister(SI_CLK_OE, (amp) ? 0b11111011 : 0b11111111); } // experimental carrier-off for low amplitudes
+
   if(!mox) return;
   OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
 }
@@ -587,8 +584,10 @@ volatile int16_t p_sin = 0;   // initialized with A*sin(t), where t=0
 volatile int16_t n_cos = 448; // initialized with A*cos(t), where t=0
 inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam.ac.uk/~am21/hakmemc.html, ITEM 149]: p_sin+=n_cos*2*PI*f/fs; n_cos-=p_sin*2*PI*f/fs;
 {
+#ifdef DEBUG
   p_sin += (n_cos*64)/((uint8_t)param_c);  // set param_c=79
   n_cos -= (p_sin*64)/((uint8_t)param_c);
+#endif
 }
 
 volatile uint16_t acc;
@@ -603,7 +602,7 @@ void dsp_tx_cw()
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
-  numSamples++;*/
+*/
 
   OCR1BL = lut[255];
   
@@ -612,7 +611,9 @@ void dsp_tx_cw()
   //process_minsky();
   //OCR1AL = (p_sin >> (16 - param_b)) + 128;
 
+#ifdef DEBUG
   acc = acc + param_c;  // param_c = 7570
+#endif
   int8_t temp = acc >> 8;
   int8_t mask = temp >> 7;
   OCR1AL = temp ^ mask;
@@ -774,7 +775,7 @@ inline int16_t filt_var(int16_t v)
   int16_t zx0 = v;
 
   static int16_t za1,za2;
-  if(filt < 4){
+  if(filt < 4){  // for SSB filters
     // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     static int16_t zz1,zz2;
     zx0=(29*(zx0-zz1)+50*za1)/64;                               //300-Hz
@@ -825,6 +826,7 @@ volatile uint8_t admux[3];
 volatile int16_t ocomb, i, q, qh;
 #undef  R  // Decimating 2nd Order CIC filter
 #define R 4  // Rate change from 62500/2 kSPS to 7812.5SPS, providing 12dB gain
+volatile uint8_t rx_state = 0;
 
 // Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
 // H1(z) = (1 + z^-1)^2 = 1 + 2*z^-1 + z^-2 = (1 + z^-2) + (2) * z^-1 = FA(z) + FB(z) * z^-1;
@@ -853,12 +855,12 @@ void sdr_rx()
 
   int16_t ac2;
   static int16_t z1;
-  if(numSamples == 0 || numSamples == 4){  // 1st stage: down-sample by 2
+  if(rx_state == 0 || rx_state == 4){  // 1st stage: down-sample by 2
     static int16_t za1;
     int16_t _ac = ac + za1 + z1;           // 1st stage: FA + FB
     za1 = ac;
     static int16_t _z1;
-    if(numSamples == 0){                   // 2nd stage: down-sample by 2
+    if(rx_state == 0){                   // 2nd stage: down-sample by 2
       static int16_t _za1;
       ac2 = _ac + _za1 + _z1;              // 2nd stage: FA + FB
       _za1 = _ac;
@@ -896,10 +898,10 @@ void sdr_rx()
         ac = ac >> (16-volume);
         if(nr) ac = process_nr(ac);
         if(mode == USB || mode == LSB){
-            if(filt) ac = filt_var(ac << 0);
+            if(filt) ac = filt_var(ac);
         }
         if(mode == CW){
-          if(filt) ac = filt_var(ac << 6);
+          if(filt) ac = filt_var(ac << 4) << 2;   //if(filt) ac = filt_var(ac << 6);
           
           if(cwdec){  // CW decoder enabled?
             char ch = cw(ac >> 0);
@@ -933,7 +935,7 @@ void sdr_rx()
     } else _z1 = _ac * 2;
   } else z1 = ac * 2;
 
-  numSamples++;
+  rx_state++;
 }
 
 void sdr_rx_2()
@@ -953,12 +955,12 @@ void sdr_rx_2()
 
   int16_t ac2;
   static int16_t z1;
-  if(numSamples == 3 || numSamples == 7){  // 1st stage: down-sample by 2
+  if(rx_state == 3 || rx_state == 7){  // 1st stage: down-sample by 2
     static int16_t za1;
     int16_t _ac = ac + za1 + z1;           // 1st stage: FA + FB
     za1 = ac;
     static int16_t _z1;
-    if(numSamples == 7){                   // 2nd stage: down-sample by 2
+    if(rx_state == 7){                   // 2nd stage: down-sample by 2
       static int16_t _za1;
       ac2 = _ac + _za1 + _z1;              // 2nd stage: FA + FB
       _za1 = _ac;
@@ -971,14 +973,12 @@ void sdr_rx_2()
         q = v[7];
         qh = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
       }
-#ifndef PROFILING
-      numSamples = 0; return;
-#endif
+      rx_state = 0; return;
     } else _z1 = _ac * 2;
   } else z1 = ac * 2;
 
 
-  numSamples++;
+  rx_state++;
 }
 
 inline void sdr_rx_common()
@@ -990,18 +990,17 @@ inline void sdr_rx_common()
   ozi2 = ozi1 + ozi2;          // Integrator section
 #endif
   ozi1 = ocomb + ozi1;
-#ifndef PROFILING
 #ifdef SECOND_ORDER_DUC
   if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #else
   if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #endif
-#endif  
 }
 
 ISR(TIMER2_COMPA_vect)  // Timer2 COMPA interrupt
 {
   func_ptr();
+  numSamples++;
 }
 
 void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
@@ -1047,33 +1046,7 @@ void timer1_start(uint32_t fs)
   OCR1AL = 0x00;  // OC1A (SIDETONE) PWM duty-cycle (span defined by ICR).
   OCR1BH = 0x00;
   OCR1BL = 0x00;  // OC1B (KEY_OUT) PWM duty-cycle (span defined by ICR).
-
-#ifdef PROFILING
-  // TIMER 1_COMPB with interrupt frequency 1.0000128001638422 Hz:
-  cli(); // stop interrupts
-  TCCR1A = 0; // set entire TCCR1A register to 0
-  TCCR1B = 0; // same for TCCR1B
-  TCNT1  = 0; // initialize counter value to 0
-  // set compare match register for 1.0000128001638422 Hz increments
-  OCR1A = 19530; // = 20000000 / (1024 * 1.0000128001638422) - 1 (must be <65536)
-  // turn on CTC mode
-  TCCR1B |= (1 << WGM12);
-  // Set CS12, CS11 and CS10 bits for 1024 prescaler
-  TCCR1B |= (1 << CS12) | (0 << CS11) | (1 << CS10);
-  // enable timer compare interrupt
-  TIMSK1 |= (1 << OCIE1A);
-  sei(); // allow interrupts
 }
-static uint32_t prev = 0;
-ISR(TIMER1_COMPA_vect){
-  uint32_t num = numSamples;
-  uint32_t diff = num - prev;
-  prev = num;
-  lcd.setCursor(0, 0); lcd.print( diff ); lcd.print(F(" SPS   ")); 
-}
-#else
-}
-#endif
 
 void timer1_stop()
 {
@@ -1432,7 +1405,7 @@ void calibrate_predistortion()
 void start_rx()
 {
   _init = 1;
-  numSamples = 0;
+  rx_state = 0;
   func_ptr = sdr_rx;  //enable RX DSP/SDR
   adc_start(2, true, F_ADC_CONV); admux[2] = ADMUX;
   if(dsp_cap == SDR){
@@ -1455,7 +1428,7 @@ void switch_rxtx(uint8_t tx_enable){
   interrupts();
   if(tx_enable) ADMUX = admux[2];
   else _init = 1;
-  numSamples = 0;
+  rx_state = 0;
   if(tx_enable){
       digitalWrite(RX, LOW);  // TX
       lcd.setCursor(15, 1); lcd.print("T");
@@ -1562,7 +1535,6 @@ void show_banner(){
 volatile uint8_t event;
 volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile int8_t menu = 0;  // current parameter id selected in menu
-unsigned long schedule_time = 0;
 
 #define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
 #define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
@@ -1610,9 +1582,10 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
       break;
   }
 }
+uint32_t schedule_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed; x for biasing BS170 directly
-static uint8_t pwm_max = 255;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; x for biasing BS170 directly
+static uint8_t pwm_max = 192;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; x for biasing BS170 directly
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
@@ -1621,10 +1594,10 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 21  // number of (visible) parameters
+#define N_PARAMS 23  // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -1654,12 +1627,16 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
     case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
     case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false); break;
-    case SIFXTAL: paramAction(action, si5351.fxtal, F("9.1"), F("Ref freq"), NULL, 24000000, 28000000, false); break;
-    case PWM_MIN:   paramAction(action, pwm_min, F("9.2"), F("PA Bias min"), NULL, 0, 255, false); break;
-    case PWM_MAX:   paramAction(action, pwm_max, F("9.3"), F("PA Bias max"), NULL, 0, 255, false); break;
-    case PARAM_A: paramAction(action, param_a, F("9.4"), F("Param A"), NULL, 0, 65535, false); break;
-    case PARAM_B: paramAction(action, param_b, F("9.5"), F("Param B"), NULL, -32768, 32767, false); break;
-    case PARAM_C: paramAction(action, param_c, F("9.6"), F("Param C"), NULL, -32768, 32767, false); break;
+    case SIFXTAL: paramAction(action, si5351.fxtal, F("8.1"), F("Ref freq"), NULL, 24000000, 28000000, false); break;
+    case PWM_MIN: paramAction(action, pwm_min, F("8.2"), F("PA Bias min"), NULL, 0, 255, false); break;
+    case PWM_MAX: paramAction(action, pwm_max, F("8.3"), F("PA Bias max"), NULL, 0, 255, false); break;
+#ifdef DEBUG
+    case SR:      paramAction(action, sr, F("9.1"), F("Sample rate"), NULL, -2147483648, 2147483647, false); break;
+    case CPULOAD: paramAction(action, cpu_load, F("9.2"), F("CPU load %"), NULL, -2147483648, 2147483647, false); break;
+    case PARAM_A: paramAction(action, param_a, F("9.3"), F("Param A"), NULL, 0, 65535, false); break;
+    case PARAM_B: paramAction(action, param_b, F("9.4"), F("Param B"), NULL, -32768, 32767, false); break;
+    case PARAM_C: paramAction(action, param_c, F("9.5"), F("Param C"), NULL, -32768, 32767, false); break;
+#endif
     // Invisible parameters
     case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false); break;
     case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false); break;
@@ -1688,12 +1665,11 @@ void initPins(){
   pinMode(AUDIO2, INPUT);  
 }
 
-#define SAFE  1
 void setup()
 {
-#ifdef SAFE
+#ifdef DEBUG
   // Benchmark dsp_tx() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
-  numSamples = 0;
+  rx_state = 0;
   uint32_t t0, t1;
   func_ptr = dsp_tx;
   t0 = micros();
@@ -1703,7 +1679,7 @@ void setup()
   float load_tx = (t1 - t0) * F_SAMP_TX * 100.0 / 1000000.0;
   // benchmark sdr_rx() ISR
   func_ptr = sdr_rx;
-  numSamples = 8;
+  rx_state = 8;
   float load_rx[8];
   float load_rx_avg = 0;
   uint16_t i;
@@ -1718,10 +1694,9 @@ void setup()
   load_rx_avg /= 8;
 
   //adc_stop();  // recover general ADC settings so that analogRead is working again
-  ADMUX = (1 << REFS0);  // restore reference voltage AREF (5V)
-
-  wdt_enable(WDTO_4S);  // Enable watchdog, resolves QCX startup issue
 #endif
+  ADMUX = (1 << REFS0);  // restore reference voltage AREF (5V)
+  wdt_enable(WDTO_4S);  // Enable watchdog, resolves QCX startup issue and other issues (bugs)
 
   // disable external interrupts
   PCICR = 0;
@@ -1767,7 +1742,7 @@ void setup()
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
 
-#ifdef SAFE
+#ifdef DEBUG
   // Measure CPU loads
   if(!(load_tx <= 100.0))
   {
@@ -1859,6 +1834,8 @@ void setup()
     delay(1500); wdt_reset();
   }
 #endif
+
+  drive = 4;  // Init settings
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
@@ -2095,6 +2072,19 @@ void loop()
         for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
           lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
       }
+#ifdef DEBUG
+      if(menu == SR){          // measure sample-rate
+        numSamples = 0;
+        delay(500 * 1.25);     // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply wqith 1.25)
+        sr = numSamples * 2;   // samples per second */
+      }
+      if(menu == CPULOAD){     // measure CPU-load
+        uint32_t i = 0;
+        uint32_t prev_time = millis();
+        for(i = 0; i != 300000; i++) wdt_reset(); // fixed CPU-load 132052*1.25us delay under 0% load condition; is 132052*1.25 * 20M = 3301300 CPU cycles fixed load
+        cpu_load = 100 - 132 * 100 / (millis() - prev_time);
+      }
+#endif
     }
   }
 

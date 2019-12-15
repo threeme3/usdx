@@ -117,12 +117,14 @@ Currently, the following functions have been assigned to buttons and menu-items:
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
 | 3.4 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
-| 9.1 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
-| 9.2 PA Bias min     | KEY_OUT PWM level (0-255) for representing   0% RF output | |
-| 9.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
-| 9.4 Param A         | for debugging, testing and experimental purpose | |
-| 9.5 Param B         | for debugging, testing and experimental purpose | |
-| 9.6 Param C         | for debugging, testing and experimental purpose | |
+| 8.1 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
+| 8.2 PA Bias min     | KEY_OUT PWM level (0-255) for representing   0% RF output | |
+| 8.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
+| 9.1 Sample rate     | for debugging, testing and experimental purpose | |
+| 9.2 CPU load        | for debugging, testing and experimental purpose | |
+| 9.3 Param A         | for debugging, testing and experimental purpose | |
+| 9.4 Param B         | for debugging, testing and experimental purpose | |
+| 9.5 Param C         | for debugging, testing and experimental purpose | |
 
 
 
