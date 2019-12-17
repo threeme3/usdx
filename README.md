@@ -15,7 +15,8 @@ pe1nnz@amsat.org
 ![](top.png)
 
 ## List of features:
-- Modification into a **simple, fun and versatile QRP CW/SSB HF transceiver** with some interesting DSP and SDR techniques; it compromises a bit on performance so not a high-performance transceiver. 
+- Modification into a **simple, fun and versatile QRP SSB HF transceiver** with embedded DSP and SDR functions;
+- High-performance QSD mixer with steep baseband roll-off followed by a digital signal processing stage provides a good operational performance in terms of sensitivity, selectivity, spurious rejection and overall (blocking) dynamic range. 
 - **[EER]/[Polar-transmitter] Class-E** driven SSB transmit-stage
 - Approximately **5W PEP SSB output** (depending on supply voltage, amplitude-PA voltage regulated through PWM with 48dB dynamic range)
 - Supports **USB and LSB** modes up to **2400 Hz bandwidth** (receiver and transmitter 400..2330Hz)
@@ -32,8 +33,8 @@ pe1nnz@amsat.org
 - An **pre-distorion** algorithm that cancels out the amplitude errors of non-linearities in the PA voltage regulated PWM supply; a lookup table is used that can be calibrated with an internal PA amplitude measurement
 - Possibility to extend the QCX analog phasing stage with a **DSP stage**
 - Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**
-- Receiver Noise floor **(MDS): –130 dBm** at 24MHz (in 500Hz BW); Blocking dynamic range: 148dB (200kHz offset or greater), 118dB (20kHz offset), 78dB (2kHz offset). Blocking: 18dBm (200kHz offset or greater), -12dBm (20kHz offset), -52dBm (2kHz offset)  (IC6A/B-gain must reduce with -10dB!!); LO Phase noise: -138dBc/Hz; Front-end selectivity: Octave
-- Digitally switchable RF front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**
+- Receiver Noise floor **(MDS): –130 dBm** at 24MHz (in 500Hz BW); Blocking dynamic range: 148dB (200kHz offset or greater), 118dB (20kHz offset), 78dB (2kHz offset). Blocking: 18dBm (200kHz offset or greater), -12dBm (20kHz offset), -52dBm (2kHz offset)  _(IC6A/B-gain must reduce with -18 (or maybe even -22) dB!!)_; LO Phase noise: -138dBc/Hz; Front-end selectivity: Octave
+- three independent switchable front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**
 - This firmware is compatible with an unmodified QCX, partial modified QCX (e.g. SSB mod, or DSP mod), or fully modified QCX (SSB + SDR mod, as described below)
 - SDR implementation simplifies the receiver heaviliy; **the original QCX PCB is now half empty** by moving the analog processing into the microcontroller and adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
 - Probably the most cost effective and easiest to build standalone SDR transceiver that you can find. More versatile and easier to build than the original QCX (less components, no transformer windings, no alignment procedure)
@@ -42,8 +43,8 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 (**this**) | 2019-09-01 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings. |
-| R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. |
+| R1.02 (**current**) | 2019-12-22 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings. |
+| R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. **See here [original QCX-SSB modification] (it is also supported by current firmware)** |
 | R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
 
 
@@ -53,18 +54,20 @@ Below the schematic after the modification is applied, unused components are lef
 
 
 ## Installation:
-To make the SDR+SSB modification, you need to remove 9 and change 8 components, install 10 wires, upload firmware and connect a microphone. On a newly to be build QCX, 46 components can be left out.
+If you just want to try out the firmware, you can upload and use it in an unmodified QCX but it will have the SSB and SDR features disabled. If you like to try out the DSP audio processing feature, you can simply disconnect R59 and hook up a speaker on pin15/U2 (with 10uF in series, similar as shown above).
 
-**Note: Click here for the [original QCX-SSB modification]. The orginal mod is supported by the latest firmware and optionally a DSP audio processing feature can be enabled by disconnecting R59 and hooking up a speaker on pin15/U2 (via 10uF capacitor, similar as shown above).**
+To make the SDR+SSB modification, you need to remove 9 and change 8 components, install 10 wires, upload firmware and connect a microphone. On a newly to be build QCX, 46 components can be left out.
 
 Change the following component values (and type of component in some cases), and wire the following component pins on the backside PCB (some pins must be disconnected from the pad):
 
-1. To implement the SDR receiver: R11,12,17,24,27,29,59,IC10 (remove); IC7-9,R13,R18-20,R25,R28-40,R60,C9,C11,C13-24,C52-53,D5,Q7 (omit on new builds); C10 (.1uF); R16,23 (120k); wire IC10(pin7) to IC6(pin7); wire R27(pin2) to IC6(pin1); wire IC2(pin15) to IC10(pin1); disconnect R50-5V and R52-5V and both wire to R57-DVM(pin3); disconnect R21-IC6(pin7) and R22-IC6(pin7) and both wire to R7-IC5(pin1).
-2. To implement the SSB transmitter: D4,R21,R56 (10k); R58 (.22uF); C32 (10uF); C31 (remove); wire IC2-pin21 to R57-DVM(pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58;
+1. To implement the SDR receiver: R11,12,17,24,27,29,59,IC10 (remove); IC7-10,R11-13,R17-20,R24-25,R28-40,R59,R60,C9,C11,C13-24,C52-53,D5,Q7 (omit on new builds); change C10 (.1uF); R16,23 (120k); R21 (10k); wire IC10(pin7) to IC6(pin7); wire R27(pin2) to IC6(pin1); wire IC2(pin15) to IC10(pin1); disconnect pin R50(to 5V) and pin R52(to 5V) and both wire to IC2(pin21); disconnect pin R21(to IC6-pin7) and pin R22(to IC6-pin7) and both wire to pin R7(to IC5-pin1).
+_Rationale: This will feed the I/Q signals to the ADC0, ADC1 input, biased at AREF/2 V, the rest of the receiver will be handled in software and audio output is realised on PB1._
+2. To implement the SSB transmitter: change D4,R56 (10k); R58 (.22uF); C32 (10uF); C31 (remove); wire IC2(pin21) to pin R57(to DVM-pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58.
+_Rationale: This will bias the mic input (at DAH line) with 5V and pass the audio to ADC2, biased at AREF/2 V; the key-shaping circuit is digitally switching the voltage supply to the PA (or alternatively directly controlled via PA bias<sup>[note 3](#note3)</sup>)._
 3. To implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] page 53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish.
-4. Upload the hex firmware-file to existing or new ATMEGA328/328P chip (here is [latest released hex file] and click on "Assets" below the description). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>). You can safely switch between this/original QCX firmware without any issues.
+_Rationale: The resonant elements and the transformer are replaced with a pass-through capacitor._
+4. Upload the hex firmware-file to original or new ATMEGA328/328P chip (here is [latest released hex file] and click on "Assets" below the description). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>). You can safely switch between this/original QCX firmware without any issues.
 5. Connect an electret microphone pins (+) to tip and (-) to sleeve of paddle-jack; PTT-switch pins to ring and sleeve (see [X1M-mic]).
-
 
 Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted and some must be remove (see above):
 ![layout](layout.png)
@@ -74,46 +77,22 @@ Below the wires that needs to be installed on the bottom PCB; a circle indicates
 
 
 ## Operation:
-Currently, the following functions have been assigned to the buttons:
+Currently, the following functions have been assigned to shortcut buttons (L=left, E=encoder, R=right) and menu-items:
 
-| Button              | Function                                                |
-| ------------------- | ------------------------------------------------------- |
-| LEFT single-press   | Selects menu-item, setting or goes back (optional: CENTER, RIGHT click)  |
-| LEFT double-press   |                                                         |
-| LEFT long-press     |                                                         |
-| LEFT push + turn    | Quick menu                                              |
-| CENTER single-press | Select (smaller) frequency step                         |
-| CENTER double-press | Select Band                                             |
-| CENTER long-press   | Select (larger) frequency step                          |
-| CENTER turn         | Tune frequency                                          |
-| CENTER push + turn  | Volume & Power-off/on                                   |
-| RIGHT single-press  | LSB/USB/CW-mode                                         | 
-| RIGHT double-press  | Filter Bandwidth                                        |
-| RIGHT long-press    | VOX mode (for full-break-in or digital modes)           |
-| RIGHT push + turn   |                                                         |
-| KEY                 | Push-to-talk (SSB) / Straight-key (CW)                  |
-
-
-Currently, the following functions have been assigned to buttons and menu-items:
-
-| Menu Item           | Function                                     | Button      |
-| ------------------- | -------------------------------------------- | ----------- |
-|                     | Push-to-talk (SSB) / Straight-key (CW) | **KEY** 
-|                     | Quick menu | **LEFT push + turn** |
-|                     | Menu-item | **LEFT single-press** |
-|                     | Tune frequency | **CENTER turn** |
-| 1.1 Volume          | Audio level (0..16) & power-off/on | **CENTER push + turn** |
-| 1.2 Mode            | Modulation (LSB, USB, CW, AM, FM) | **RIGHT single-press** |
-| 1.3 Filter BW       | Audio passband (Full, 300..4000, 300..2500, 300..1700, 200, 100 Hz) | **RIGHT double-press** |
-| 1.4 Band            | Band-switch to pre-defined FT8 freqs for 80m, 60m, 40m, 30m, 20m, 17m, 15m, 12m, 10m, 6m, 4m | **CENTER double-press** |
-| 1.5 Tuning Rate     | Tuning frequency step size 10M, 1M, 0.5M, 100k, 10k, 1k, 0.5k, 100, 10, 1 | **CENTER long/single-press** |
+| Menu Item           | Function                                     | Shortcut |
+| ------------------- | -------------------------------------------- | -------- |
+| 1.1 Volume          | Audio level (0..16) & power-off/on | **E +turn** |
+| 1.2 Mode            | Modulation (LSB, USB, CW, AM, FM) | **R** |
+| 1.3 Filter BW       | Audio passband (Full, 300..4000, 300..2500, 300..1700, 200, 100 Hz) | **R double** |
+| 1.4 Band            | Band-switch to pre-defined FT8 freqs (80,60,40,30,20,17,15,12,10,6,4m) | **E double** |
+| 1.5 Tuning Rate     | Tuning step size 10M, 1M, 0.5M, 100k, 10k, 1k, 0.5k, 100, 10, 1 | **E or E long** |
 | 1.6 AGC             | Automatic Gain Control (ON, OFF) | |
-| 1.7 NR              | Noise-reduction level (0-8), basically smooth signal and cut-off high-frequencies | |
+| 1.7 NR              | Noise-reduction level (0-8), load-pass & smooth | |
 | 1.8 ATT             | Analog Attenuator (0, -13, -20, -33, -40, -53, -60, -73 dB) | |
 | 1.9 ATT2            | Digital Attenuator in CIC-stage (0-16) in steps of 6dB | |
 | 1.10 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
 | 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
-| 3.1 VOX             | Voice Operated Xmit (ON, OFF) | **RIGHT long-press** | |
+| 3.1 VOX             | Voice Operated Xmit (ON, OFF) | **R long** | |
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
 | 3.4 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
@@ -125,7 +104,10 @@ Currently, the following functions have been assigned to buttons and menu-items:
 | 9.3 Param A         | for debugging, testing and experimental purpose | |
 | 9.4 Param B         | for debugging, testing and experimental purpose | |
 | 9.5 Param C         | for debugging, testing and experimental purpose | |
-
+| main                | Frequency (20kHz..99MHz) | **turn** |
+| main                | Quick menu | **L +turn** |
+| main                | Menu enter | **L** |
+| menu                | Menu back | **R** |
 
 
 Operating Instructions:
@@ -181,7 +163,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - Alternatively, in case you have an [Arduino] environment installed, you can upload the [QCX-SSB Sketch] directly from the Arduino environment (without using AVRDudess and firmware file); make sure "Tools > Board > Arduino/Genuino Uno",  "Tools > Port > /dev/ttyUSB0 or ttyACM0", and then "Sketch > Upload" is selected, while the ATMEGA328P chip is placed in the Arduino UNO socket. It is also possible to use [Arduino as ISP] method: upload this variation of [ArduinoISP] to the Arduino board and select "Tools > Programmer > Arduino as ISP", and "Sketch > Upload Using Programmer".
 2. <a name="note2"/>The occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to half a unit-circle _UA/2 (equivalent to 180 degrees)). The sensitivity of the VOX switching can be set with parameter VOX_THRESHOLD. Audio-input can be attenuated by increasing parameter MIC_ATTEN (6dB per step).
 3. Alternatively, the PA MOSFETs can be directly biased by the PWM envelope signal, basically making the key-shaping circuit redundant. To do so, Q6,Q4,R41,R42,C32,C31 can be removed entirely, whereby C-E pads of Q6 are wired, and where a 100nF capacitor is inserted at IC3A-pin3 and G of Q1-3, and where a 10k resistor is placed at G-D pads of Q4, a 10nF capacitor between S-D pads of Q4, and where a 10k resistor is placed between D of Q4 and G of Q1-3.
-
+4. Experimental alternative for 18dB less overall receiver gain and a single receiver gain stage only: To implement the SDR receiver: R11,12,R14,R15,17,59 (remove); change R7,10(47k); change C4,C7(2nF); IC6-10,R11-40,R59-60,C9-24,C52-53,D5,Q7 (omit on new builds); wire IC2(pin15) to IC10(pin1); disconnect R50-(to 5V) pin and R52-5V and both wire to IC2(pin25); disconnect pin C39(to R27) and wire to IC5(pin1); disconnect pin C40(-to R27) and wire to IC5(pin7).
 
 ### Credits:
 [QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] transmitter and QCX-SDR receiver stage both running on a ATMEGA328P, including its multiband front-end and direct PA biasing/envelope-generation technique; its concept, circuit, code and modification to run on a QCX are a design by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi.

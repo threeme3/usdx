@@ -6,28 +6,6 @@
 
 #define VERSION   "1.01s"
 
-/* BACKLOG:
-code definitions and re-use for comb, integrator, dc decoupling, arctan
-in func_ptr for different mode types
-refactor main()
-agc based on rms256, agc/smeter after filter
-noisefree integrator (rx audio out) in lower range
-raised cosine tx amp for cw
-auto paddle
-cw tx message/cw encoder
-32 bin fft
-dynamic range cw
-att extended agc
-configurable F_CPU
-CW-R/CW-L offset
-VFO-A/B+split+RIT
-OLED display support
-VOX integration in main loop
-auto-bias for AUDIO1+2 inputs
-K2/TS480 CAT control
-faster RX-TX switch to support CW
-*/
-
 // QCX pin defintion
 #define LCD_D4  0         //PD0
 #define LCD_D5  1         //PD1
@@ -47,7 +25,7 @@ faster RX-TX switch to support CW
 #define AUDIO2  PIN_A1    //PC1
 #define DVM     PIN_A2    //PC2
 #define BUTTONS PIN_A3    //PC3
-#define LCD_RS  18        //shared with SDA
+#define LCD_RS  18        //PC4 shared with SDA
 #define SDA     18        //PC4
 #define SCL     19        //PC5
 
@@ -688,7 +666,7 @@ volatile int8_t volume = 8;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
-volatile uint8_t att2 = 2;
+volatile uint8_t att2 = 3;
 volatile uint8_t _init;
 
 //static uint32_t gain = 1024;
@@ -767,10 +745,10 @@ void junk()
 }
 #endif
 
-#define N_FILT 6
+#define N_FILT 7
 volatile int8_t filt = 0;
 
-inline int16_t filt_var(int16_t v)
+inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
 { 
   int16_t zx0 = v;
 
@@ -792,9 +770,10 @@ inline int16_t filt_var(int16_t v)
     case 1: break; //0-4000Hz (pass-through)
     case 2: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
     case 3: zx0=(7*(zx0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
-    case 4: zx0=(5*(zx0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
-    case 5: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
-    case 6: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
+    case 4: zx0=(zx0+2*za1+za2+41*zb1-23*zb2)/32; break;   //500-1000Hz
+    case 5: zx0=(5*(zx0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
+    case 6: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
+    case 7: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
   }
   zb2=zb1;
   zb1=zx0;
@@ -804,9 +783,10 @@ inline int16_t filt_var(int16_t v)
     case 1: break; //0-4000Hz (pass-through)
     case 2: zx0=(8*(zx0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
     case 3: zx0=(4*(zx0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
-    case 4: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
-    case 5: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
-    case 6: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
+    case 4: zx0=(16*(zx0-2*zb1+zb2)+105*zc1-52*zc2)/64; break;      //500-1000Hz
+    case 5: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
+    case 6: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
+    case 7: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
   }
   zc2=zc1;
   zc1=zx0;
@@ -850,19 +830,38 @@ void sdr_rx()
   adc = corr_adc;
 
   static int16_t dc;
-  dc += (adc - dc) / 2;
-  int16_t ac = adc - dc;     // DC decoupling
+  //dc += (adc - dc) / 2;  // we lose LSB with this method
+  //dc = (3*dc + adc)/4;
+  //int16_t ac = adc - dc;     // DC decoupling
+  int16_t ac = adc;
+
+//#define AUTO_ADC_BIAS  1
+#ifdef AUTO_ADC_BIAS
+  param_b = (127*param_b + adc)/128;
+  if(param_b > 8){
+    digitalWrite(AUDIO1, LOW);
+    pinMode(AUDIO1, OUTPUT);
+    pinMode(AUDIO1, INPUT);
+    //param_b = 0;
+  } //else
+  if(param_b < -8){
+    digitalWrite(AUDIO1, HIGH);
+    pinMode(AUDIO1, OUTPUT);
+    pinMode(AUDIO1, INPUT);
+    //param_b = 0;
+  }
+#endif
 
   int16_t ac2;
   static int16_t z1;
   if(rx_state == 0 || rx_state == 4){  // 1st stage: down-sample by 2
     static int16_t za1;
-    int16_t _ac = ac + za1 + z1;           // 1st stage: FA + FB
+    int16_t _ac = ac + za1 + z1 * 2;           // 1st stage: FA + FB
     za1 = ac;
     static int16_t _z1;
     if(rx_state == 0){                   // 2nd stage: down-sample by 2
       static int16_t _za1;
-      ac2 = _ac + _za1 + _z1;              // 2nd stage: FA + FB
+      ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
         // post processing I and Q (down-sampled) results
@@ -901,7 +900,8 @@ void sdr_rx()
             if(filt) ac = filt_var(ac);
         }
         if(mode == CW){
-          if(filt) ac = filt_var(ac << 4) << 2;   //if(filt) ac = filt_var(ac << 6);
+          if(filt) ac = filt_var(ac << 0) << 2;
+          //if(filt) ac = filt_var(ac << 6);
           
           if(cwdec){  // CW decoder enabled?
             char ch = cw(ac >> 0);
@@ -917,7 +917,12 @@ void sdr_rx()
         
         //static int16_t dc;
         //dc += (ac - dc) / 2;
+        //dc = (15*dc + ac)/16;
+        //dc = (15*dc + (ac - dc))/16;
         //ac = ac - dc;    // DC decoupling
+
+        ac = min(max(ac, -512), 511);
+        //ac = min(max(ac, -128), 127);
     
         // Output stage
         static int16_t ozd1, ozd2;
@@ -932,8 +937,8 @@ void sdr_rx()
 #endif
         ozd1 = ac;
       }
-    } else _z1 = _ac * 2;
-  } else z1 = ac * 2;
+    } else _z1 = _ac;
+  } else z1 = ac;
 
   rx_state++;
 }
@@ -949,20 +954,38 @@ void sdr_rx_2()
   sdr_rx_common();  //necessary? YES!
 #endif
 
-  static int16_t dc;
-  dc += (adc - dc) / 2;
-  int16_t ac = adc - dc;     // DC decoupling
+  //static int16_t dc;
+  //dc += (adc - dc) / 2;  // we lose LSB with this method
+  //dc = (3*dc + adc)/4;
+  //int16_t ac = adc - dc;     // DC decoupling
+  int16_t ac = adc;
 
+#ifdef AUTO_ADC_BIAS
+  param_c = (127*param_c + adc)/128;
+  if(param_c > 8){
+    digitalWrite(AUDIO2, LOW);
+    pinMode(AUDIO2, OUTPUT);
+    pinMode(AUDIO2, INPUT);
+    //param_c = 0;
+  } //else
+  if(param_c < -8){
+    digitalWrite(AUDIO2, HIGH);
+    pinMode(AUDIO2, OUTPUT);
+    pinMode(AUDIO2, INPUT);
+    //param_c = 0;
+  }
+#endif
+  
   int16_t ac2;
   static int16_t z1;
   if(rx_state == 3 || rx_state == 7){  // 1st stage: down-sample by 2
     static int16_t za1;
-    int16_t _ac = ac + za1 + z1;           // 1st stage: FA + FB
+    int16_t _ac = ac + za1 + z1 * 2;           // 1st stage: FA + FB
     za1 = ac;
     static int16_t _z1;
     if(rx_state == 7){                   // 2nd stage: down-sample by 2
       static int16_t _za1;
-      ac2 = _ac + _za1 + _z1;              // 2nd stage: FA + FB
+      ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
         // Process Q (down-sampled) samples
@@ -974,9 +997,8 @@ void sdr_rx_2()
         qh = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
       }
       rx_state = 0; return;
-    } else _z1 = _ac * 2;
-  } else z1 = ac * 2;
-
+    } else _z1 = _ac;
+  } else z1 = ac;
 
   rx_state++;
 }
@@ -993,14 +1015,17 @@ inline void sdr_rx_common()
 #ifdef SECOND_ORDER_DUC
   if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #else
-  if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+  OCR1AL = (ozi1>>5) + 128;
+  //if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #endif
 }
 
 ISR(TIMER2_COMPA_vect)  // Timer2 COMPA interrupt
 {
   func_ptr();
+#ifdef DEBUG
   numSamples++;
+#endif
 }
 
 void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
@@ -1041,7 +1066,7 @@ void timer1_start(uint32_t fs)
   TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11); // Clear OC1A,OC1B on Compare Match when upcounting. Set OC1A,OC1B on Compare Match when downcounting.
   TCCR1B |= (1 << CS10) | (1 << WGM13) | (1 << WGM12); // WGM13: Mode 14 - Fast PWM;  CS10: clkI/O/1 (No prescaling)
   ICR1H = 0x00;
-  ICR1L = (float)F_CPU / (float)fs - 0.5;  // PWM value range (determines bit-depth and PWM frequency):  Fpwm = F_CPU / Prescaler * (1 + TOP)
+  ICR1L = min(255, (float)F_CPU / (float)fs - 0.5);  // PWM value range (fs>78431):  Fpwm = F_CPU / [Prescaler * (1 + TOP)]
   OCR1AH = 0x00;
   OCR1AL = 0x00;  // OC1A (SIDETONE) PWM duty-cycle (span defined by ICR).
   OCR1BH = 0x00;
@@ -1193,14 +1218,14 @@ volatile int32_t freq = 7074000;
 int8_t smode = 1;
 
 float dbm_max;
-float smeter(float ref = 5.1)  //= 10*log(F_SAMP_RX/R/2400)  ref to 2.4kHz BW.
+float smeter(float ref = 5)  //= 10*log(8000/2400)=5  ref to 2.4kHz BW.  plus some other calibration factor
 {
   if(smode == 0){ // none, no s-meter
     return 0;
   }
   float rms = _absavg256 / 256.0; //sqrt(256.0);
-  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 100.0 * 50.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 100.0 * 120.0 / 1.750);
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
   dbm_max = max(dbm_max, dbm);
   static uint8_t cnt;
@@ -1532,6 +1557,28 @@ void show_banner(){
   lcd.print(F("\x01 ")); lcd_blanks();
 }
 
+const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
+
+void display_vfo(uint32_t freq){
+  lcd.setCursor(0, 1);
+  lcd.print('\x06');  // VFO
+  uint32_t n = freq / 1000000;  // lcd.print(f) with commas
+  uint32_t n2 = freq % 1000000;
+  uint32_t scale = 1000000;
+  char buf[16];
+  sprintf(buf, "%2u", n); lcd.print(buf);
+  while(scale != 1){
+    scale /= 1000;
+    n = n2 / scale;
+    n2 = n2  % scale;
+    if(scale == 1) sprintf(buf, ",%02u", n / 10); else // leave last digit out
+    sprintf(buf, ",%03u", n);
+    lcd.print(buf);
+  }
+  lcd.print(" "); lcd.print(mode_label[mode]); lcd.print("  ");
+  lcd.setCursor(15, 1); lcd.print("R");
+}
+
 volatile uint8_t event;
 volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile int8_t menu = 0;  // current parameter id selected in menu
@@ -1588,8 +1635,7 @@ static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29
 static uint8_t pwm_max = 192;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; x for biasing BS170 directly
 
 const char* offon_label[2] = {"OFF", "ON"};
-const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
-const char* filt_label[7] = { "Full", "4000", "2500", "1700", "200", "100", "50" };
+const char* filt_label[N_FILT+1] = { "Full", "4000", "2500", "1700", "500", "200", "100", "50" };
 const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
@@ -1938,7 +1984,7 @@ void loop()
         if(!menumode){
           encoder_val = 1;
           paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, _N(mode_label), true);
-          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_100;
+          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
           //if(mode > FM) mode = LSB;
           if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
           if(mode == CW) filt = 4; else filt = 0;
@@ -2050,10 +2096,11 @@ void loop()
     if(menumode == 2){
       lcd.setCursor(0, 1); lcd.cursor(); delay(10); // edits menu item value; make cursor visible
       if(menu == MODE){ // post-handling Mode parameter
+        delay(100);
         change = true;
         si5351.prev_pll_freq = 0;  // enforce PLL reset
         // make more generic: 
-        if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_100;
+        if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
         if(mode == CW) filt = 4; else filt = 0;
       }
       if(menu == ATT){ // post-handling ATT parameter
@@ -2084,6 +2131,9 @@ void loop()
         for(i = 0; i != 300000; i++) wdt_reset(); // fixed CPU-load 132052*1.25us delay under 0% load condition; is 132052*1.25 * 20M = 3301300 CPU cycles fixed load
         cpu_load = 100 - 132 * 100 / (millis() - prev_time);
       }
+      if((menu == PARAM_A) || (menu == PARAM_B) || (menu == PARAM_C)){
+        delay(300);
+      }
 #endif
     }
   }
@@ -2101,23 +2151,7 @@ void loop()
     schedule_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
  
     if(menumode == 0){
-      lcd.setCursor(0, 1);
-      lcd.print('\x06');  // VFO
-      uint32_t n = freq / 1000000;  // lcd.print(f) with commas
-      uint32_t n2 = freq % 1000000;
-      uint32_t scale = 1000000;
-      char buf[16];
-      sprintf(buf, "%2u", n); lcd.print(buf);
-      while(scale != 1){
-        scale /= 1000;
-        n = n2 / scale;
-        n2 = n2  % scale;
-        if(scale == 1) sprintf(buf, ",%02u", n / 10); else // leave last digit out
-        sprintf(buf, ",%03u", n);
-        lcd.print(buf);
-      }
-      lcd.print(" "); lcd.print(mode_label[mode]); lcd.print("  ");
-      lcd.setCursor(15, 1); lcd.print("R");
+      display_vfo(freq);
   
       // The following is a hack for SWR measurement:
       //si5351.alt_clk2(freq + 2400);
@@ -2126,10 +2160,15 @@ void loop()
     }
     
     noInterrupts();
+    if(mode == CW){
+      const int cw_offset = 600;  // this is actual the center frequency of the CW-filters
+      si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
+      si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
+    } else
     if(mode == LSB)
       si5351.freq(freq, 90, 0);  // RX in LSB
     else
-      si5351.freq(freq, 0, 90);  // RX in USB
+      si5351.freq(freq, 0, 90);  // RX in USB, ...
     interrupts();
   }
   
@@ -2149,3 +2188,29 @@ void main()
   for(;;) loop();
 }
 #endif
+
+/* TODO/BACKLOG:
+code definitions and re-use for comb, integrator, dc decoupling, arctan
+in func_ptr for different mode types
+refactor main()
+agc based on rms256, agc/smeter after filter
+noisefree integrator (rx audio out) in lower range
+raised cosine tx amp for cw
+auto paddle
+cw tx message/cw encoder
+32 bin fft
+dynamic range cw
+att extended agc
+configurable F_CPU
+CW-L mode
+VFO-A/B+split+RIT
+OLED display support aka http://www.technoblogy.com/list?22ML
+VOX integration in main loop
+auto-bias for AUDIO1+2 inputs
+K2/TS480 CAT control
+faster RX-TX switch to support CW
+clock
+qcx API demo code
+scan
+si5351 simplification aka https://groups.io/g/BITX20/files/KE7ER/si5351bx_0_0.ino
+*/
