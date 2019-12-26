@@ -666,7 +666,7 @@ volatile int8_t volume = 8;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
-volatile uint8_t att2 = 3;
+volatile uint8_t att2 = 0;
 volatile uint8_t _init;
 
 //static uint32_t gain = 1024;
@@ -829,7 +829,7 @@ void sdr_rx()
   prev_adc = adc;
   adc = corr_adc;
 
-  static int16_t dc;
+  //static int16_t dc;
   //dc += (adc - dc) / 2;  // we lose LSB with this method
   //dc = (3*dc + adc)/4;
   //int16_t ac = adc - dc;     // DC decoupling
@@ -1224,7 +1224,8 @@ float smeter(float ref = 5)  //= 10*log(8000/2400)=5  ref to 2.4kHz BW.  plus so
     return 0;
   }
   float rms = _absavg256 / 256.0; //sqrt(256.0);
-  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0); // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 820.0 * 3.0/*??*/);          // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
   dbm_max = max(dbm_max, dbm);
