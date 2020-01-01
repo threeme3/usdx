@@ -540,6 +540,7 @@ inline int16_t ssb(int16_t in)
 
 #define MIC_ATTEN  0  // 0*6dB attenuation (note that the LSB bits are quite noisy)
 volatile int8_t mox = 0;
+volatile int8_t volume = 8;
 
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
@@ -558,43 +559,28 @@ void dsp_tx()
   OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
 }
 
-volatile int16_t p_sin = 0;   // initialized with A*sin(t), where t=0
-volatile int16_t n_cos = 448; // initialized with A*cos(t), where t=0
+volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
+volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
 inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam.ac.uk/~am21/hakmemc.html, ITEM 149]: p_sin+=n_cos*2*PI*f/fs; n_cos-=p_sin*2*PI*f/fs;
 {
-#ifdef DEBUG
-  p_sin += (n_cos*64)/((uint8_t)param_c);  // set param_c=79
-  n_cos -= (p_sin*64)/((uint8_t)param_c);
-#endif
+  p_sin += 3*n_cos/4;  // sine at 0.75*F_SAMP/6.28 = 600 Hz = cw_offset
+  n_cos -= 3*p_sin/4;
 }
 
 volatile uint16_t acc;
 
 void dsp_tx_cw()
 { // jitter dependent things first
-/*
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
-  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
-  si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
-  //OCR1BL = amp;                        // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
-  int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
-  int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
-  si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
-*/
-
   OCR1BL = lut[255];
   
-  //if(mon) OCR1AL = (adc << (mon-1)) + 128;  // TX audio monitoring
+  process_minsky();
+  OCR1AL = (p_sin >> (16 - volume)) + 128;
 
-  //process_minsky();
-  //OCR1AL = (p_sin >> (16 - param_b)) + 128;
-
-#ifdef DEBUG
+/*
   acc = acc + param_c;  // param_c = 7570
-#endif
   int8_t temp = acc >> 8;
   int8_t mask = temp >> 7;
-  OCR1AL = temp ^ mask;
+  OCR1AL = temp ^ mask;*/
 }
 
 volatile int8_t cwdec = 0;
@@ -662,7 +648,6 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 28409
 #define F_ADC_CONV (192307/1)
 
-volatile int8_t volume = 8;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
@@ -1224,8 +1209,8 @@ float smeter(float ref = 5)  //= 10*log(8000/2400)=5  ref to 2.4kHz BW.  plus so
     return 0;
   }
   float rms = _absavg256 / 256.0; //sqrt(256.0);
-  //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0); // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 820.0 * 3.0/*??*/);          // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);   // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 820.0 * 3.0/*??*/);   // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
   dbm_max = max(dbm_max, dbm);
@@ -2003,6 +1988,8 @@ void loop()
         filt++;
         _init = true;
         if(mode == CW && filt > N_FILT) filt = 4;
+        if(mode == CW && (filt == 5 || filt == 6) && stepsize < STEP_100) stepsize = STEP_100; // for CW BW 200, 100      -> step = 100 Hz
+        if(mode == CW && filt == 7 && stepsize < STEP_10) stepsize = STEP_10;                  // for CW BW 50 -> step = 10 Hz
         if(mode != CW && filt > 3) filt = 0;
         encoder_val = 0; 
         paramAction(UPDATE, FILTER);
