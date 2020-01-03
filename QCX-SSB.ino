@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.01s"
+#define VERSION   "1.01t"
 
 // QCX pin defintion
 #define LCD_D4  0         //PD0
@@ -569,6 +569,10 @@ inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam
 
 volatile uint16_t acc;
 
+void dummy()
+{
+}
+
 void dsp_tx_cw()
 { // jitter dependent things first
   OCR1BL = lut[255];
@@ -1000,7 +1004,7 @@ inline void sdr_rx_common()
 #ifdef SECOND_ORDER_DUC
   if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #else
-  OCR1AL = (ozi1>>5) + 128;
+  if(volume) OCR1AL = (ozi1>>5) + 128;
   //if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #endif
 }
@@ -1237,182 +1241,6 @@ float smeter(float ref = 5)  //= 10*log(8000/2400)=5  ref to 2.4kHz BW.  plus so
   return dbm;
 }
 
-uint32_t sample_amp(uint8_t pin, uint16_t osr)
-{
-  uint16_t avg = 1024 / 2;
-  uint32_t rms = 0;
-  uint16_t i;
-  for(i = 0; i != 16; i++){
-    uint16_t adc = analogRead(pin);
-    avg = (avg + adc) / 2;
-  }
-  for(i = 0; i != osr; i++){ // 128 overampling is 42dB gain => with 10-bit ADC resulting in a total of 102dB DR
-    uint16_t adc = analogRead(pin);
-    avg = (avg + adc) / 2;  // average
-    rms += ((adc > avg) ? 1 : -1) * (adc - avg);  // rectify based
-    wdt_reset();
-  }
-  return rms;
-}
-
-float dbmeter(float ref = 0.0)
-{
-  float rms = ((float)sample_amp(AUDIO1, 128)) * 5.0 / (1024.0 * 128.0 * 100.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
-  lcd.setCursor(9, 0); lcd.print(dbm); lcd.print(F("dB    "));
-  delay(300);
-  return dbm;
-}
-
-// RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
-void calibrate_iq()
-{
-  lcd.setCursor(9, 0); lcd_blanks();
-  digitalWrite(SIG_OUT, true); // loopback on
-  si5351.prev_pll_freq = 0;  //enforce PLL reset
-  si5351.freq(freq, 0, 90);  // RX in USB
-  float dbc;
-  si5351.alt_clk2(freq + 700);
-  dbc = dbmeter();
-  si5351.alt_clk2(freq - 700);
-  lcd.setCursor(0, 1); lcd.print(F("I-Q bal. (700 Hz)")); lcd_blanks();
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-  si5351.alt_clk2(freq + 600);
-  dbc = dbmeter();
-  si5351.alt_clk2(freq - 600);
-  lcd.setCursor(0, 1); lcd.print(F("Phase Lo (600 Hz)")); lcd_blanks();
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-  si5351.alt_clk2(freq + 800);
-  dbc = dbmeter();
-  si5351.alt_clk2(freq - 800);
-  lcd.setCursor(0, 1); lcd.print(F("Phase Hi (800 Hz)")); lcd_blanks();
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); dbmeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
-/*
-  for(uint32_t offset = 0; offset < 3000; offset += 100){
-    si5351.alt_clk2(freq + offset);
-    dbc = dbmeter();
-    si5351.alt_clk2(freq - offset);
-    lcd.setCursor(0, 1); lcd.print(offset); lcd.print(F(" Hz")); lcd_blanks();
-    wdt_reset(); dbmeter(dbc); delay(500); wdt_reset(); 
-  }
-*/
-  lcd.setCursor(9, 0); lcd_blanks();  // cleanup dbmeter
-  digitalWrite(SIG_OUT, false); // loopback off
-  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-  change = true;  //restore original frequency setting
-
-}
-
-void powermeter()
-{
-  lcd.setCursor(9, 0); lcd_blanks();
-  si5351.prev_pll_freq = 0;  //enforce PLL reset
-  si5351.freq(freq, 0, 90);  // RX in USB
-  si5351.alt_clk2(freq + 1000); // si5351.freq_clk2(freq + 1000);
-  si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
-  digitalWrite(KEY_OUT, HIGH); //OCR1BL = 0xFF;
-  digitalWrite(RX, LOW);  // TX
-
-  //if(dsp_cap != SDR){ adc_start(1, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX; }
-  wdt_reset(); delay(100); 
-
-  float rms;
-  rms = ((float)sample_amp(AUDIO2, 128)) * 5.0 / (1024.0 * 128.0 * 100.0 / 10000.0); // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * rx/tx switch attenuation]
-  //if(dsp_cap == SDR) rms = (float)rms256 * 1.1 / (1024.0 * (float)R * 256.0 * 100.0 * 50.0 / 10000);          // rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  //else               rms = (float)rms256 * 5.0 / (1024.0 * (float)R * 256.0 * 100.0 / 10000);
-  float w = (rms * rms) / 50.0;
-  float dbm = 10.0 * log10(w) + 30.0; //from rmsV to dBm at 50R
-
-  lcd.setCursor(9, 0); lcd.print(F("  ")); lcd.print(w); lcd.print(F("W   "));
-  //lcd.setCursor(9, 0); lcd.print(F(" +")); lcd.print((int16_t)dbm ); lcd.print(F("dBm   "));
-
-  digitalWrite(KEY_OUT, LOW); //OCR1BL = 0x00;
-  digitalWrite(RX, HIGH);  // RX
-  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-  change = true;  //restore original frequency setting
-  delay(1000);
-}
-
-void test_tx_amp()
-{
-  lcd.setCursor(9, 0); lcd_blanks();
-  TCCR1A = 0;   // Timer 1: PWM mode
-  TCCR1B = 0;
-  TCCR1A |= (1 << COM1B1); // Clear OC1A/OC1B on Compare Match when upcounting. Set OC1A/OC1B on Compare Match when downcounting.
-  TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
-  ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
-  ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
-  OCR1BH = 0x00;
-  OCR1BL = 0x00;  // PWM duty-cycle (span set by ICR).
-
-  si5351.prev_pll_freq = 0;  // enforce PLL reset
-  si5351.freq(freq, 0, 90);  // RX in USB
-  si5351.alt_clk2(freq);
-  si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
-  digitalWrite(RX, LOW);  // TX
-  uint16_t i;
-  for(i = 0; i != 256; i++)
-  {
-    OCR1BL = lut[i];
-    si5351.alt_clk2(freq + i * 10);
-    wdt_reset();
-    lcd.setCursor(0, 1); lcd.print(F("SWEEP(")); lcd.print(i); lcd.print(F(")=")); lcd.print(lut[i]); lcd_blanks();
-    delay(200);
-  }
-
-  OCR1BL = 0;
-  delay(500);
-  digitalWrite(RX, HIGH);  // RX
-  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-  change = true;  //restore original frequency setting
-}
-
-void calibrate_predistortion()
-{
-  lcd.setCursor(9, 0); lcd_blanks();
-  TCCR1A = 0;   // Timer 1: PWM mode
-  TCCR1B = 0;
-  TCCR1A |= (1 << COM1B1); // Clear OC1A/OC1B on Compare Match when upcounting. Set OC1A/OC1B on Compare Match when downcounting.
-  TCCR1B |= ((1 << CS10) | (1 << WGM13)); // WGM13: Mode 8 - PWM, Phase and Frequency Correct;  CS10: clkI/O/1 (No prescaling)
-  ICR1H = 0x00;  // TOP. This sets the PWM frequency: PWM_FREQ=312.500kHz ICR=0x1freq bit_depth=5; PWM_FREQ=156.250kHz ICR=0x3freq bit_depth=6; PWM_FREQ=78.125kHz  ICR=0x7freq bit_depth=7; PWM_FREQ=39.250kHz  ICR=0xFF bit_depth=8
-  ICR1L = 0xFF;  // Fpwm = F_CPU / (2 * Prescaler * TOP) :   PWM_FREQ = 39.25kHz, bit-depth=8
-  OCR1BH = 0x00;
-  OCR1BL = 0x00;  // PWM duty-cycle (span set by ICR).
-
-  si5351.prev_pll_freq = 0;  //enforce PLL reset
-  si5351.freq(freq, 0, 90);  // RX in USB
-  si5351.alt_clk2(freq + 1000); // si5351.freq_clk2(freq + 1000);
-  si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
-  digitalWrite(RX, LOW);  // TX
-  OCR1BL = 0xFF; // Max power to determine scale
-  delay(200);
-  float scale = sample_amp(AUDIO2, 128);
-  wdt_reset();
-  uint8_t amp[256];
-  int16_t i, j;
-  for(i = 127; i >= 0; i--) // determine amp for pwm value i
-  {
-    OCR1BL = i;
-    wdt_reset();
-    delay(100);
-
-    amp[i] = min(255, (float)sample_amp(AUDIO2, 128) * 255.0 / scale);
-    lcd.setCursor(0, 1); lcd.print(F("CALIB(")); lcd.print(i); lcd.print(F(")=")); lcd.print(amp[i]); lcd_blanks();
-  }
-  OCR1BL = 0xFF; // Max power to determine scale
-  delay(200);
-  for(j = 0; j != 256; j++){
-    for(i = 0; i != 255 && amp[i] < j; i++) ; //lookup pwm i for amp[i] >= j
-    if(j == 255) i = 255; // do not use PWM for peak RF
-    lut[j] = i;
-  }
-
-  OCR1BL = 0x00;
-  digitalWrite(RX, HIGH);  // RX
-  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-  change = true;  //restore original frequency setting
-}
-
 void start_rx()
 {
   _init = 1;
@@ -1436,6 +1264,7 @@ void switch_rxtx(uint8_t tx_enable){
   //delay(1);
   noInterrupts();
   func_ptr = (tx_enable) ? ((mode == CW) ? dsp_tx_cw : dsp_tx) : sdr_rx;
+  if((!dsp_cap) && (!tx_enable) && vox)  func_ptr = dummy; //hack: for SSB mode, disable rx_dsp during vox mode enabled as it slows down the vox loop too much!
   interrupts();
   if(tx_enable) ADMUX = admux[2];
   else _init = 1;
@@ -1689,7 +1518,8 @@ void initPins(){
   pinMode(KEY_OUT, OUTPUT);
   pinMode(BUTTONS, INPUT);  // L/R/rotary button
   pinMode(DIT, INPUT_PULLUP);
-  pinMode(DAH, INPUT);  //pinMode(DAH, INPUT_PULLUP); // Could this replace D4?
+  //pinMode(DAH, INPUT);  
+  pinMode(DAH, INPUT_PULLUP); // Could this replace D4?
 
   digitalWrite(AUDIO1, LOW);  // when used as output, help can mute RX leakage into AREF
   digitalWrite(AUDIO2, LOW);
@@ -2169,15 +1999,7 @@ void loop()
   wdt_reset();
 }  
 
-#ifndef ARDUINO
-void main()
-{
-  setup();
-  for(;;) loop();
-}
-#endif
-
-/* TODO/BACKLOG:
+/* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
 in func_ptr for different mode types
 refactor main()
