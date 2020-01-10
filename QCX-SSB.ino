@@ -862,7 +862,7 @@ void sdr_rx()
   ADMUX = admux[1];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
-  func_ptr = sdr_rx_2;    // processing function for next conversion
+  func_ptr = sdr_rx_q;    // processing function for next conversion
   sdr_rx_common();
   
   // Only for I: correct I/Q sample delay by means of linear interpolation
@@ -934,7 +934,7 @@ void sdr_rx()
   rx_state++;
 }
 
-void sdr_rx_2()
+void sdr_rx_q()
 {
   // process Q for odd samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
   ADMUX = admux[0];  // set MUX for next conversion
@@ -1749,27 +1749,36 @@ void setup()
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0  
   digitalWrite(RX, HIGH);  // generate pulse on SIDETONE and test if it can be seen on AUDIO2
-  delay(100); // settle
+  delay(1); // settle
   digitalWrite(SIDETONE, LOW);
   int16_t v1 = analogRead(AUDIO2);
   digitalWrite(SIDETONE, HIGH);
   int16_t v2 = analogRead(AUDIO2);
   digitalWrite(SIDETONE, LOW);
-  dsp_cap = (v2 - v1) < (0.1 * 1024.0 / 5.0);  // DSP capability?
-  
-  // Test if QCX has SDR capability: AUDIO2 is disconnected from AUDIO1
-  delay(400); wdt_reset(); // settle:  the following test only works well 400ms after startup
-  v1 = analogRead(AUDIO1);
-  pinMode(AUDIO2, OUTPUT);  // generate pulse on AUDIO2 and test if it can be seen on AUDIO1
-  digitalWrite(AUDIO2, HIGH);
-  delay(5);
-  digitalWrite(AUDIO2, LOW);
-  v2 = analogRead(AUDIO1);
-  pinMode(AUDIO2, INPUT);
-  digitalWrite(AUDIO2, LOW);
-  if((dsp_cap) && (v2 - v1) < 8) dsp_cap = SDR;  // SDR capacility?
-  // Test if QCX has SSB capability: DVM is biased
-  ssb_cap = analogRead(DVM) > 369;
+  dsp_cap = !(abs(v2 - v1) > (0.5 * 1024.0 / 5.0));  // DSP capability?
+  if(dsp_cap){  // Test if QCX has SDR capability: AUDIO2 is disconnected from AUDIO1  (only in case of DSP capability)
+    delay(400); wdt_reset(); // settle:  the following test only works well 400ms after startup
+    v1 = analogRead(AUDIO1);
+    digitalWrite(AUDIO2, HIGH);   // generate pulse on AUDIO2 and test if it can be seen on AUDIO1
+    pinMode(AUDIO2, OUTPUT);
+    delay(1);
+    digitalWrite(AUDIO2, LOW); 
+    delay(1);
+    digitalWrite(AUDIO2, HIGH);
+    v2 = analogRead(AUDIO1);
+    pinMode(AUDIO2, INPUT);
+    if(!(abs(v2 - v1) > (0.010 * 1024.0 / 5.0))) dsp_cap = SDR;  // SDR capacility?
+  }
+  // Test if QCX has SSB capability: DAH is connected to DVM
+  delay(1); // settle
+  pinMode(DAH, OUTPUT);
+  digitalWrite(DAH, LOW);
+  v1 = analogRead(DVM);
+  digitalWrite(DAH, HIGH);
+  v2 = analogRead(DVM);
+  digitalWrite(DAH, LOW);
+  pinMode(DAH, INPUT_PULLUP);
+  ssb_cap = (abs(v2 - v1) > (0.5 * 1024.0 / 5.0));  // SSB capability?
 
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
@@ -1793,14 +1802,12 @@ void setup()
   }*/
   
   // Measure CPU loads
-  if(!(load_tx <= 100.0))
-  {
+  if(!(load_tx <= 100.0)){
     lcd.setCursor(0, 1); lcd.print(F("!!CPU_tx=")); lcd.print(load_tx); lcd.print(F("%")); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
-  if(!(load_rx_avg <= 100.0))
-  {
+  if(!(load_rx_avg <= 100.0)){
     lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(F("=")); lcd.print(load_rx_avg); lcd.print(F("%")); lcd_blanks();
     delay(1500); wdt_reset();
     // and specify individual timings for each of the eight alternating processing functions:
@@ -1820,16 +1827,14 @@ void setup()
   delay(100); // settle
   float vdd = 2.0 * (float)analogRead(AUDIO2) * 5.0 / 1024.0;
   digitalWrite(RX, HIGH);
-  if(!(vdd > 4.8 && vdd < 5.2))
-  {
+  if(!(vdd > 4.8 && vdd < 5.2)){
     lcd.setCursor(0, 1); lcd.print(F("!!V5.0=")); lcd.print(vdd); lcd.print(F("V")); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
   // Measure VEE (+3.3V); should be ~3.3V
   float vee = (float)analogRead(SCL) * 5.0 / 1024.0;
-  if(!(vee > 3.2 && vee < 3.8))
-  {
+  if(!(vee > 3.2 && vee < 3.8)){
     lcd.setCursor(0, 1); lcd.print(F("!!V3.3=")); lcd.print(vee); lcd.print(F("V")); lcd_blanks();
     delay(1500); wdt_reset();
   }
@@ -1841,20 +1846,38 @@ void setup()
   bitSet(ADCSRA, ADSC);
   for(; bit_is_set(ADCSRA, ADSC););
   float avcc = 1.1 * 1023.0 / ADC;
-  if(!(avcc > 4.6 && avcc < 5.1))
-  {
+  if(!(avcc > 4.6 && avcc < 5.1)){
     lcd.setCursor(0, 1); lcd.print(F("!!Vavcc=")); lcd.print(avcc); lcd.print(F("V")); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
+  // Report no SSB capability
+  if(!ssb_cap){
+    lcd.setCursor(0, 1); lcd.print(F("No MIC input...")); lcd_blanks();
+    delay(300); wdt_reset();
+  }
+
   // Measure DVM bias; should be ~VAREF/2
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
-  if((ssb_cap) && !(dvm > 1.8 && dvm < 3.2))
-  {
+  if((ssb_cap) && !(dvm > 1.8 && dvm < 3.2)){
     lcd.setCursor(0, 1); lcd.print(F("!!Vadc2=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
+  // Measure AUDIO1, AUDIO2 bias; should be ~VAREF/2
+  if(dsp_cap == SDR){
+    float audio1 = (float)analogRead(AUDIO1) * 5.0 / 1024.0;
+    if(!(audio1 > 1.8 && audio1 < 3.2)){
+      lcd.setCursor(0, 1); lcd.print(F("!!Vadc0=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
+      delay(1500); wdt_reset();
+    }
+    float audio2 = (float)analogRead(AUDIO2) * 5.0 / 1024.0;
+    if(!(audio2 > 1.8 && audio2 < 3.2)){
+      lcd.setCursor(0, 1); lcd.print(F("!!Vadc1=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
+      delay(1500); wdt_reset();
+    }
+  }
+  
   // Measure I2C Bus speed for Bulk Transfers
   si5351.freq(freq, 0, 90);
   wdt_reset();
