@@ -29,7 +29,6 @@
 #define SDA     18        //PC4
 #define SCL     19        //PC5
 
-#include <inttypes.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
@@ -83,6 +82,8 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
 };
 LCD lcd;
+//#include <LiquidCrystal.h>
+//LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
 volatile int8_t encoder_val = 0;
 volatile int8_t encoder_step = 0;
@@ -223,10 +224,138 @@ public:
   }
 };
 
+#define log2(n) (log(n) / log(2))
+
+// /*
+I2C i2c;
+class SI5351 {
+public:
+  volatile int32_t _fout;
+  volatile uint8_t _div;  // note: uint8_t asserts fout > 3.5MHz with R_DIV=1
+  volatile uint16_t _msa128min512;
+  volatile uint32_t _msb128;
+  volatile uint8_t pll_regs[8];
+
+  #define BB0(x) ((uint8_t)(x))           // Bash byte x of int32_t
+  #define BB1(x) ((uint8_t)((x)>>8))
+  #define BB2(x) ((uint8_t)((x)>>16))
+
+  #define FAST __attribute__((optimize("Ofast")))
+
+  inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
+  { 
+    //#define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
+    //uint32_t msb128 = _msb128 + ((int64_t)(_div * (int32_t)df) * _MSC * 128) / fxtal;
+
+    //#define _MSC  0xFFFFF  // Old algorithm 114% CPU load
+    //register uint32_t xmsb = (_div * (_fout + (int32_t)df)) % fxtal;  // xmsb = msb * fxtal/(128 * _MSC);
+    //uint32_t msb128 = xmsb * 5*(32/32) - (xmsb/32);  // msb128 = xmsb * 159/32, where 159/32 = 128 * 0xFFFFF / fxtal; fxtal=27e6
+
+    #define _MSC  (27004800/128)  // 114% CPU load  perfect alignment
+    uint32_t msb128 = (_div * (_fout + (int32_t)df)) % fxtal;
+
+    uint32_t msp1 = _msa128min512 + msb128 / _MSC;  // = 128 * _msa + msb128 / _MSC - 512;
+    uint32_t msp2 = msb128 % _MSC;  // = msb128 - msb128/_MSC * _MSC;
+
+    //pll_regs[0] = BB1(msc);  // 3 regs are constant
+    //pll_regs[1] = BB0(msc);
+    //pll_regs[2] = BB2(msp1);
+    pll_regs[3] = BB1(msp1);
+    pll_regs[4] = BB0(msp1);
+    pll_regs[5] = ((_MSC&0xF0000)>>(16-4))|BB2(msp2); // top nibble MUST be same as top nibble of _MSC !
+    pll_regs[6] = BB1(msp2);
+    pll_regs[7] = BB0(msp2);
+  }
+  #define SI5351_ADDR 0x60              // I2C address of Si5351   (typical)
+
+  inline void SendPLLBRegisterBulk(){
+    i2c.start();
+    i2c.SendByte(SI5351_ADDR << 1);
+    i2c.SendByte(26+1*8 + 3);  // Write to PLLB
+    i2c.SendByte(pll_regs[3]);
+    i2c.SendByte(pll_regs[4]);
+    i2c.SendByte(pll_regs[5]);
+    i2c.SendByte(pll_regs[6]);
+    i2c.SendByte(pll_regs[7]);
+    i2c.stop();
+  }
+
+  void SendRegister(uint8_t reg, uint8_t* data, uint8_t n){
+    i2c.start();
+    i2c.SendByte(SI5351_ADDR << 1);
+    i2c.SendByte(reg);
+    while (n--) i2c.SendByte(*data++);
+    i2c.stop();      
+  }
+  void SendRegister(uint8_t reg, uint8_t val){ SendRegister(reg, &val, 1); }
+      
+  uint32_t fxtal = 27004900;      // Crystal freq in Hz, nominal frequency 27004300
+  uint8_t iqmsa; // to detect a need for a PLL reset
+
+  void freq(uint32_t fout, uint8_t i, uint8_t q){  // Set a CLK0,1 to fout Hz with phase i, q
+      uint8_t msa; uint32_t msb, msc, msp1, msp2, msp3p2;
+      uint8_t rdiv = 0;             // CLK pin sees fout/(2^rdiv)
+      if(fout < 500000){ rdiv = 7; fout *= 128; }; // Divide by 128 for fout 4..500kHz
+
+      uint16_t d = (16 * fxtal) / fout;  // Integer part
+      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d--; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+      uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
+      msa = fvcoa / fxtal;     // Integer part of vco/fxtal
+      msb = ((uint64_t)(fvcoa % fxtal)*_MSC) / fxtal; // Fractional part
+      msc = _MSC;
+      
+      msp1 = 128*msa + 128*msb/msc - 512;
+      msp2 = 128*msb - 128*msb/msc * msc;    // msp3 == msc        
+      msp3p2 = (((msc & 0x0F0000) <<4) | msp2);  // msp3 on top nibble
+      uint8_t pll_regs[8] = { BB1(msc), BB0(msc), BB2(msp1), BB1(msp1), BB0(msp1), BB2(msp3p2), BB1(msp2), BB0(msp2) };
+      SendRegister(26+0*8, pll_regs, 8); // Write to PLLA
+      SendRegister(26+1*8, pll_regs, 8); // Write to PLLB
+
+      msa = fvcoa / fout;     // Integer part of vco/fout
+      msp1 = (128*msa - 512) | (((uint32_t)rdiv)<<20);     // msp1 and msp2=0, msp3=1, not fractional
+      uint8_t ms_regs[8] = {0, 1, BB2(msp1), BB1(msp1), BB0(msp1), 0, 0, 0};
+      SendRegister(42+0*8, ms_regs, 8); // Write to MS0
+      SendRegister(42+1*8, ms_regs, 8); // Write to MS1
+      SendRegister(42+2*8, ms_regs, 8); // Write to MS2
+      SendRegister(16+0, 0x0C|3);       // CLK0: PLLA local msynth; 3=8mA
+      SendRegister(16+1, 0x0C|3);       // CLK1: PLLA local msynth; 3=8mA
+      SendRegister(16+2, 0x2C|3);       // CLK2: PLLB local msynth; 3=8mA
+      SendRegister(165, i * msa / 90);  // CLK0: I-phase (on change -> Reset PLL)
+      SendRegister(166, q * msa / 90);  // CLK1: Q-phase (on change -> Reset PLL)
+      if(iqmsa != ((i-q)*msa/90)){ iqmsa = (i-q)*msa/90; SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
+      SendRegister(3, 0b11111100);      // Enable/disable clock
+
+      _fout = fout;  // cache
+      _div = d;
+      _msa128min512 = fvcoa / fxtal * 128 - 512;
+      _msb128=((uint64_t)(fvcoa % fxtal)*_MSC*128) / fxtal;
+  }
+
+  volatile int32_t prev_pll_freq;
+  uint8_t RecvRegister(uint8_t reg){
+    i2c.start();  // Data write to set the register address
+    i2c.SendByte(SI5351_ADDR << 1);
+    i2c.SendByte(reg);
+    i2c.stop();
+    i2c.start(); // Data read to retrieve the data from the set address
+    i2c.SendByte((SI5351_ADDR << 1) | 1);
+    uint8_t data = i2c.RecvByte(true);
+    i2c.stop();
+    return data;
+  }
+  void powerDown(){
+    for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b11000000);  // Conserve power when output is disabled
+    SendRegister(3, 0b11111111); // Disable all CLK outputs    
+  }
+  #define SI_CLK_OE 3
+
+};
+static SI5351 si5351;
+// */
+
+ /*
 class SI5351 : public I2C {
 public:
-  #define log2(n) (log(n) / log(2))
-
   #define SI_I2C_ADDR 0x60  // SI5351A I2C address: 0x60 for SI5351A-B-GT; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
   #define SI_CLK_OE 3     // Register definitions
   #define SI_CLK0_CONTROL 16
@@ -254,7 +383,7 @@ public:
   volatile int32_t raw_freq;
   volatile uint8_t divider;  // note: because of int8 only freq > 3.6MHz can be covered for R_DIV=1
   volatile uint8_t mult;
-  volatile uint8_t pll_data[8];
+  volatile uint8_t pll_regs[8];
   volatile int32_t prev_pll_freq;
   volatile int32_t pll_freq;   // temporary
   
@@ -315,18 +444,18 @@ public:
   {
     start();
     SendByte(SI_I2C_ADDR << 1);
-    SendByte(SI_SYNTH_PLL_B + 3);  // Skip the first three pll_data bytes (first two always 0xFF and third not often changing
-    SendByte(pll_data[3]);
-    SendByte(pll_data[4]);
-    SendByte(pll_data[5]);
-    SendByte(pll_data[6]);
-    SendByte(pll_data[7]);
+    SendByte(SI_SYNTH_PLL_B + 3);  // Skip the first three pll_regs bytes (first two always 0xFF and third not often changing
+    SendByte(pll_regs[3]);
+    SendByte(pll_regs[4]);
+    SendByte(pll_regs[5]);
+    SendByte(pll_regs[6]);
+    SendByte(pll_regs[7]);
     stop();
   }
   
   #define FAST __attribute__((optimize("Ofast")))
 
-  // this function relies on cached (global) variables: divider, mult, raw_freq, pll_data
+  // this function relies on cached (global) variables: divider, mult, raw_freq, pll_regs
   inline void FAST freq_calc_fast(int16_t freq_offset)
   { // freq_offset is relative to freq set in freq(freq)
     // uint32_t num128 = ((divider * (raw_freq + offset)) % fxtal) * (float)(0xFFFFF * 128) / fxtal;
@@ -339,14 +468,14 @@ public:
     // Set up specified PLL with mult, num and denom: mult is 15..90, num128 is 0..128*1,048,575 (128*0xFFFFF), denom is 0..1,048,575 (0xFFFFF)
     uint32_t P1 = 128 * mult + (num128 / 0xFFFFF) - 512;
     uint32_t P2 = num128 % 0xFFFFF;
-    //pll_data[0] = 0xFF;
-    //pll_data[1] = 0xFF;
-    //pll_data[2] = (P1 >> 14) & 0x0C;
-    pll_data[3] = P1 >> 8;
-    pll_data[4] = P1;
-    pll_data[5] = 0xF0 | (P2 >> 16);
-    pll_data[6] = P2 >> 8;
-    pll_data[7] = P2;
+    //pll_regs[0] = 0xFF;
+    //pll_regs[1] = 0xFF;
+    //pll_regs[2] = (P1 >> 14) & 0x0C;
+    pll_regs[3] = P1 >> 8;
+    pll_regs[4] = P1;
+    pll_regs[5] = 0xF0 | (P2 >> 16);
+    pll_regs[6] = P2 >> 8;
+    pll_regs[7] = P2;
   }
   uint16_t div(uint32_t num, uint32_t denom, uint32_t* b, uint32_t* c)
   { // returns a + b / c = num / denom, where a is the integer part and b and c is the optional fractional part 20 bits each (range 0..1048575)
@@ -362,14 +491,15 @@ public:
   }
   void freq(uint32_t freq, uint8_t i, uint8_t q)
   { // Fout = Fvco / (R * [MSx_a + MSx_b/MSx_c]),  Fvco = Fxtal * [MSPLLx_a + MSPLLx_b/MSPLLx_c]; MSx as integer reduce spur
-    uint8_t r_div = (freq > (SI_PLL_FREQ/256/1)) ? 1 : (freq > (SI_PLL_FREQ/256/32)) ? 32 : 128; // helps divider to be in range
+    //uint8_t r_div = (freq > (SI_PLL_FREQ/256/1)) ? 1 : (freq > (SI_PLL_FREQ/256/32)) ? 32 : 128; // helps divider to be in range
+    uint8_t r_div = (freq < 500000) ? 128 : 1;
     freq *= r_div;  // take r_div into account, now freq is in the range 1MHz to 150MHz
     raw_freq = freq;   // cache frequency generated by PLL and MS stages (excluding R divider stage); used by freq_calc_fast()
   
     divider = SI_PLL_FREQ / freq;  // Calculate the division ratio. 900,000,000 is the maximum internal PLL freq (official range 600..900MHz but can be pushed to 300MHz..~1200Mhz)
     if(divider % 2) divider--;  // divider in range 8.. 900 (including 4,6 for integer mode), even numbers preferred. Note that uint8 datatype is used, so 254 is upper limit
     if( (divider * (freq - 5000) / fxtal) != (divider * (freq + 5000) / fxtal) ) divider -= 2; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
-    /*int32_t*/ pll_freq = divider * freq; // Calculate the pll_freq: the divider * desired output freq
+    pll_freq = divider * freq; // Calculate the pll_freq: the divider * desired output freq
     uint32_t num, denom;
     mult = div(pll_freq, fxtal, &num, &denom); // Determine the mult to get to the required pll_freq (in the range 15..90)
   
@@ -435,6 +565,7 @@ public:
   }
 };
 static SI5351 si5351;
+ */
 
 #undef F_CPU
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
@@ -558,7 +689,7 @@ void dsp_tx()
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
-#define CARRIER_COMPLETELY_OFF_ON_LOW  1
+//#define CARRIER_COMPLETELY_OFF_ON_LOW  1
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
   if(OCR1BL == 0){ si5351.SendRegister(SI_CLK_OE, (amp) ? 0b11111011 : 0b11111111); } // experimental carrier-off for low amplitudes
 #endif
@@ -1120,65 +1251,6 @@ ISR(TIMER2_COMPA_vect)  // Timer2 COMPA interrupt
 #endif
 }
 
-/*
-ISR(TIMER2_COMPA_vect, ISR_NAKED)  // Timer2 COMPA interrupt, naked ISR: no prologue/epilogue generated (an ISR takes at least 38 clock cycles)
-{
-  asm volatile( //prologue (register explanation: https://stackoverflow.com/questions/23943129/gcc-generating-useless-code-in-isr )
-  "push r1\n\r"  //Fixed Registers: R1 always contains zero. During an insn the content might be destroyed, e.g. by a MUL instruction that uses R0/R1 as implicit output register. If an insn destroys R1, the insn must restore R1 to zero afterwards. This register must be saved in ISR prologues and must then be set to zero because R1 might contain values other than zero. The ISR epilogue restores the value. In inline assembler you can use __zero_reg__ for the zero register.
-  "push r0\n\r"  //Fixed Registers: R0 is used as scratch register that need not to be restored after its usage. It must be saved and restored in interrupt service routine's (ISR) prologue and epilogue. In inline assembler you can use __tmp_reg__ for the scratch register.
-  "in r0,__SREG__\n\r"
-  "push r0\n\r"
-  "clr __zero_reg__\n\r"
-  "push r18\n\r" //Call-Clobbered Registers: R18–R27, R30, R31 These GPRs are call clobbered. An ordinary function may use them without restoring the contents. Interrupt service routines (ISRs) must save and restore each register they use.
-  "push r19\n\r"
-  "push r20\n\r"
-  "push r21\n\r"
-  "push r22\n\r"
-  "push r23\n\r"
-  "push r24\n\r"
-  "push r25\n\r"
-  "push r26\n\r"
-  "push r27\n\r"
-  "push r30\n\r"
-  "push r31\n\r"
-  );             // Call-Saved Registers: R2–R17, R28, R29 The remaining GPRs are call-saved, i.e. a function that uses such a registers must restore its original content. This applies even if the register is used to pass a function argument.
-  func_ptr();
-//  asm volatile(
-//  "lds r30,func_ptr\n\r"
-//  "lds r31,func_ptr+1\n\r"
-//  "icall\n\r"
-//  );
-#ifdef DEBUG
-  //numSamples++;
-  asm volatile(
-  "lds r24,numSamples\n\r"
-  "lds r25,numSamples+1\n\r"
-  "adiw r24,1\n\r"
-  "sts numSamples+1,r25\n\r"
-  "sts numSamples,r24\n\r"
-  );
-#endif
-  asm volatile( //epilogue
-  "pop r31\n\r"
-  "pop r30\n\r"
-  "pop r27\n\r"
-  "pop r26\n\r"
-  "pop r25\n\r"
-  "pop r24\n\r"
-  "pop r23\n\r"
-  "pop r22\n\r"
-  "pop r21\n\r"
-  "pop r20\n\r"
-  "pop r19\n\r"
-  "pop r18\n\r"
-  "pop r0\n\r"
-  "out __SREG__,r0\n\r"
-  "pop r0\n\r"
-  "pop r1\n\r"
-  "reti\n\r"
-  );
-}*/
-
 void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
 {
   DIDR0 |= (1 << adcpin); // disable digital input
@@ -1538,22 +1610,17 @@ void show_banner(){
 
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
 
-void display_vfo(uint32_t freq){
+void display_vfo(uint32_t f){
   lcd.setCursor(0, 1);
-  lcd.print('\x06');  // VFO
-  uint32_t n = freq / 1000000;  // lcd.print(f) with commas
-  uint32_t n2 = freq % 1000000;
-  uint32_t scale = 1000000;
-  char buf[16];
-  sprintf(buf, "%2u", n); lcd.print(buf);
-  while(scale != 1){
-    scale /= 1000;
-    n = n2 / scale;
-    n2 = n2  % scale;
-    if(scale == 1) sprintf(buf, ",%02u", n / 10); else // leave last digit out
-    sprintf(buf, ",%03u", n);
-    lcd.print(buf);
+  lcd.print('\x06');  // VFO A/B
+
+  uint32_t scale=10e6;  // VFO frequency
+  if(f/scale == 0){ lcd.print(' '); scale/=10; }  // Initial space instead of zero
+  for(; scale!=1; f%=scale, scale/=10){
+    lcd.print(f/scale);
+    if(scale == (uint32_t)1e3 || scale == (uint32_t)1e6) lcd.print(',');  // Thousands separator
   }
+  
   lcd.print(" "); lcd.print(mode_label[mode]); lcd.print("  ");
   lcd.setCursor(15, 1); lcd.print("R");
 }
@@ -1897,9 +1964,10 @@ void setup()
   uint16_t i2c_error = 0;  // number of I2C byte transfer errors
   for(i = 0; i != 1000; i++){
     si5351.freq_calc_fast(i);
-    //for(int j = 3; j != 8; j++) si5351.pll_data[j] = rand();
+    //for(int j = 3; j != 8; j++) si5351.pll_regs[j] = rand();
     si5351.SendPLLBRegisterBulk();
-    for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_B + j) != si5351.pll_data[j]) i2c_error++;
+    #define SI_SYNTH_PLL_B 34
+    for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_B + j) != si5351.pll_regs[j]) i2c_error++;
   }
   if(i2c_error){
     lcd.setCursor(0, 1); lcd.print(F("!!BER_i2c=")); lcd.print(i2c_error); lcd_blanks();

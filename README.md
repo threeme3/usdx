@@ -250,6 +250,8 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 [RX3DPK]: https://www.facebook.com/photo.php?fbid=2382353591830446&set=pcb.2382353628497109&type=3&theater
 
+[QRP-BR]: https://groups.io/g/QRP-BR/topic/gerando_ssb_digitalmente/29628623
+
 [Opzij]: https://youtu.be/uN706PiFLm0
 
 [lyrics]: https://www.google.com/search?q=lyrics+opzij
