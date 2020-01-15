@@ -111,6 +111,31 @@ void encoder_setup()
   last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
   interrupts();
 }
+/*
+class Encoder {
+public:
+  volatile int8_t val = 0;
+  volatile int8_t step = 0;
+  uint8_t last_state;
+  Encoder(){
+    pinMode(ROT_A, INPUT_PULLUP);
+    pinMode(ROT_B, INPUT_PULLUP);
+    PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); // interrupt-enable for ROT_A, ROT_B pin changes; see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
+    PCICR |= (1 << PCIE2);
+    last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
+    sei();    
+  }
+  void event(){
+    switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
+      case 0x31: case 0x10: case 0x02: case 0x23: if(step < 0) step = 0; step++; if(step >  3){ step = 0; val++; } break;
+      case 0x32: case 0x20: case 0x01: case 0x13: if(step > 0) step = 0; step--; if(step < -3){ step = 0; val--; } break;  
+    }
+  }
+};
+Encoder enc;
+ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
+  enc.event();
+}*/
 
 class I2C {
 public:
@@ -244,15 +269,15 @@ public:
 
   inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
   { 
-    //#define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
-    //uint32_t msb128 = _msb128 + ((int64_t)(_div * (int32_t)df) * _MSC * 128) / fxtal;
+    #define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
+    uint32_t msb128 = _msb128 + ((int64_t)(_div * (int32_t)df) * _MSC * 128) / fxtal;
 
     //#define _MSC  0xFFFFF  // Old algorithm 114% CPU load
     //register uint32_t xmsb = (_div * (_fout + (int32_t)df)) % fxtal;  // xmsb = msb * fxtal/(128 * _MSC);
     //uint32_t msb128 = xmsb * 5*(32/32) - (xmsb/32);  // msb128 = xmsb * 159/32, where 159/32 = 128 * 0xFFFFF / fxtal; fxtal=27e6
 
-    #define _MSC  (27004800/128)  // 114% CPU load  perfect alignment
-    uint32_t msb128 = (_div * (_fout + (int32_t)df)) % fxtal;
+    //#define _MSC  (27004800/128)  // 114% CPU load  perfect alignment
+    //uint32_t msb128 = (_div * (_fout + (int32_t)df)) % fxtal;
 
     uint32_t msp1 = _msa128min512 + msb128 / _MSC;  // = 128 * _msa + msb128 / _MSC - 512;
     uint32_t msp2 = msb128 % _MSC;  // = msb128 - msb128/_MSC * _MSC;
@@ -290,7 +315,7 @@ public:
   void SendRegister(uint8_t reg, uint8_t val){ SendRegister(reg, &val, 1); }
       
   uint32_t fxtal = 27004900;      // Crystal freq in Hz, nominal frequency 27004300
-  uint8_t iqmsa; // to detect a need for a PLL reset
+  int16_t iqmsa; // to detect a need for a PLL reset
 
   void freq(uint32_t fout, uint8_t i, uint8_t q){  // Set a CLK0,1 to fout Hz with phase i, q
       uint8_t msa; uint32_t msb, msc, msp1, msp2, msp3p2;
@@ -718,12 +743,47 @@ void dsp_tx_cw()
   
   process_minsky();
   OCR1AL = (p_sin >> (16 - volume)) + 128;
+}
 
-/*
-  acc = acc + param_c;  // param_c = 7570
-  int8_t temp = acc >> 8;
-  int8_t mask = temp >> 7;
-  OCR1AL = temp ^ mask;*/
+void dsp_tx_am()
+{ // jitter dependent things first
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
+  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
+  int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  int16_t in = (adc >> MIC_ATTEN);
+  in = in << (drive-4);
+  //static int16_t dc;
+  //dc += (in - dc) / 2;
+  //in = in - dc;     // DC decoupling
+  #define AM_BASE 32
+  in=max(0, min(255, (in + AM_BASE)));
+  amp=in;// lut[in];
+}
+
+uint8_t reg;
+void dsp_tx_dsb()
+{ // jitter dependent things first
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
+  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
+  si5351.SendRegister(16+2, reg);             // CLK2 polarity depending on amplitude
+  int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  int16_t in = (adc >> MIC_ATTEN);
+  in = in << drive;
+  reg = (in < 0) ? 0x2C|3|0x10 : 0x2C|3;  //0x2C=PLLB local msynth 3=8mA 0x10=invert
+  in=min(255, abs(in));
+  amp=in;// lut[in];
+}
+
+void dsp_tx_fm()
+{ // jitter dependent things first
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
+  OCR1BL = lut[255];                   // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
+  si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
+  int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  int16_t in = (adc >> MIC_ATTEN);
+  in = in << (drive);
+  int16_t df = in;
+  si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
 }
 
 volatile int8_t cwdec = 0;
@@ -921,12 +981,6 @@ inline int16_t slow_dsp(int16_t ac)
   if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);
 
   if(mode == AM) { // (12%CPU for the mode selection etc)
-    /*{ static int16_t dc;
-      dc += (i - dc) / 2;
-      i = i - dc; }  // DC decoupling
-    { static int16_t dc;
-      dc += (q - dc) / 2;
-      q = q - dc; }  // DC decoupling  */
     ac = magn(i, q);  //(25%CPU)
     { static int16_t dc;
       dc += (ac - dc) / 2;
@@ -942,12 +996,9 @@ inline int16_t slow_dsp(int16_t ac)
   if(agc) ac = process_agc(ac);
   ac = ac >> (16-volume);
   if(nr) ac = process_nr(ac);
-  if(mode == USB || mode == LSB){
-      if(filt) ac = filt_var(ac);
-  }
+  if(filt) ac = filt_var(ac);
   if(mode == CW){
-    if(filt) ac = filt_var(ac << 0) << 2;
-    //if(filt) ac = filt_var(ac << 6);
+    if(filt) ac = ac << 2;
     
     if(cwdec){  // CW decoder enabled?
       char ch = cw(ac >> 0);
@@ -1495,7 +1546,15 @@ void switch_rxtx(uint8_t tx_enable){
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
-  func_ptr = (tx_enable) ? ((mode == CW) ? dsp_tx_cw : dsp_tx) : sdr_rx;
+  if(tx_enable){
+    switch(mode){
+      case USB:
+      case LSB: func_ptr = dsp_tx; break;
+      case CW:  func_ptr = dsp_tx_cw; break;
+      case AM:  func_ptr = dsp_tx_am; break;
+      case FM:  func_ptr = dsp_tx_fm; break;
+    }
+  } else func_ptr = sdr_rx;
   if((!dsp_cap) && (!tx_enable) && vox)  func_ptr = dummy; //hack: for SSB mode, disable dsp_rx during vox mode enabled as it slows down the vox loop too much!
   interrupts();
   if(tx_enable) ADMUX = admux[2];
