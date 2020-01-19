@@ -930,7 +930,7 @@ inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
 { 
   int16_t zx0 = v;
 
-  static int16_t za1,za2;
+  static int16_t za0,za1,za2;
   if(filt < 4){  // for SSB filters
     // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     static int16_t zz1,zz2;
@@ -938,12 +938,11 @@ inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
     zz2=zz1;
     zz1=v;
   }
-  za2=za1;
-  za1=zx0;
+  za0=zx0;
 
   // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
   //static int16_t za1,za2;
-  static int16_t zb1,zb2;
+  static int16_t zb0,zb1,zb2;
   switch(filt){
     case 1: break; //0-4000Hz (pass-through)
     case 2: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
@@ -953,8 +952,7 @@ inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
     case 6: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
     case 7: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
   }
-  zb2=zb1;
-  zb1=zx0;
+  zb0=zx0;
 
   static int16_t zc1,zc2;
   switch(filt){
@@ -965,9 +963,16 @@ inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
     case 5: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
     case 6: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
     case 7: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
-  }
+  }  
   zc2=zc1;
   zc1=zx0;
+
+  zb2=zb1;
+  zb1=zb0;
+
+  za2=za1;
+  za1=za0;
+
   return zx0;
 }
 
