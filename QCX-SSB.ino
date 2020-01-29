@@ -567,8 +567,8 @@ public:
     setCursor(0, 0);
   }
 };
-//SSD1306Device lcd;
-LCD lcd;
+SSD1306Device lcd;
+//LCD lcd;
 //#include <LiquidCrystal.h>
 //LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
@@ -1189,7 +1189,7 @@ inline int16_t ssb(int16_t in)
 #define MIC_ATTEN  0  // 0*6dB attenuation (note that the LSB bits are quite noisy)
 volatile int8_t mox = 0;
 volatile int8_t volume = 8;
-
+/*
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
 void dsp_tx()
@@ -1201,6 +1201,33 @@ void dsp_tx()
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
+//#define CARRIER_COMPLETELY_OFF_ON_LOW  1
+#ifdef CARRIER_COMPLETELY_OFF_ON_LOW
+  if(OCR1BL == 0){ si5351.SendRegister(SI_CLK_OE, (amp) ? 0b11111011 : 0b11111111); } // experimental carrier-off for low amplitudes
+#endif
+
+  if(!mox) return;
+  OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
+}
+*/
+// This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
+// It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
+static int16_t _adc;
+void dsp_tx()
+{ // jitter dependent things first
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
+  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
+  si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
+  //OCR1BL = amp;                      // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
+  int16_t adc = 0;                     // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  adc = ADC; 
+  ADCSRA |= (1 << ADSC);
+  int16_t df = ssb(_adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
+  adc += ADC;
+  ADCSRA |= (1 << ADSC);
+  si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
+  adc += ADC;
+  _adc = (adc/3 - 512);
 //#define CARRIER_COMPLETELY_OFF_ON_LOW  1
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
   if(OCR1BL == 0){ si5351.SendRegister(SI_CLK_OE, (amp) ? 0b11111011 : 0b11111111); } // experimental carrier-off for low amplitudes
