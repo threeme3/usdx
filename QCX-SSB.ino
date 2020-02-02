@@ -1,10 +1,10 @@
-//  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
+//  QCX-SSB.igit update no - https://github.com/threeme3/QCX-SSB
 //
 //  Copyright 2019, 2020   Guido PE1NNZ <pe1nnz@amsat.org>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.01v"
+#define VERSION   "1.01w"
 
 // QCX pin defintion
 #define LCD_D4  0         //PD0
@@ -82,11 +82,12 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
 };
 
-class I2C_ {
+// I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
+class I2C_ {  // direct port I/O (disregards/does-not-need pull-ups)
 public:
   #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
-  #define _I2C_SDA (1<<0) // (1 << 4) // PC4
-  #define _I2C_SCL (1<<1) // (1 << 5) // PC5
+  #define _I2C_SDA (1<<2) // PD2
+  #define _I2C_SCL (1<<3) // PD3
   #define _I2C_INIT() _I2C_SDA_HI(); _I2C_SCL_HI(); DDRD |= (_I2C_SDA | _I2C_SCL);
   #define _I2C_SDA_HI() PORTD |=  _I2C_SDA; _DELAY();
   #define _I2C_SDA_LO() PORTD &= ~_I2C_SDA; _DELAY();
@@ -567,8 +568,8 @@ public:
     setCursor(0, 0);
   }
 };
-SSD1306Device lcd;
-//LCD lcd;
+//SSD1306Device lcd;
+LCD lcd;
 //#include <LiquidCrystal.h>
 //LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
@@ -756,15 +757,15 @@ public:
 
   inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
   { 
-    //#define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
-    //uint32_t msb128 = _msb128 + ((int64_t)(_div * (int32_t)df) * _MSC * 128) / fxtal;
+    #define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
+    uint32_t msb128 = _msb128 + ((int64_t)(_div * (int32_t)df) * _MSC * 128) / fxtal;
 
     //#define _MSC  0xFFFFF  // Old algorithm 114% CPU load, shortcut for a fixed fxtal=27e6
     //register uint32_t xmsb = (_div * (_fout + (int32_t)df)) % fxtal;  // xmsb = msb * fxtal/(128 * _MSC);
     //uint32_t msb128 = xmsb * 5*(32/32) - (xmsb/32);  // msb128 = xmsb * 159/32, where 159/32 = 128 * 0xFFFFF / fxtal; fxtal=27e6
 
-    #define _MSC  (27004800/128)  // 114% CPU load  perfect alignment
-    uint32_t msb128 = (_div * (_fout + (int32_t)df)) % fxtal;
+    //#define _MSC  (27004800/128)  // 114% CPU load  perfect alignment
+    //uint32_t msb128 = (_div * (_fout + (int32_t)df)) % fxtal;
 
     uint32_t msp1 = _msa128min512 + msb128 / _MSC;  // = 128 * _msa + msb128 / _MSC - 512;
     uint32_t msp2 = msb128 % _MSC;  // = msb128 - msb128/_MSC * _MSC;
@@ -801,7 +802,7 @@ public:
   }
   void SendRegister(uint8_t reg, uint8_t val){ SendRegister(reg, &val, 1); }
       
-  uint32_t fxtal = 27004900;      // Crystal freq in Hz, nominal frequency 27004300
+  uint32_t fxtal = 27005075;      // Crystal freq in Hz, nominal frequency 27004300
   int16_t iqmsa; // to detect a need for a PLL reset
 
   void freq(uint32_t fout, uint8_t i, uint8_t q){  // Set a CLK0,1 to fout Hz with phase i, q
@@ -1116,6 +1117,8 @@ inline void _vox(uint8_t trigger)
 #define _UA  (F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
 //#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 //#define CONSTANT_AMP  1 // enable this in case there is no circuitry for controlling envelope (key shaping circuit)
+//#define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on no-envelope transitions, to prevent potential unwanted biasing/leakage through PA circuit
+#define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
 
 inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 { // source: [1] http://www-labs.iro.umontreal.ca/~mignotte/IFT2425/Documents/EfficientApproximationArctgFunction.pdf
@@ -1160,7 +1163,7 @@ inline int16_t ssb(int16_t in)
 
   _amp = _amp << (drive);
 #ifdef CONSTANT_AMP
-  if(_amp < 4 ) return 0; //hack: for constant amplitude cases, set drive=1 for good results
+  if(_amp < 4 ){ amp = 0; return 0; } //hack: for constant amplitude cases, set drive=1 for good results
   //digitalWrite(RX, (_amp < 4)); // fast on-off switching for constant amplitude case
 #endif
   _amp = ((_amp > 255) || (drive == 8)) ? lut[255] : _amp; // clip or when drive=8 use max output
@@ -1189,11 +1192,29 @@ inline int16_t ssb(int16_t in)
 #define MIC_ATTEN  0  // 0*6dB attenuation (note that the LSB bits are quite noisy)
 volatile int8_t mox = 0;
 volatile int8_t volume = 8;
-/*
+
 // This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
 // It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
+static int16_t _adc;
 void dsp_tx()
 { // jitter dependent things first
+#ifdef MULTI_ADC  // SSB with multiple ADC conversions:
+  int16_t adc;                         // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  adc = ADC;
+  ADCSRA |= (1 << ADSC);
+  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
+  si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
+  //OCR1BL = amp;                      // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
+  adc += ADC;
+  ADCSRA |= (1 << ADSC);
+  int16_t df = ssb(_adc >> MIC_ATTEN); // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
+  adc += ADC;
+  ADCSRA |= (1 << ADSC);
+  si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
+  adc += ADC;
+  ADCSRA |= (1 << ADSC);
+  _adc = (adc/4 - 512);
+#else  // SSB with single ADC conversion:
   ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
   //OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
   si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
@@ -1201,34 +1222,8 @@ void dsp_tx()
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   int16_t df = ssb(adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
-//#define CARRIER_COMPLETELY_OFF_ON_LOW  1
-#ifdef CARRIER_COMPLETELY_OFF_ON_LOW
-  if(OCR1BL == 0){ si5351.SendRegister(SI_CLK_OE, (amp) ? 0b11111011 : 0b11111111); } // experimental carrier-off for low amplitudes
 #endif
 
-  if(!mox) return;
-  OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
-}
-*/
-// This is the ADC ISR, issued with sample-rate via timer1 compb interrupt.
-// It performs in real-time the ADC sampling, calculation of SSB phase-differences, calculation of SI5351 frequency registers and send the registers to SI5351 over I2C.
-static int16_t _adc;
-void dsp_tx()
-{ // jitter dependent things first
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
-  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
-  si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
-  //OCR1BL = amp;                      // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
-  int16_t adc = 0;                     // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
-  adc = ADC; 
-  ADCSRA |= (1 << ADSC);
-  int16_t df = ssb(_adc >> MIC_ATTEN);  // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
-  adc += ADC;
-  ADCSRA |= (1 << ADSC);
-  si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
-  adc += ADC;
-  _adc = (adc/3 - 512);
-//#define CARRIER_COMPLETELY_OFF_ON_LOW  1
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
   if(OCR1BL == 0){ si5351.SendRegister(SI_CLK_OE, (amp) ? 0b11111011 : 0b11111111); } // experimental carrier-off for low amplitudes
 #endif
@@ -1854,10 +1849,12 @@ void timer1_start(uint32_t fs)
 {  // Timer 1: OC1A and OC1B in PWM mode
   TCCR1A = 0;
   TCCR1B = 0;
-  TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11); // Clear OC1A,OC1B on Compare Match when upcounting. Set OC1A,OC1B on Compare Match when downcounting.
-  TCCR1B |= (1 << CS10) | (1 << WGM13) | (1 << WGM12); // WGM13: Mode 14 - Fast PWM;  CS10: clkI/O/1 (No prescaling)
+  TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11); // Clear OC1A/OC1B on compare match, set OC1A/OC1B at BOTTOM (non-inverting mode)
+  TCCR1B |= (1 << CS10) | (1 << WGM13) | (1 << WGM12); // Mode 14 - Fast PWM;  CS10: clkI/O/1 (No prescaling)
   ICR1H = 0x00;
   ICR1L = min(255, (float)F_CPU / (float)fs - 0.5);  // PWM value range (fs>78431):  Fpwm = F_CPU / [Prescaler * (1 + TOP)]
+  //TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10); // Clear OC1A/OC1B on compare match, set OC1A/OC1B at BOTTOM (non-inverting mode)
+  //TCCR1B |= (1 << CS10) | (1 << WGM12); // Mode 5 - Fast PWM, 8-bit;  CS10: clkI/O/1 (No prescaling)
   OCR1AH = 0x00;
   OCR1AL = 0x00;  // OC1A (SIDETONE) PWM duty-cycle (span defined by ICR).
   OCR1BH = 0x00;
@@ -2398,7 +2395,7 @@ void setup()
   digitalWrite(SIDETONE, HIGH);
   int16_t v2 = analogRead(AUDIO2);
   digitalWrite(SIDETONE, LOW);
-  dsp_cap = !(abs(v2 - v1) > (0.5 * 1024.0 / 5.0));  // DSP capability?
+  dsp_cap = !(abs(v2 - v1) > (0.05 * 1024.0 / 5.0));  // DSP capability?
   if(dsp_cap){  // Test if QCX has SDR capability: AUDIO2 is disconnected from AUDIO1  (only in case of DSP capability)
     delay(400); wdt_reset(); // settle:  the following test only works well 400ms after startup
     v1 = analogRead(AUDIO1);
@@ -2421,7 +2418,7 @@ void setup()
   v2 = analogRead(DVM);
   digitalWrite(DAH, LOW);
   pinMode(DAH, INPUT_PULLUP);
-  ssb_cap = (abs(v2 - v1) > (0.5 * 1024.0 / 5.0));  // SSB capability?
+  ssb_cap = (abs(v2 - v1) > (0.05 * 1024.0 / 5.0));  // SSB capability?
 
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
@@ -2578,10 +2575,39 @@ void setup()
   show_banner();  // remove release number
 
   start_rx();
+
+// #define CAT 1
+#ifdef CAT
+  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
+#endif
 }
+
+void print_char(uint8_t in){  // Print char in second line of display and scroll right.
+  for(int i = 0; i!= 15; i++) out[i] = out[i+1];
+  out[15] = in;
+  out[16] = '\0';
+  cw_event = true;
+}
+
+static char cat[16];
+static uint8_t nc = 0;
 
 void loop()
 {
+#ifdef CAT
+  if(Serial.available() > 0){
+    uint8_t in = Serial.read();
+    print_char(in);
+    if(in == ';'){  // process current cat cmd
+      cat[nc] = '\0'; 
+      nc = 0;       // prepare for next cat cmd
+      char tmp[16];
+      if(sscanf(cat, "IF%s", tmp) == 1){ lcd.setCursor(0, 0); lcd.print(cat); };
+      
+    } else if(nc < (sizeof(cat) - 1)) cat[nc++] = in;
+  }
+#endif
+  
   //delay(10);
 
   if(menumode == 0){
@@ -2905,11 +2931,15 @@ scan
 unwanted VOX feedback in DSP mode
 move last bit of arrays into flash? https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_rom_array.html
 remove floats
-
-Multiple ADC conversion and avg in TX path 
-u-law in RX path: http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
+u-law in RX path?: http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
 Arduino library?
 1. RX bias offset correction by measurement avg, 2. charge decoupling cap. by resetting to 0V and setting 5V for a certain amount of (charge) time
+AGC amplitude sense behind filter, controlling gain before filter
+add 1K (500R?) to GND at TTL RF output to keep zero-level below BS170 threshold
+additional PWM output for potential BOOST conversion
+SWR measurement?
+CW decoder amp thrshld restriction and noise reduction (use of certain pause amounts)
+squelch gating
 
 Analyse assembly:
 /home/guido/Downloads/arduino-1.8.10/hardware/tools/avr/bin/avr-g++ -S -g -Os -w -std=gnu++11 -fpermissive -fno-exceptions -ffunction-sections -fdata-sections -fno-threadsafe-statics -Wno-error=narrowing -MMD -mmcu=atmega328p -DF_CPU=16000000L -DARDUINO=10810 -DARDUINO_AVR_UNO -DARDUINO_ARCH_AVR -I/home/guido/Downloads/arduino-1.8.10/hardware/arduino/avr/cores/arduino -I/home/guido/Downloads/arduino-1.8.10/hardware/arduino/avr/variants/standard /tmp/arduino_build_483134/sketch/QCX-SSB.ino.cpp -o /tmp/arduino_build_483134/sketch/QCX-SSB.ino.cpp.txt
