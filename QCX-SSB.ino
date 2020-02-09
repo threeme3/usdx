@@ -1,10 +1,10 @@
-//  QCX-SSB.igit update no - https://github.com/threeme3/QCX-SSB
+//  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
 //
 //  Copyright 2019, 2020   Guido PE1NNZ <pe1nnz@amsat.org>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.01w"
+#define VERSION   "1.01x"
 
 // QCX pin defintion
 #define LCD_D4  0         //PD0
@@ -1202,11 +1202,11 @@ void dsp_tx()
   int16_t adc;                         // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   adc = ADC;
   ADCSRA |= (1 << ADSC);
-  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
+  //OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
   si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
-  //OCR1BL = amp;                      // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
+  OCR1BL = amp;                      // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
   adc += ADC;
-  ADCSRA |= (1 << ADSC);
+  //ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct biasing)
   int16_t df = ssb(_adc >> MIC_ATTEN); // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   adc += ADC;
   ADCSRA |= (1 << ADSC);
@@ -2251,7 +2251,7 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
 uint32_t schedule_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
-static uint8_t pwm_max = 192;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 192 for biasing BS170 directly
+static uint8_t pwm_max = 220;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* filt_label[N_FILT+1] = { "Full", "4000", "2500", "1700", "500", "200", "100", "50" };
@@ -2550,6 +2550,7 @@ void setup()
 
   drive = 4;  // Init settings
   if(!ssb_cap){ mode = CW; filt = 4; stepsize = STEP_500; }
+  if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
@@ -2615,7 +2616,7 @@ void loop()
     if(!((mode == CW) && cw_event)) stepsize_showcursor();
   }
 
-  if(mode == CW && cw_event){
+  if(cw_event){
     cw_event = false;
     lcd.setCursor(0, 1); lcd.print(out);
   }
