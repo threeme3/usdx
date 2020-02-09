@@ -1166,8 +1166,8 @@ inline int16_t ssb(int16_t in)
   if(_amp < 4 ){ amp = 0; return 0; } //hack: for constant amplitude cases, set drive=1 for good results
   //digitalWrite(RX, (_amp < 4)); // fast on-off switching for constant amplitude case
 #endif
-  _amp = ((_amp > 255) || (drive == 8)) ? lut[255] : _amp; // clip or when drive=8 use max output
-  amp = (tx) ? lut[_amp] : 0;
+  amp = ((_amp > 255) || (drive == 8)) ? lut[255] : lut[_amp]; // clip or when drive=8 use max output
+  amp = (tx) ? amp : 0;
 
   static int16_t prev_phase;
   int16_t phase = arctan3(q, i);
@@ -1206,7 +1206,7 @@ void dsp_tx()
   si5351.SendPLLBRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
   OCR1BL = amp;                      // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
   adc += ADC;
-  //ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct biasing)
+  //ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct biasing); ENABLE this line when using direct biasing!!
   int16_t df = ssb(_adc >> MIC_ATTEN); // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   adc += ADC;
   ADCSRA |= (1 << ADSC);
