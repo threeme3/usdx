@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.01x"
+#define VERSION   "1.01y"
 
 // QCX pin defintion
 #define LCD_D4  0         //PD0
@@ -21,10 +21,10 @@
 #define SIG_OUT 11        //PB3
 #define DAH     12        //PB4
 #define DIT     13        //PB5
-#define AUDIO1  PIN_A0    //PC0
-#define AUDIO2  PIN_A1    //PC1
-#define DVM     PIN_A2    //PC2
-#define BUTTONS PIN_A3    //PC3
+#define AUDIO1  14        //PC0/A0
+#define AUDIO2  15        //PC1/A1
+#define DVM     16        //PC2/A2
+#define BUTTONS 17        //PC3/A3
 #define LCD_RS  18        //PC4 shared with SDA
 #define SDA     18        //PC4
 #define SCL     19        //PC5
@@ -80,6 +80,32 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void noCursor(){ cmd(0x0c); }
   void noDisplay(){ cmd(0x08); }
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
+};
+
+#include <LiquidCrystal.h>
+class LCD_ : public LiquidCrystal {
+public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
+  //LCD_(uint8_t rs = LCD_RS, uint8_t en = LCD_EN, uint8_t d4 = LCD_D4, uint8_t d5, = LCD_D5 uint8_t d6 = LCD_D6, uint8_t d7 = LCD_D7) : LiquidCrystal(rs, en, d4, d5, d6, d7){ };
+  LCD_() : LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7){ };
+  virtual size_t write(uint8_t value){ // overwrites LiquidCrystal::write() and re-implements LCD data writes
+    pinMode(LCD_RS, INPUT);  // pull-up LCD_RS
+    write4bits(value >> 4);
+    write4bits(value);
+    pinMode(LCD_RS, OUTPUT); // pull-down LCD_RS
+    return 1;
+  };
+  void write4bits(uint8_t value){
+    digitalWrite(LCD_D4, (value >> 0) & 0x01);
+    digitalWrite(LCD_D5, (value >> 1) & 0x01);
+    digitalWrite(LCD_D6, (value >> 2) & 0x01);
+    digitalWrite(LCD_D7, (value >> 3) & 0x01);
+    digitalWrite(LCD_EN, LOW);  // pulseEnable
+    delayMicroseconds(1);
+    digitalWrite(LCD_EN, HIGH);
+    delayMicroseconds(1);    // enable pulse must be >450ns
+    digitalWrite(LCD_EN, LOW);
+    delayMicroseconds(100);   // commands need > 37us to settle
+  };
 };
 
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
@@ -455,10 +481,10 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
     0x20, 0b10,   // Set Memory Addressing Mode
           // 00=Horizontal Addressing Mode; 01=Vertical Addressing Mode;
           // 10=Page Addressing Mode (RESET); 11=Invalid
-//  0xB0,     // Set Page Start Address for Page Addressing Mode, 0-7
+ 0xB0,     // Set Page Start Address for Page Addressing Mode, 0-7
   0xC8,     // Set COM Output Scan Direction.  Flip Veritically.
-//  0x00,     // Set low nibble of column address
-//  0x10,     // Set high nibble of column address
+ 0x00,     // Set low nibble of column address
+ 0x10,     // Set high nibble of column address
    0x40,     // Set display start line address
   0x81, /*32*/ 0x7F,   // Set contrast control register
   0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
@@ -569,7 +595,8 @@ public:
   }
 };
 //SSD1306Device lcd;
-LCD lcd;
+//LCD lcd;
+LCD_ lcd;
 //#include <LiquidCrystal.h>
 //LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
@@ -1166,8 +1193,8 @@ inline int16_t ssb(int16_t in)
   if(_amp < 4 ){ amp = 0; return 0; } //hack: for constant amplitude cases, set drive=1 for good results
   //digitalWrite(RX, (_amp < 4)); // fast on-off switching for constant amplitude case
 #endif
-  amp = ((_amp > 255) || (drive == 8)) ? lut[255] : lut[_amp]; // clip or when drive=8 use max output
-  amp = (tx) ? amp : 0;
+  _amp = ((_amp > 255) || (drive == 8)) ? 255 : _amp; // clip or when drive=8 use max output
+  amp = (tx) ? lut[_amp] : 0;
 
   static int16_t prev_phase;
   int16_t phase = arctan3(q, i);
@@ -1492,7 +1519,29 @@ volatile int16_t i, q;
 inline int16_t slow_dsp(int16_t ac)
 {
   static uint8_t absavg256cnt;
-  if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);
+  if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; 
+//#define AUTO_ADC_BIAS  1
+#ifdef AUTO_ADC_BIAS
+    if(param_b < 0){
+      pinMode(AUDIO1, INPUT_PULLUP);
+      pinMode(AUDIO1, INPUT);
+    }
+    if(param_c < 0){
+      pinMode(AUDIO2, INPUT_PULLUP);
+      pinMode(AUDIO2, INPUT);
+    }
+    if(param_b > 500){
+      pinMode(AUDIO1, OUTPUT);
+      digitalWrite(AUDIO1, LOW);
+      pinMode(AUDIO1, INPUT);
+    }
+    if(param_c > 500){
+      pinMode(AUDIO2, OUTPUT);
+      digitalWrite(AUDIO2, LOW);
+      pinMode(AUDIO2, INPUT);
+    }
+#endif
+  } else absavg256 += abs(ac);
 
   if(mode == AM) { // (12%CPU for the mode selection etc)
     ac = magn(i, q);  //(25%CPU)
@@ -1571,23 +1620,9 @@ void sdr_rx()
   //int16_t ac = adc - dc;     // DC decoupling
   int16_t ac = adc;
 
-//#define AUTO_ADC_BIAS  1
 #ifdef AUTO_ADC_BIAS
-  param_b = (127*param_b + adc)/128;
-  if(param_b > 8){
-    digitalWrite(AUDIO1, LOW);
-    pinMode(AUDIO1, OUTPUT);
-    pinMode(AUDIO1, INPUT);
-    //param_b = 0;
-  } //else
-  if(param_b < -8){
-    digitalWrite(AUDIO1, HIGH);
-    pinMode(AUDIO1, OUTPUT);
-    pinMode(AUDIO1, INPUT);
-    //param_b = 0;
-  }
+  param_b = (7*param_b + adc)/8;
 #endif
-
   int16_t ac2;
   static int16_t z1;
   if(rx_state == 0 || rx_state == 4){  // 1st stage: down-sample by 2
@@ -1646,21 +1681,8 @@ void sdr_rx_q()
   int16_t ac = adc;
 
 #ifdef AUTO_ADC_BIAS
-  param_c = (127*param_c + adc)/128;
-  if(param_c > 8){
-    digitalWrite(AUDIO2, LOW);
-    pinMode(AUDIO2, OUTPUT);
-    pinMode(AUDIO2, INPUT);
-    //param_c = 0;
-  } //else
-  if(param_c < -8){
-    digitalWrite(AUDIO2, HIGH);
-    pinMode(AUDIO2, OUTPUT);
-    pinMode(AUDIO2, INPUT);
-    //param_c = 0;
-  }
+  param_c = (7*param_c + adc)/8;
 #endif
-  
   int16_t ac2;
   static int16_t z1;
   if(rx_state == 3 || rx_state == 7){  // 1st stage: down-sample by 2
@@ -2590,8 +2612,23 @@ void print_char(uint8_t in){  // Print char in second line of display and scroll
   cw_event = true;
 }
 
-static char cat[16];
+static char cat[20];  // temporary here
 static uint8_t nc = 0;
+static uint16_t cat_cmd = 0;
+
+void parse_cat(uint8_t in){   // TS480 CAT protocol:  https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
+  if(nc == 0) cat_cmd = in << 8;
+  if(nc == 1) cat_cmd += in;
+  if(in == ';'){  // end of cat command -> parse and process
+
+    switch(cat_cmd){
+      case 'I'<<8|'F': Serial.write("IF00010138000     +00000000002000000 ;"); lcd.setCursor(0, 0); lcd.print("IF"); break;
+    }
+    nc = 0;       // reset
+  } else {
+    if(nc < (sizeof(cat) - 1)) cat[nc++] = in; // buffer and count-up
+  }
+}
 
 void loop()
 {
@@ -2599,13 +2636,7 @@ void loop()
   if(Serial.available() > 0){
     uint8_t in = Serial.read();
     print_char(in);
-    if(in == ';'){  // process current cat cmd
-      cat[nc] = '\0'; 
-      nc = 0;       // prepare for next cat cmd
-      char tmp[16];
-      if(sscanf(cat, "IF%s", tmp) == 1){ lcd.setCursor(0, 0); lcd.print(cat); };
-      
-    } else if(nc < (sizeof(cat) - 1)) cat[nc++] = in;
+    parse_cat(in);
   }
 #endif
   
@@ -2843,6 +2874,7 @@ void loop()
       if((menu == PWM_MIN) || (menu == PWM_MAX)){
         for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
           lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
+          //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
       }
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate

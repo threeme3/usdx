@@ -19,7 +19,7 @@ pe1nnz@amsat.org
 - Approximately **5W PEP SSB output** (depending on supply voltage, amplitude-PA voltage regulated through PWM with 48dB dynamic range)
 - Supports **USB and LSB** modes up to **2400 Hz bandwidth** (receiver and transmitter 400..2330Hz)
 - Two-tone third-order intermodulation distortion **(IMD3) of -33dBc** (-16dBc for constant-envelope) and **carrier/side-band rejection better than -45dBc** (two-tone)
-- Receiver unwanted side-band **rejection up to -20dB**
+- Receiver unwanted side-band **rejection up to -50dB**
 - Continuously tunable through bands **80m-10m** (anything between 20kHz-99MHz is tunable but with degraded or loss in performance)
 - **Multiband** support
 - Software-based **VOX** that can be used as **fast Full Break-In** (QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
