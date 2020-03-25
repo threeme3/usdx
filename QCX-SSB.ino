@@ -6,28 +6,58 @@
 
 #define VERSION   "1.01y"
 
-// QCX pin defintion
-#define LCD_D4  0         //PD0
-#define LCD_D5  1         //PD1
-#define LCD_D6  2         //PD2
-#define LCD_D7  3         //PD3
-#define LCD_EN  4         //PD4
-#define FREQCNT 5         //PD5
-#define ROT_A   6         //PD6
-#define ROT_B   7         //PD7
-#define RX      8         //PB0
-#define SIDETONE 9        //PB1
-#define KEY_OUT 10        //PB2
-#define SIG_OUT 11        //PB3
-#define DAH     12        //PB4
-#define DIT     13        //PB5
-#define AUDIO1  14        //PC0/A0
-#define AUDIO2  15        //PC1/A1
-#define DVM     16        //PC2/A2
-#define BUTTONS 17        //PC3/A3
-#define LCD_RS  18        //PC4 shared with SDA
-#define SDA     18        //PC4
-#define SCL     19        //PC5
+// QCX pin defintions
+#define LCD_D4  0         //PD0    (pin 2)
+#define LCD_D5  1         //PD1    (pin 3)
+#define LCD_D6  2         //PD2    (pin 4)
+#define LCD_D7  3         //PD3    (pin 5)
+#define LCD_EN  4         //PD4    (pin 6)
+#define FREQCNT 5         //PD5    (pin 11)
+#define ROT_A   6         //PD6    (pin 12)
+#define ROT_B   7         //PD7    (pin 13)
+#define RX      8         //PB0    (pin 14)
+#define SIDETONE 9        //PB1    (pin 15)
+#define KEY_OUT 10        //PB2    (pin 16)
+#define SIG_OUT 11        //PB3    (pin 17)
+#define DAH     12        //PB4    (pin 18)
+#define DIT     13        //PB5    (pin 19)
+#define AUDIO1  14        //PC0/A0 (pin 23)
+#define AUDIO2  15        //PC1/A1 (pin 24)
+#define DVM     16        //PC2/A2 (pin 25)
+#define BUTTONS 17        //PC3/A3 (pin 26)
+#define LCD_RS  18        //PC4    (pin 27)
+#define SDA     18        //PC4    (pin 27)
+#define SCL     19        //PC5    (pin 28)
+//#define NTX	11          //PB3    (pin 17)  - experimental: LOW on TX
+
+/*
+// UCX installation: On blank chip, use (standard Arduino Uno) fuse settings (E:FD, H:DE, L:FF), and use customized Optiboot bootloader for 20MHz clock, then upload via serial interface (with RX, TX and DTR lines connected to pin 1, 2, 3 respectively)
+// UCX pin defintions
++#define SDA     3         //PD3    (pin 5)
++#define SCL     4         //PD4    (pin 6)
++#define ROT_A   6         //PD6    (pin 12)
++#define ROT_B   7         //PD7    (pin 13)
++#define RX      8         //PB0    (pin 14)
++#define SIDETONE 9        //PB1    (pin 15)
++#define KEY_OUT 10        //PB2    (pin 16)
++#define NTX     11        //PB3    (pin 17)
++#define DAH     12        //PB4    (pin 18)
++#define DIT     13        //PB5    (pin 19)
++#define AUDIO1  14        //PC0/A0 (pin 23)
++#define AUDIO2  15        //PC1/A1 (pin 24)
++#define DVM     16        //PC2/A2 (pin 25)
++#define BUTTONS 17        //PC3/A3 (pin 26)
+// In addition set:
+#define OLED  1
+#define ONEBUTTON  1
+#undef DEBUG
+adjust I2C and I2C_ ports, 
+ssb_cap=1; dsp_cap=2;
+#define _DELAY() for(uint8_t i = 0; i != 5; i++) asm("nop");
+#define F_XTAL 20004000
+#define F_CPU F_XTAL
+experimentally: #define AUTO_ADC_BIAS 1
+*/
 
 #include <avr/sleep.h>
 #include <avr/wdt.h>
@@ -594,11 +624,15 @@ public:
     setCursor(0, 0);
   }
 };
-//SSD1306Device lcd;
-//LCD lcd;
-LCD_ lcd;
+//#define OLED  1
+#ifdef OLED
+SSD1306Device lcd;
+#else
+LCD lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
+//LCD_ lcd;  // slower LCD, suitable for non-QCX supplied displays
 //#include <LiquidCrystal.h>
 //LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+#endif
 
 volatile int8_t encoder_val = 0;
 volatile int8_t encoder_step = 0;
@@ -782,6 +816,11 @@ public:
 
   #define FAST __attribute__((optimize("Ofast")))
 
+  #define F_XTAL 27005075            // Crystal freq in Hz, nominal frequency 27004300
+  //#define F_XTAL 25004000          // Alternate SI clock
+  //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
+  uint32_t fxtal = F_XTAL;
+
   inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
   { 
     #define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
@@ -791,7 +830,7 @@ public:
     //register uint32_t xmsb = (_div * (_fout + (int32_t)df)) % fxtal;  // xmsb = msb * fxtal/(128 * _MSC);
     //uint32_t msb128 = xmsb * 5*(32/32) - (xmsb/32);  // msb128 = xmsb * 159/32, where 159/32 = 128 * 0xFFFFF / fxtal; fxtal=27e6
 
-    //#define _MSC  (27004800/128)  // 114% CPU load  perfect alignment
+    //#define _MSC  (F_XTAL/128)  // 114% CPU load  perfect alignment
     //uint32_t msb128 = (_div * (_fout + (int32_t)df)) % fxtal;
 
     uint32_t msp1 = _msa128min512 + msb128 / _MSC;  // = 128 * _msa + msb128 / _MSC - 512;
@@ -828,8 +867,7 @@ public:
     i2c.stop();      
   }
   void SendRegister(uint8_t reg, uint8_t val){ SendRegister(reg, &val, 1); }
-      
-  uint32_t fxtal = 27005075;      // Crystal freq in Hz, nominal frequency 27004300
+
   int16_t iqmsa; // to detect a need for a PLL reset
 
   void freq(uint32_t fout, uint8_t i, uint8_t q){  // Set a CLK0,1 to fout Hz with phase i, q
@@ -1109,6 +1147,7 @@ static SI5351 si5351;
 
 #undef F_CPU
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
+//#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
 
 #define DEBUG  1   // enable testing and diagnostics features
 #ifdef DEBUG
@@ -1838,8 +1877,9 @@ ISR(TIMER2_COMPA_vect)  // Timer2 COMPA interrupt
 
 void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
 {
+#ifndef AUTO_ADC_BIAS
   DIDR0 |= (1 << adcpin); // disable digital input
-  
+#endif  
   ADCSRA = 0;             // clear ADCSRA register
   ADCSRB = 0;             // clear ADCSRB register
   ADMUX = 0;              // clear ADMUX register
@@ -2097,7 +2137,10 @@ void switch_rxtx(uint8_t tx_enable){
   else _init = 1;
   rx_state = 0;
   if(tx_enable){
-      digitalWrite(RX, LOW);  // TX
+      digitalWrite(RX, LOW);  // TX (disable RX)
+#ifdef NTX
+      digitalWrite(NTX, LOW);  // TX (enable TX)
+#endif
       lcd.setCursor(15, 1); lcd.print("T");
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
       //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
@@ -2108,6 +2151,9 @@ void switch_rxtx(uint8_t tx_enable){
       TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
       OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
       digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
+#ifdef NTX
+      digitalWrite(NTX, HIGH);  // RX (disable TX)
+#endif
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
       lcd.setCursor(15, 1); lcd.print((vox) ? "V" : "R");
   }
@@ -2342,7 +2388,12 @@ void initPins(){
   pinMode(SIG_OUT, OUTPUT);
   pinMode(RX, OUTPUT);
   pinMode(KEY_OUT, OUTPUT);
+//#define ONEBUTTON  1
+#ifdef ONEBUTTON
+  pinMode(BUTTONS, INPUT_PULLUP);  // rotary button
+#else
   pinMode(BUTTONS, INPUT);  // L/R/rotary button
+#endif
   pinMode(DIT, INPUT_PULLUP);
   //pinMode(DAH, INPUT);  
   pinMode(DAH, INPUT_PULLUP); // Could this replace D4?
@@ -2350,7 +2401,12 @@ void initPins(){
   digitalWrite(AUDIO1, LOW);  // when used as output, help can mute RX leakage into AREF
   digitalWrite(AUDIO2, LOW);
   pinMode(AUDIO1, INPUT);
-  pinMode(AUDIO2, INPUT);  
+  pinMode(AUDIO2, INPUT);
+
+#ifdef NTX
+  digitalWrite(NTX, HIGH);
+  pinMode(NTX, OUTPUT);
+#endif
 }
 
 void setup()
@@ -2361,7 +2417,7 @@ void setup()
   uint8_t mcusr = MCUSR;
   MCUSR = 0;
   //wdt_disable();
-  wdt_enable(WDTO_4S);  // Enable watchdog, resolves QCX startup issue and other issues (bugs)
+  wdt_enable(WDTO_4S);  // Enable watchdog
 
   // Benchmark dsp_tx() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
   rx_state = 0;
@@ -2441,6 +2497,11 @@ void setup()
   digitalWrite(DAH, LOW);
   pinMode(DAH, INPUT_PULLUP);
   ssb_cap = (abs(v2 - v1) > (0.05 * 1024.0 / 5.0));  // SSB capability?
+
+  //ssb_cap = 0; dsp_cap = 0;  // force standard QCX capability
+  //ssb_cap = 1; dsp_cap = 0;  // force SSB and standard QCX-RX capability
+  //ssb_cap = 1; dsp_cap = 1;  // force SSB and DSP capability
+  //ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
 
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
@@ -2660,21 +2721,26 @@ void loop()
     switch_rxtx(0);
   }
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
-  if(digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
+#ifdef ONEBUTTON
+  uint8_t inv = 1;
+#else
+  uint8_t inv = 0;
+#endif
+  if(inv ^ digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
     if(!(event & PL)){  // hack: if there was long-push before, then fast forward
       uint16_t v = analogSafeRead(BUTTONS);
       event = SC;
       int32_t t0 = millis();
-      for(; digitalRead(BUTTONS);){ // until released or long-press
+      for(; inv ^ digitalRead(BUTTONS);){ // until released or long-press
         if((millis() - t0) > 300){ event = PL; break; }
         wdt_reset();
       }
       delay(10); //debounce
       for(; (event != PL) && ((millis() - t0) < 500);){ // until 2nd press or timeout
-        if(digitalRead(BUTTONS)){ event = DC; break; }
+        if(inv ^ digitalRead(BUTTONS)){ event = DC; break; }
         wdt_reset();
       }
-      for(; digitalRead(BUTTONS);){ // until released, or encoder is turned while longpress
+      for(; inv ^ digitalRead(BUTTONS);){ // until released, or encoder is turned while longpress
         if(encoder_val && event == PL){ event = PT; break; }
         wdt_reset();
       }  // Max. voltages at ADC3 for buttons L,R,E: 3.76V;4.55V;5V, thresholds are in center
