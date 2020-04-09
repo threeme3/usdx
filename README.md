@@ -60,8 +60,8 @@ Please note that if you apply the mod on a QCX Rev5, you have in addition to con
 
 Change the following component values (and type of component in some cases), and wire the following component pins on the backside PCB (some pins must be disconnected from the pad):
 
-1. To implement the SDR receiver: R11,12,R14,R15,17,59 (remove); IC6-10,R11-40,R59-60,C9-24,C52-53,D5,Q7 (optionally omit on new builds); change R7,10(82k); C4,C7(1nF); wire IC2(pin15) to IC10(pin1); disconnect R50-(to 5V) pin and R52-5V and both wire to IC2(pin25); disconnect pin C39(to R27) and wire to IC5(pin1); disconnect pin C40(-to R27) and wire to IC5(pin7).
-_Rationale: This will feed the amplified I/Q signals to the ADC0, ADC1 input, biased at AREF/2 V, the rest of the receiver will be handled in software and audio output is realised on PB1. For more sensitivity on the higher bands, there is this [2-stage QCX-SDR modification]._
+1. To implement the SDR receiver: R11,12,R14,R15,17,27,29,59,IC10 (remove); IC6-10,R11-40,R59-60,C9-24,C52-53,D5,Q7 (optionally omit on new builds); change R7,10(82k); C4,C7(1nF); wire IC2(pin15) to IC10(pin1); disconnect R50(5V pin) pin and R52(5V pin) and both wire to IC2(pin21); disconnect pin C39(to R27/R29) and wire to IC5(pin1); disconnect pin C40(to IC10) and wire to IC5(pin7).
+_Rationale: This will feed the amplified I/Q signals to the ADC0, ADC1 input, biased at 0.5*VAREF(=1.1 or 2.5V), the rest of the receiver will be handled in software and audio output is realised on PB1._
 2. To implement the SSB transmitter: change D4,R56 (10k); R58 (.22uF); C32 (10uF); C31 (remove); wire IC2(pin21) to pin R57(to DVM-pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58.
 _Rationale: This will bias the mic input (at DAH line) with 5V and pass the audio to ADC2, biased at AREF/2 V; the key-shaping circuit is digitally switching the voltage supply to the PA (or alternatively directly controlled via PA bias<sup>[note 3](#note3)</sup>)._
 3. To implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] page 53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish.
@@ -72,7 +72,7 @@ _Rationale: The resonant elements and the transformer are replaced with a pass-t
 Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted and some must be remove (see above):
 ![layout](layout.png)
 
-Below the wires that needs to be installed on the bottom PCB; a circle indicates that the component pin is disconnected from the PCB pad and directly wired to another pad (the wire may be fed through the PCB hole or wired on the top side):
+Below the wires that needs to be installed on the bottom PCB. Note that a circle represents resistor R50/R52 that is in series with the wire and the pad at which the circle is drawn (the resistor is no longer connected to its original neighbour pad and its probably the best to place this wiring and resistor at the components side):
 ![pcb](pcb.png)
 
 

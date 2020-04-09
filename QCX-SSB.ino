@@ -876,6 +876,8 @@ public:
       if(fout < 500000){ rdiv = 7; fout *= 128; }; // Divide by 128 for fout 4..500kHz
 
       uint16_t d = (16 * fxtal) / fout;  // Integer part
+      if(fout > 30000000) d = (34 * fxtal) / fout; // when fvco is getting too low (400 MHz)
+
       if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d--; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
       uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
       msa = fvcoa / fxtal;     // Integer part of vco/fxtal
