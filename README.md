@@ -1,11 +1,11 @@
-# QCX-SDR: SDR and SSB with your QCX transceiver
-This is a simple and experimental modification that transforms a [QCX] into a (Class-E driven) SSB transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8, JS8, FT4. It can be fully-continuous tuned through bands 160m-10m in the LSB/USB-modes with a 2400Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
+# QCX-SSB: SSB with your QCX transceiver
+This is a simple and experimental modification that transforms a [QCX] into a (Class-E driven) SSB transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8, JS8, FT4. It can be fully-continuous tuned through bands 80m-10m in the LSB/USB-modes with a 2400Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
 
-The SSB transmit and receiver stages are implemented completely in a digital and software-based manner. At transmit the ATMEGA328P samples the input-audio and reconstructing a SSB-signal by controlling the SI5351 PLL phase (through tiny frequency changes over 800kbit/s I2C) and controlling the PA Power (through PWM on the key-shaping circuit). In this way a highly power-efficient class-E driven SSB-signal can be realized; a PWM driven class-E design keeps the SSB transceiver simple, tiny, cool, power-efficient and low-cost (ie. no need for power-inefficient and complex linear amplifier with bulky heat-sink as often is seen in SSB transceivers). At receive the ATMEGA328P over-samples the I/Q at 62.5kHz, implements a down-sampling phasing receiver in the digital domain via Hilbert transformers and digital filters, and sends the resulting signal via PWM shaping to the headphone/speaker output.
+The SSB transmit-stage is implemented entirely in digital and software-based manner: at the heart the ATMEGA328P is sampling the input-audio and reconstructing a SSB-signal by controlling the SI5351 PLL phase (through tiny frequency changes over 800kbit/s I2C) and controlling the PA Power (through PWM on the key-shaping circuit). In this way a highly power-efficient class-E driven SSB-signal can be realized; a PWM driven class-E design keeps the SSB transceiver simple, tiny, cool, power-efficient and low-cost (ie. no need for power-inefficient and complex linear amplifier with bulky heat-sink as often is seen in SSB transceivers).
 
-An Open Source Arduino sketch is used as the basis for the firmware, the hardware modification bypasses the QCX CW filter and adds a microphone input in-place of the DVM-circuit; the mod is easy to apply and consist of four wire and four component changes and after applying the transceiver remains compatible with the original QCX (CW) firmware.
+For the receiver, a large portion of the original QCX circuit has been removed and implemented in digital manner (software): the ATMEGA328P is now implementing the 90 degree phase shift circuit, the (CW/SSB) filter circuit and the audio amplifier circuit (now a class-D amplifier). This has simplified the QCX circuit a lot (50% less components needed), and there are a number of advantages and features: there is no longer a need for an alignment procedure due to the very accurate 90 degree Hilbert phase shifter; and there are now adjustable IF DSP filters for CW and SSB; and there is an AGC and there is a noise-reducing DSP signal conditioning function and there are three indepent built-in attenuators in the analog front-end which helps utilizing the full dynamic range. The speaker is directly connected and driven by the ATMEGA. A digital mixer with narrow low-pass window (2 kHz) and steep roll-off (-45dB/decade) with ADC oversampling are offering enough alias rejection, processing-gain and dynamic-range for handling weak (0.12μV) and strong-signals (S9+60dB).
 
-This experiment is created to try out what can be done with very minimal and simplified hardware; a simple ATMEGA processor, a QCX and a software-based SSB processing approach. Feel free to experiment with this sketch, let me know your thoughts or contribute here: https://github.com/threeme3/QCX-SSB  There is a forum discussion on the topic here: [QRPLabs Forum]
+This experiment is created to try out what is can be achieved with minimal hardware while moving complexity towards software; here the approach followed is to simplify the design where possible while keep a reasonable performance. The result is a cheap, easy to build, versatile QRP SSB transceiver that actually is quite suitable for making QSOs (even in contest situations), however due to the experimental nature some parts are still in progress and hence limited. Feel free to try it out or to experiment with this sketch, let me know your thoughts or contribute here: https://github.com/threeme3/QCX-SSB  There is a forum discussion on the topic here: [QRPLabs Forum]
 
 73, Guido
 pe1nnz@amsat.org
@@ -13,36 +13,33 @@ pe1nnz@amsat.org
 ![](top.png)
 
 ## List of features:
-- Modification into a **simple, fun and versatile QRP SSB HF transceiver** with embedded DSP and SDR functions;
-- High-performance QSD mixer with steep baseband roll-off followed by a digital signal processing stage provides a good operational performance in terms of sensitivity, selectivity, spurious rejection and overall (blocking) dynamic range. 
-- **[EER]/[Polar-transmitter] Class-E** driven SSB transmit-stage
-- Approximately **5W PEP SSB output** (depending on supply voltage, amplitude-PA voltage regulated through PWM with 48dB dynamic range)
-- Supports **USB and LSB** modes up to **2400 Hz bandwidth** (receiver and transmitter 400..2330Hz)
-- Two-tone third-order intermodulation distortion **(IMD3) of -33dBc** (-16dBc for constant-envelope) and **carrier/side-band rejection better than -45dBc** (two-tone)
-- Receiver unwanted side-band **rejection up to -50dB**
-- Continuously tunable through bands **80m-10m** (anything between 20kHz-99MHz is tunable but with degraded or loss in performance)
-- **Multiband** support
+- **Simple, fun and versatile QRP SSB HF transceiver** with embedded **DSP and SDR functions**;
+- **[EER] Class-E** driven SSB transmit-stage
+- Approximately **5W PEP SSB output** from 13.8V supply
+- **All-Mode support: USB, LSB, experimental modes: CW, AM, FM**
+- **DSP filters: 4000, 2500, 1700, 500, 200, 100, 50 Hz passband**
+- **DSP features: Automatic Gain Control (AGC), Noise-reduction (NR), Voice-triggered Xmit (VOX), RX Attentuators (ATT), TX drive control, Volume control, dBm/S-meter.**
+- SSB opposite side-band/carrier supression **Transmit: better than -45dBc, IMD3 (two-tone) -33dBc, Receive: better than -50dBc**
+- **Multiband** support, continuously tunable through bands **80m-10m** (and from 20kHz..99MHz with loss in performance)
+- **Open source** firmware, built with Arduino IDE; allows experimentation, new features can be added, contributions can be shared via Github, software-complexity: 2000 lines of code
 - Software-based **VOX** that can be used as **fast Full Break-In** (QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
-- **Simple to install modification** with **6 component changes and 4 wires** to implement a basic SSB transceiver, **1 component change** to implement DSP feature,  **11 component changes and 6 wires** to implement SDR feature
-- Firmware is **open source** through an Arduino Sketch, it allows experimentation, new features can be easily added, contributions can be shared via Github repository QCX-SSB, about 2000 lines of code
-- Completely **digital and software-based** SSB transmit-stage (**no additional circuitry needed**, except for the audio-in circuit)
-- **ATMEGA328P signal processing:** samples audio-input and reconstruct a SSB-signal by controlling the _phase of the SI5351 PLL_ (through tiny frequency changes over 800kbits/s I2C) and the _amplitude of the PA_ (through PWM of the PA key-shaping circuit).
-- **Lean and low-cost SSB transceiver design**: because of the EER/Polar-transmitter class-E stage it is **highly power-efficient** (no bulky heatsinks required), and has a **simple design** (no complex balanced linear power amplifier required)
-- An **pre-distorion** algorithm that cancels out the amplitude errors of non-linearities in the PA voltage regulated PWM supply; a lookup table is used that can be calibrated with an internal PA amplitude measurement
-- Possibility to extend the QCX analog phasing stage with a **DSP stage**
-- Could replace the QCX analog phasing stage completely with a **digital SDR receiver stage**, taking away the need for the manual side-band rejection adjustment procedure and delivering DSP features such as the joy of having a **AGC, adjustable CW/SSB filters**
-- Receiver Noise floor **(MDS): –131 dBm** at 28MHz (in 500Hz BW); Blocking dynamic range: 148dB (200kHz offset or greater), 118dB (20kHz offset), 78dB (2kHz offset). Blocking: 18dBm (200kHz offset or greater), -12dBm (20kHz offset), -52dBm (2kHz offset); LO Phase noise: -138dBc/Hz; Front-end selectivity: Octave
-- three independent switchable front-end **attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**
-- This firmware is compatible with an unmodified QCX, partial modified QCX (e.g. SSB mod, or DSP mod), or fully modified QCX (SSB + SDR mod, as described below)
-- SDR implementation simplifies the receiver heaviliy; **the original QCX PCB is now half empty** by moving the analog processing into the microcontroller and adding new and improving existing features. On a new QCX build: 46 components less to be installed, 8 component design changes, 9 additional wires.
-- Probably the most cost effective and easiest to build standalone SDR transceiver that you can find. More versatile and easier to build than the original QCX (less components, no transformer windings, no alignment procedure)
+- **Simple to install modification** with **8 component changes and 8 wires**
+- **Lightweight and low-cost transceiver design**: because of the EER-transmitter class-E stage it is **highly power-efficient** (no bulky heatsinks required), and has a **simple design** (no complex balanced linear power amplifier required)
+- **Fully digital and software-based SSB transmit-stage**: samples microphone-input and reconstruct a SSB-signal by controlling the phase of the SI5351 PLL (through tiny frequency changes over 800kbits/s I2C) and the amplitude of the PA (through PWM of the PA key-shaping circuit)
+- **Fully digital and software-based SDR receiver-stages**: samples I/Q (complex) signal from Quadrature Sampling Detector digital mixer, and performs a 90-degree phase-shift mathematically in software (Hilbert-transform) and cancels out one side-band by adding them
+- Three independent switchable analog front-end **receiver attenuators (0dB, -13dB, -20dB, -33dB, -53dB, -60dB, -73dB)**
+- Receiver Noise floor **MDS: –135 dBm** at 28MHz (in 200Hz BW)
+- Receiver Front-end selectivity: **steep -45dB/decade roll-off +/-2kHz from tuned-frequency**
+- Blocking **dynamic range: 20kHz offset 123dB, 2kHz offset 78dB**
+- **CW decoder (experimental).**
+- Probably the most **cost effective** and **easy** to build standalone SDR/SSB transceiver that you can find. Very much **simplifies** the original QCX circuit (i.e. **50% less components to install**, **no complex transformer windings**, **no alignment procedure**) and more **versatile** in use.
 
 
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 (**current**) | 2019-12-22 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings. |
-| R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. **See here [original QCX-SSB modification] (it is also supported by current firmware)** |
+| R1.02 (**current**) | 2020-04-12 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. |
+| R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. **See here [original QCX-SSB modification] (it is also supported by current firmware!)** |
 | R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
 
 
@@ -52,21 +49,20 @@ Below the schematic after the modification is applied, unused components are lef
 
 
 ## Installation:
-If you just want to try out the firmware, you can upload and use it in an unmodified QCX but it will have the SSB and SDR features disabled. If you like to try out the DSP audio processing feature, you can simply disconnect R59 and hook up a speaker on pin15/U2 (with 10uF in series, similar as shown above).
+For the modification, you need to remove 10 and change 8 components, install 8 wires, upload firmware and connect a microphone. On a newly to be build QCX, 46 components can be left out.
 
-To make the SDR+SSB modification, you need to remove 9 and change 8 components, install 10 wires, upload firmware and connect a microphone. On a newly to be build QCX, 46 components can be left out.
+Please note that if you apply the mod on a newer than QCX than Rev 4 (see the number on PCB in bottom right corner), you have in addition to convert back to the original Rev4 circuit (e.g. restore R49, R50, C39, R53, (C21, C22 excluded) on a Rev 5 PCB) See [PCB Revision] section and [QCX Assembly instruction] manuals for more info about the changes.
 
-Please note that if you apply the mod on a QCX Rev5, you have in addition to convert back to the original Rev4 circuit, ie. restore: R49, R50, C39, R53, (C21, C22 excluded) see [Rev5 changes].
+Change the following component values (and type of component in some cases), and wire the following component pins/pads:
 
-Change the following component values (and type of component in some cases), and wire the following component pins on the backside PCB (some pins must be disconnected from the pad):
-
-1. To implement the SDR receiver: R11,12,R14,R15,17,27,29,59,IC10 (remove); IC6-10,R11-40,R59-60,C9-24,C52-53,D5,Q7 (optionally omit on new builds); change R7,10(82k); C4,C7(1nF); wire IC2(pin15) to IC10(pin1); disconnect R50(5V pin) pin and R52(5V pin) and both wire to IC2(pin21); disconnect pin C39(to R27/R29) and wire to IC5(pin1); disconnect pin C40(to IC10) and wire to IC5(pin7).
+1. To implement the SDR receiver: R11,12,14,15,17,27,29,59,IC10 (remove); IC6-10,R11-40,R59-60,C9-24,C52-53,D5,Q7 (optionally omit on new builds); change R7,10(82k); C4,C7(1nF); wire IC2(pin15) to IC10(pin1); disconnect R50(5V side) and R52(5V side) and both wire to IC2(pin21); wire C39(R27/R29 side) to IC5(pin1); wire C40(IC10 side) to IC5(pin7).
 _Rationale: This will feed the amplified I/Q signals to the ADC0, ADC1 input, biased at 0.5*VAREF(=1.1 or 2.5V), the rest of the receiver will be handled in software and audio output is realised on PB1._
-2. To implement the SSB transmitter: change D4,R56 (10k); R58 (.22uF); C32 (10uF); C31 (remove); wire IC2(pin21) to pin R57(to DVM-pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58.
+To implement the original (analog) QCX receiver, you can skip this step and just brigde the CW-filter as was done in the [original QCX-SSB modification].
+2. To implement the SSB transmitter: C31 (remove); change D4,R56 (10k); R58 (.22uF); C32 (10uF); wire IC2(pin21) to pin R57(to DVM-pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58.
 _Rationale: This will bias the mic input (at DAH line) with 5V and pass the audio to ADC2, biased at AREF/2 V; the key-shaping circuit is digitally switching the voltage supply to the PA (or alternatively directly controlled via PA bias<sup>[note 3](#note3)</sup>)._
-3. To implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] page 53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish.
+3. Optionally, to implement multiband support: C1,C5,C8,T1,R64 (remove); at T1 landing pattern (see [QCX Assembly instruction] page 53) install R (1K) over 6-8; R (1K) over 3-4; C (10nF) over 4-8; C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with different LPFs as you wish (get some inspiration by [QRPLabs Low Pass Filter kit]).
 _Rationale: The resonant elements and the transformer are replaced with a pass-through capacitor._
-4. Upload the hex firmware-file to original or new ATMEGA328/328P chip (here is [latest released hex file] and click on "Assets" below the description). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>). You can safely switch between this/original QCX firmware without any issues. The fuse settings should be E=FD H=D1 L=F7.
+4. Upload the hex firmware-file to original or new ATMEGA328/328P chip (here is [latest released hex file] and click on "Assets" below the description). The [standard QCX firmware upload procedure] can be followed (for details <sup>[note 1](#note1)</sup>). The fuse settings should be E=FD H=D1 L=F7. After uploading, and the mods are applied correclt the display should show QCX-SDR (or QCX-SSB for the analog RX implementation).
 5. Connect an electret microphone pins (+) to tip and (-) to sleeve of paddle-jack; PTT-switch pins to ring and sleeve (see [X1M-mic]).
 
 Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted and some must be remove (see above):
@@ -126,10 +122,10 @@ On startup, the transceiver is performing a self-test. It is checking the supply
 
 
 ## Technical Description:
-The principle of operation is depicted in the following video-fragment: [Opzij] (in Dutch; [lyrics])... :-)  jokes aside; below the block diagram of the QCX-SSB and SDR transceiver:
+The principle of operation (at least what is ging on in the ATMEGA) is a bit as in the following video-fragment: [Opzij] (in Dutch saying; _"Sideways, sideways, sideways, Make room, make room, make room, We are in an incredible rush"_; full [lyrics]) here... :-)  jokes aside; below the block diagram of the QCX-SSB, SDR transceiver:
 ![block diagram](block.png)
 
-For SSB reception, the QCX analog phasing receiver stage is replaced with a digital SDR stage; this means that the phase shifting op-amp IC6 is changed into a regular amplifier and whereby the individual I and Q outputs are directly fed into the ATMEGA328P ADC inputs for signal processing. The ATMEGA328P will over-sample the ADC input at a 32kHz sample-rate and perform a phase-shift by means of a Hilbert-transform and summing the result to obtain side-band rejection; it will also perform CW or SSB filtering and provide an AGC function. Since the phase-shifting network and analog CW filter are no used, about 30% of the components can be left out; by combining the function of IC7B into IC6A another op-amp can be saved. The ADC inputs are low-pass filtered (-40dB/decade roll-off at 1.5kHz cut-off) to prevent aliasing and input are biased with a 1.1V analog reference voltage to obtain additional sensitivity and dynamic range. With the 10-bit ADCs and a 4x over-sampling rate, a theoretical dynamic range of 72dB can be obtained in 2.4kHz SSB bandwidth. LSB/USB mode switching is done by changing the 90 degree phase shift on the CLK1/CLK2 signals of the SI5351 PLL.
+For SSB reception, the QCX analog phasing receiver stage is replaced with a digital SDR stage; this means that the phase shifting op-amp IC6 is changed into a regular amplifier and whereby the individual I and Q outputs are directly fed into the ATMEGA328P ADC inputs for signal processing. The ATMEGA328P (over-)samples the ADC input at a 62kHz sample-rate, down-samples this high-samplerate to a lower samplerate and performs a phase-shift by means of a Hilbert-transform, summing the result to obtain side-band rejection; it subsequently it performs a low-pass filtering and provide an AGC function. Since the original QCX phase-shifting network and analog CW filter are not used, about half of the components can be left out; by combining the function of IC7B into IC6A another op-amp can be saved. The ADC inputs are low-pass filtered (-40dB/decade roll-off at 1.5kHz cut-off) to prevent aliasing and input are biased with a 1.1V analog reference voltage to obtain additional sensitivity and dynamic range. With the 10-bit ADCs and a 4x over-sampling rate, a theoretical dynamic range of 72dB can be obtained in 2.4kHz SSB bandwidth. LSB/USB mode switching is done by changing the 90 degree phase shift on the CLK0/CLK1 signals of the SI5351 PLL.
 
 For SSB transmission the QCX DVM-circuitry is changed and used as an audio-input circuit. An electret-microphone (with PTT switch) is added to the Paddle jack connecting the DVM-circuitry, whereby the DOT input acts as the PTT and the DASH input acts as the audio-input. The electret microphone is biased with 5V through a 10K resistor. A 10nF blocking capacitor prevents RF leakage into the circuit. The audio is fed into ADC2 input of the ATMEGA328P microprocessor through a 220nF decoupling capacitor. The ADC2 input is biased at 0.55V via a divider network of 10K to a 1.1V analog reference voltage, with 10-bits ADC resolution this means the microphone-input sensitivity is about 1mV (1.1V/1024) which is just sufficient to process unamplified speech.
 
@@ -141,7 +137,7 @@ The IMD performance is related dependent on the quality of the system: the linea
 
 
 ## Results
-Here is a [sample] me calling CQ on 40m with my QCX-SSB at 5W and received back by the Hack Green websdr about 400km away.
+Here is a [sample] me calling CQ on 40m with my QCX-SSB at 5W and received back by the Hack Green websdr about 400km away, note that the audio quality has further improved since then.
 
 Several OMs reported a successful QCX-SSB modification and were able to make SSB QRP DX contacts over thousands of kilometers on the 20m and 40m bands. During CQ WW contest I was able to make 34 random QSOs on 40m with 5W and an inverted-V over the house in just a few hours with CN3A as my furthest contact, I could observe the benefits of using SSB with constant-envelope in cases where my signal was weak; for FT8 a Raspberry Pi 3B+ with JTDX was used to make FT8 contacts all the way up to NA.
 
@@ -152,7 +148,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - Opposite side-band rejection (two-tone): better than -45dBc
 - Carrier rejection (two-tone): better than -45dBc
 - Wide-band spurious (two-tone): better than -45dBc
-- 3dB bandwidth (sweep): 400..2330Hz
+- 3dB bandwidth (sweep): 0..2400Hz
 ![twotone](twotone.png)
 
 
@@ -166,7 +162,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 
 ### Credits:
-[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] transmitter and QCX-SDR receiver stage both running on a ATMEGA328P, including its multiband front-end and direct PA biasing/envelope-generation technique; its concept, circuit, code and modification to run on a QCX are a design by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi.
+[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] transmitter and QCX-SDR receiver stage both running on a ATMEGA328P, including its multiband front-end and direct PA biasing/envelope-generation technique; its concept, circuit, code and modification to run on a QCX are a design by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi. Many thanks to all of you who got interested in this project and took the challege and effort to try out QCX-SSB. Without your valuable feedback the project could not have kept moving on, improving and challenging new ideas!
 
 <!---
 ### References
@@ -178,15 +174,13 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 [original schematic]: https://qrp-labs.com/images/qcx/HiRes.png
 
-[Rev5 changes]: https://groups.io/g/QRPLabs/message/42095
-
 [QCX-SSB]: https://github.com/threeme3/QCX-SSB
 
 [QCX-SSB Sketch]: QCX-SSB.ino
 
 [latest released hex file]: https://github.com/threeme3/QCX-SSB/releases
 
-[original QCX-SSB modification]: https://github.com/threeme3/QCX-SSB/tree/26c4e97a034d367e1325c5587a56a7c2a43c69f3
+[original QCX-SSB modification]: https://github.com/threeme3/QCX-SSB/tree/R1.01d
 
 [2-stage QCX-SDR modification]: https://github.com/threeme3/QCX-SSB/tree/653e2d8c387138d30269ffd003065be78cc648ca
 
@@ -259,6 +253,10 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 [phase shift in the SI5351 clocks]: https://www.silabs.com/community/timing/forum.topic.html/difficulty_settingp-LchG
 
 [QCX Assembly instruction]: https://www.qrp-labs.com/images/qcx/assembly_A4_Rev_4b.pdf
+
+[PCB Revision]: https://www.qrp-labs.com/qcx
+
+[QRPLabs Low Pass Filter kit]: https://www.qrp-labs.com/lpfkit.html
 
 [Arduino PWM]: http://interface.khm.de/index.php/lab/interfaces-advanced/arduino-dds-sinewave-generator/
 
