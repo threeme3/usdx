@@ -1220,7 +1220,7 @@ inline int16_t ssb(int16_t in)
 
   dc += (in - dc) / 2;
   v[15] = in - dc;     // DC decoupling
-  //dc = in;  // this is actually creating a low-pass filter
+  //dc = in;  // this is actually creating a high-pass (emphasis) filter
 
   i = v[7];
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
