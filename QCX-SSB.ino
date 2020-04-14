@@ -624,7 +624,7 @@ public:
     setCursor(0, 0);
   }
 };
-//#define OLED  1
+//#define OLED  1   // SDD1306 connection on display header: 1=GND(black), 2=RED(red), 13=SDA(brown), 14=SCK(orange)
 #ifdef OLED
 SSD1306Device lcd;
 #else
@@ -2042,25 +2042,25 @@ int analogSafeRead(uint8_t pin)
   return val;
 }
 
+enum dsp_cap_t { ANALOG, DSP, SDR };
+uint8_t dsp_cap = 0;
+uint8_t ssb_cap = 0;
+
 uint16_t analogSampleMic()
 {
   uint16_t adc;
   noInterrupts();
-  digitalWrite(RX, LOW);  // enable RF input
+  if(dsp_cap == SDR) digitalWrite(RX, LOW);  // disable RF input, only for SDR mod
   //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
   ADMUX = admux[2];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
-  digitalWrite(RX, HIGH);  // disable RF input
+  if(dsp_cap == SDR) digitalWrite(RX, HIGH);  // enable RF input, only for SDR mod
   //si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   adc = ADC;
   interrupts();
   return adc;
 }
-
-enum dsp_cap_t { ANALOG, DSP, SDR };
-uint8_t dsp_cap = 0;
-uint8_t ssb_cap = 0;
 
 volatile bool change = true;
 volatile int32_t freq = 7074000;
