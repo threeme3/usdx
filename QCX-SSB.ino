@@ -816,7 +816,7 @@ public:
 
   #define FAST __attribute__((optimize("Ofast")))
 
-  #define F_XTAL 27005075            // Crystal freq in Hz, nominal frequency 27004300
+  #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
   //#define F_XTAL 25004000          // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
@@ -2163,6 +2163,40 @@ void switch_rxtx(uint8_t tx_enable){
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
 }
 
+#define CAL_IQ 1
+#ifdef CAL_IQ
+// RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
+void calibrate_iq()
+{
+  smode = 1;
+  lcd.setCursor(0, 0); lcd.print(blanks); lcd.print(blanks);
+  digitalWrite(SIG_OUT, true); // loopback on
+  si5351.freq(freq, 0, 90);  // RX in USB
+  si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  float dbc;
+  si5351.freq_calc_fast(+700); si5351.SendPLLBRegisterBulk(); delay(100);
+  dbc = smeter();
+  si5351.freq_calc_fast(-700); si5351.SendPLLBRegisterBulk(); delay(100);
+  lcd.setCursor(0, 1); lcd.print("I-Q bal. 700Hz"); lcd.print(blanks);
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  si5351.freq_calc_fast(+600); si5351.SendPLLBRegisterBulk(); delay(100);
+  dbc = smeter();
+  si5351.freq_calc_fast(-600); si5351.SendPLLBRegisterBulk(); delay(100);
+  lcd.setCursor(0, 1); lcd.print("Phase Lo 600Hz"); lcd.print(blanks);
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  si5351.freq_calc_fast(+800); si5351.SendPLLBRegisterBulk(); delay(100);
+  dbc = smeter();
+  si5351.freq_calc_fast(-800); si5351.SendPLLBRegisterBulk(); delay(100);
+  lcd.setCursor(0, 1); lcd.print("Phase Hi 800Hz"); lcd.print(blanks);
+  for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+
+  lcd.setCursor(9, 0); lcd.print(blanks);  // cleanup dbmeter
+  digitalWrite(SIG_OUT, false); // loopback off
+  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  change = true;  //restore original frequency setting
+}
+#endif
+
 int8_t prev_bandval = 2;
 int8_t bandval = 2;
 #define N_BANDS 11
@@ -2329,10 +2363,10 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 23  // number of (visible) parameters
+#define N_PARAMS 24  // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -2365,6 +2399,9 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SIFXTAL: paramAction(action, si5351.fxtal, F("8.1"), F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, F("8.2"), F("PA Bias min"), NULL, 0, 255, false); break;
     case PWM_MAX: paramAction(action, pwm_max, F("8.3"), F("PA Bias max"), NULL, 0, 255, false); break;
+#ifdef CAL_IQ
+    case CALIB:   if(dsp_cap != SDR) paramAction(action, param_c, F("8.4"), F("IQ Test/Cal."), NULL, 0, 0, false); break;
+#endif
 #ifdef DEBUG
     case SR:      paramAction(action, sr, F("9.1"), F("Sample rate"), NULL, -2147483648, 2147483647, false); break;
     case CPULOAD: paramAction(action, cpu_load, F("9.2"), F("CPU load %"), NULL, -2147483648, 2147483647, false); break;
@@ -2958,6 +2995,11 @@ void loop()
       }
       if((menu == PARAM_A) || (menu == PARAM_B) || (menu == PARAM_C)){
         delay(300);
+      }
+#endif
+#ifdef CAL_IQ
+      if(menu == CALIB){
+        calibrate_iq(); menu = 0;
       }
 #endif
     }
