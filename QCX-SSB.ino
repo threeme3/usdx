@@ -819,7 +819,7 @@ public:
   #define F_XTAL 27005075            // Crystal freq in Hz, nominal frequency 27004300
   //#define F_XTAL 25004000          // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
-  uint32_t fxtal = F_XTAL;
+  volatile uint32_t fxtal = F_XTAL;
 
   inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
   { 
@@ -897,9 +897,9 @@ public:
       SendRegister(42+0*8, ms_regs, 8); // Write to MS0
       SendRegister(42+1*8, ms_regs, 8); // Write to MS1
       SendRegister(42+2*8, ms_regs, 8); // Write to MS2
-      SendRegister(16+0, 0x0C|3);       // CLK0: PLLA local msynth; 3=8mA
-      SendRegister(16+1, 0x0C|3);       // CLK1: PLLA local msynth; 3=8mA
-      SendRegister(16+2, 0x2C|3);       // CLK2: PLLB local msynth; 3=8mA
+      SendRegister(16+0, 0x0C|3|0x40);       // CLK0: PLLA local msynth; 3=8mA; integer division
+      SendRegister(16+1, 0x0C|3|0x40);       // CLK1: PLLA local msynth; 3=8mA; integer division
+      SendRegister(16+2, 0x2C|3|0x40);       // CLK2: PLLB local msynth; 3=8mA; integer division
       SendRegister(165, i * msa / 90);  // CLK0: I-phase (on change -> Reset PLL)
       SendRegister(166, q * msa / 90);  // CLK1: Q-phase (on change -> Reset PLL)
       if(iqmsa != ((i-q)*msa/90)){ iqmsa = (i-q)*msa/90; SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
@@ -2362,7 +2362,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
     case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
     case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false); break;
-    case SIFXTAL: paramAction(action, si5351.fxtal, F("8.1"), F("Ref freq"), NULL, 24000000, 28000000, false); break;
+    case SIFXTAL: paramAction(action, si5351.fxtal, F("8.1"), F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, F("8.2"), F("PA Bias min"), NULL, 0, 255, false); break;
     case PWM_MAX: paramAction(action, pwm_max, F("8.3"), F("PA Bias max"), NULL, 0, 255, false); break;
 #ifdef DEBUG
@@ -2986,7 +2986,7 @@ void loop()
     
     noInterrupts();
     if(mode == CW){
-      const int cw_offset = 600;  // this is actual the center frequency of the CW-filters
+      const int32_t cw_offset = (dsp_cap) ? 600 : 720;  // this is actual the center frequency of the CW-filters
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
       si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
     } else
