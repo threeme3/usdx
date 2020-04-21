@@ -67,6 +67,10 @@ See here the completed transceiver with the modifications applied (includes PA b
 ![](pcb-top.png)
 ![](pcb-bottom.png)
 
+**Build options:**
+1. For an unbuilt QCX, the easiest way to build this digital transceiver is to omit the 78 components and apply all above modifications, this will offer you all features described above. If you want to, you can still decide to build the original QCX from here.
+2. If you already have a working QCX, the easiest way is to apply the SSB transmit mod and bypass the CW filter with a switch, in this way your transceiver keeps the analog receiver circuit, there are no SDR features, and you can still place the original QRP Labs CW firmware if you prefer.
+
 ## Operation:
 Currently, the following functions have been assigned to shortcut buttons (L=left, E=encoder, R=right) and menu-items:
 
