@@ -1688,7 +1688,7 @@ void sdr_rx()
         // Output stage
         static int16_t ozd1, ozd2;
         if(_init){ ac = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
-//#define SECOND_ORDER_DUC  1
+#define SECOND_ORDER_DUC  1
 #ifdef SECOND_ORDER_DUC
         int16_t od1 = ac - ozd1; // Comb section
         ocomb = od1 - ozd2;
@@ -1712,7 +1712,7 @@ void sdr_rx_q()
   int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   func_ptr = sdr_rx;    // processing function for next conversion
 #ifdef SECOND_ORDER_DUC
-  sdr_rx_common();  //necessary? YES!
+//  sdr_rx_common();  //necessary? YES!... Maybe NOT!
 #endif
 
   //static int16_t dc;
