@@ -1300,15 +1300,16 @@ void dsp_tx()
   OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
 }
 
+volatile uint16_t acc;
+volatile uint32_t cw_offset = 700;
+
 volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
 volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
 inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam.ac.uk/~am21/hakmemc.html, ITEM 149]: p_sin+=n_cos*2*PI*f/fs; n_cos-=p_sin*2*PI*f/fs;
 {
-  p_sin += 3*n_cos/4;  // sine at 0.75*F_SAMP/6.28 = 600 Hz = cw_offset
+  p_sin += 3*n_cos/4;  // sine at 0.75*F_SAMP/6.28 = 574 Hz = cw_offset
   n_cos -= 3*p_sin/4;
 }
-
-volatile uint16_t acc;
 
 void dummy()
 {
@@ -1503,54 +1504,78 @@ param_c = avg;
 #define N_FILT 7
 volatile int8_t filt = 0;
 
-inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
+inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
 { 
-  int16_t zx0 = v;
-
-  static int16_t za0,za1,za2;
-  if(filt < 4){  // for SSB filters
+  static int16_t za1,za2;
+  
+  //if(filt < 4)
+  {  // for SSB filters
     // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     static int16_t zz1,zz2;
-    zx0=(29*(zx0-zz1)+50*za1)/64;                               //300-Hz
+    za0=(29*(za0-zz1)+50*za1)/64;                               //300-Hz
     zz2=zz1;
-    zz1=v;
+    zz1=za0;
   }
-  za0=zx0;
 
   // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
-  //static int16_t za1,za2;
   static int16_t zb0,zb1,zb2;
   switch(filt){
-    case 1: break; //0-4000Hz (pass-through)
-    case 2: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
-    case 3: zx0=(7*(zx0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
-    case 4: zx0=(zx0+2*za1+za2+41*zb1-23*zb2)/32; break;   //500-1000Hz
-    case 5: zx0=(5*(zx0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
-    case 6: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
-    case 7: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
+    case 1: zb0=za0; break; //0-4000Hz (pass-through)
+    case 2: zb0=(10*(za0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
+    case 3: zb0=(7*(za0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
   }
-  zb0=zx0;
 
-  static int16_t zc1,zc2;
+  static int16_t zc0,zc1,zc2;
   switch(filt){
-    case 1: break; //0-4000Hz (pass-through)
-    case 2: zx0=(8*(zx0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
-    case 3: zx0=(4*(zx0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
-    case 4: zx0=(16*(zx0-2*zb1+zb2)+105*zc1-52*zc2)/64; break;      //500-1000Hz
-    case 5: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
-    case 6: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
-    case 7: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
-  }  
+    case 1: zc0=zb0; break; //0-4000Hz (pass-through)
+    case 2: zc0=(8*(zb0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
+    case 3: zc0=(4*(zb0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
+  }
+
   zc2=zc1;
-  zc1=zx0;
+  zc1=zc0;
 
   zb2=zb1;
   zb1=zb0;
 
   za2=za1;
   za1=za0;
+  
+  return zc0;
+}
 
-  return zx0;
+inline int16_t filt_var_cw(int32_t za0)  //filters build with www.micromodeler.com
+{ 
+  static int32_t za1,za2;
+  za0 <<= 6;
+
+  // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
+  static int32_t zb0,zb1,zb2;
+  switch(filt){
+    case 4: zb0=(za0+2*za1+za2+41*zb1-23*zb2)/32; break;   //500-1000Hz
+    case 5: zb0=(5*(za0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
+    case 6: zb0=(3*(za0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
+    case 7: zb0=((2*za0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
+  }
+
+  static int32_t zc0,zc1,zc2;
+  switch(filt){
+    case 4: zc0=(16*(zb0-2*zb1+zb2)+105*zc1-52*zc2)/64; break;      //500-1000Hz
+    case 5: zc0=((zb0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
+    case 6: zc0=((zb0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
+    case 7: zc0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
+  }
+
+  zc2=zc1;
+  zc1=zc0;
+
+  zb2=zb1;
+  zb1=zb0;
+
+  za2=za1;
+  za1=za0;
+  
+  return zc0 >> 6;
 }
 
 static uint32_t absavg256 = 0;
@@ -1600,8 +1625,9 @@ inline int16_t slow_dsp(int16_t ac)
   if(agc) ac = process_agc(ac);
   ac = ac >> (16-volume);
   if(nr) ac = process_nr(ac);
-  if(filt) ac = filt_var(ac) << 2;
-  if(mode == CW){    
+
+  if(mode == CW){
+    ac = filt_var_cw(ac) << 2;
     if(cwdec){  // CW decoder enabled?
       char ch = cw(ac >> 0);
       if(ch){
@@ -1610,8 +1636,7 @@ inline int16_t slow_dsp(int16_t ac)
         cw_event = true;
       }
     }
-    
-  }
+  } else if(filt) ac = filt_var(ac) << 2;
   //if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);  //hack
   
   //static int16_t dc;
@@ -2363,10 +2388,10 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 24  // number of (visible) parameters
+#define N_PARAMS 25  // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -2392,6 +2417,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false); break;
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
+    case CWOFF:   paramAction(action, cw_offset, F("2.2"), F("CW Offset"), NULL, 300, 2000, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
     case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
@@ -2673,6 +2699,7 @@ void setup()
   drive = 4;  // Init settings
   if(!ssb_cap){ mode = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
+  if(dsp_cap) cw_offset = 600;
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
@@ -2947,6 +2974,7 @@ void loop()
     menu = max(1 /* 0 */, min(menu, N_PARAMS));
   }
 
+  bool param_change = (encoder_val != 0);
   if(menumode != 0){  // Show parameter and value
     if(menu != 0){
       paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
@@ -2955,31 +2983,38 @@ void loop()
       change = true; // refresh freq display (when menu = 0)
     }
     if(menumode == 2){
-      lcd.setCursor(0, 1); lcd.cursor(); delay(10); // edits menu item value; make cursor visible
-      if(menu == MODE){ // post-handling Mode parameter
-        delay(100);
-        change = true;
-        si5351.prev_pll_freq = 0;  // enforce PLL reset
-        // make more generic: 
-        if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
-        if(mode == CW) filt = 4; else filt = 0;
-      }
-      if(menu == ATT){ // post-handling ATT parameter
-        if(dsp_cap == SDR){
-          adc_start(0, !(att & 0x01), F_ADC_CONV); admux[0] = ADMUX;  // att bit 0 ON: attenuate -13dB by changing ADC AREF (full-scale range) from 1V1 to 5V
-          adc_start(1, !(att & 0x01), F_ADC_CONV); admux[1] = ADMUX;
+      if(param_change){
+        lcd.setCursor(0, 1); lcd.cursor(); delay(10); // edits menu item value; make cursor visible
+        if(menu == MODE){ // post-handling Mode parameter
+          delay(100);
+          change = true;
+          si5351.prev_pll_freq = 0;  // enforce PLL reset
+          // make more generic: 
+          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
+          if(mode == CW) filt = 4; else filt = 0;
         }
-        digitalWrite(RX, !(att & 0x02)); // att bit 1 ON: attenuate -20dB by disabling RX line, switching Q5 (antenna input switch) into 100k resistence
-        pinMode(AUDIO1, (att & 0x04) ? OUTPUT : INPUT); // att bit 2 ON: attenuate -40dB by terminating ADC inputs with 10R
-        pinMode(AUDIO2, (att & 0x04) ? OUTPUT : INPUT);
-      }
-      if(menu == SIFXTAL){
-        change = true;
-      }
-      if((menu == PWM_MIN) || (menu == PWM_MAX)){
-        for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
-          lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
-          //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
+        if(menu == ATT){ // post-handling ATT parameter
+          if(dsp_cap == SDR){
+            adc_start(0, !(att & 0x01), F_ADC_CONV); admux[0] = ADMUX;  // att bit 0 ON: attenuate -13dB by changing ADC AREF (full-scale range) from 1V1 to 5V
+            adc_start(1, !(att & 0x01), F_ADC_CONV); admux[1] = ADMUX;
+          }
+          digitalWrite(RX, !(att & 0x02)); // att bit 1 ON: attenuate -20dB by disabling RX line, switching Q5 (antenna input switch) into 100k resistence
+          pinMode(AUDIO1, (att & 0x04) ? OUTPUT : INPUT); // att bit 2 ON: attenuate -40dB by terminating ADC inputs with 10R
+          pinMode(AUDIO2, (att & 0x04) ? OUTPUT : INPUT);
+        }
+        if(menu == SIFXTAL){
+          change = true;
+        }
+        if((menu == PWM_MIN) || (menu == PWM_MAX)){
+          for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
+            lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
+            //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
+        }
+#ifdef CAL_IQ
+        if(menu == CALIB){
+          calibrate_iq(); menu = 0;
+        }
+#endif
       }
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate
@@ -2995,11 +3030,6 @@ void loop()
       }
       if((menu == PARAM_A) || (menu == PARAM_B) || (menu == PARAM_C)){
         delay(300);
-      }
-#endif
-#ifdef CAL_IQ
-      if(menu == CALIB){
-        calibrate_iq(); menu = 0;
       }
 #endif
     }
@@ -3028,7 +3058,6 @@ void loop()
     
     noInterrupts();
     if(mode == CW){
-      const int32_t cw_offset = (dsp_cap) ? 600 : 720;  // this is actual the center frequency of the CW-filters
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
       si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
     } else
