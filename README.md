@@ -169,7 +169,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - Rüdiger Möller, HPSDR presentation by [DJ1MR], 2018. Transmitter architectures for high efficiency amplification
 - [Arduino PWM]
 - [Serial interface]
---->
+-->
 [Simple, fun and versatile]: ucx.png
 
 [original schematic]: https://qrp-labs.com/images/qcx/HiRes.png
