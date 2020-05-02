@@ -72,10 +72,70 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   #define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
   #define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
   #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
+  #define LCD_EN_HI() PORTD |= (1 << _en);         // EN high
+  #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
+  void begin(uint8_t x=-1, uint8_t y=-1){                // Send command , make sure at least 40ms after power-up before sending commands
+    DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN and RS pins outputs
+    PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
+    //delayMicroseconds(50000);                      // *
+    LCD_RS_LO(); LCD_EN_LO();
+    cmd(0x03);                                     // Ensures display is in 8-bit mode
+    //delayMicroseconds(4500); cmd(0x03); delayMicroseconds(4500); cmd(0x03); delayMicroseconds(150); // * Ensures display is in 8-bit mode
+    cmd(0x02);                                     // Puts display in 4-bit mode
+    //cmd(0x28);                                     // * Function set: 2-line, 5x8 
+    cmd(0x0c);                                     // Display on
+    cmd(0x01);                                     // Clear display
+    delay(3);                                      // Allow to execute Clear on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
+    //cmd(0x06);                                     // * Entrymode: left, shift-dec
+  }
+  void nib(uint8_t b){                             // Send four bit nibble to display
+    PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
+    asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns
+    LCD_EN_LO();
+    delayMicroseconds(52);                         // Execution time
+  }
+  void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
+  size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
+    //LCD_EN_HI();                                   // Complete Enable cycle must be at least 500ns (so start early)
+    uint8_t nibh = LCD_PREP_NIBBLE(b >>  4);       // Prepare high nibble data and enable high
+    PORTD = nibh;                                  // Send high nibble data and enable high
+    uint8_t nibl = LCD_PREP_NIBBLE(b & 0xf);       // Prepare low nibble data and enable high
+    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns; ATMEGA clock-cycle is 50ns (so at least 5 cycles)
+    LCD_RS_HI();
+    LCD_EN_LO();
+    PORTD = nibl;                                  // Send low nibble data and enable high
+    LCD_RS_LO();
+    //asm("nop"); asm("nop");                        // Complete Enable cycle must be at least 500ns
+    //PORTD = nibl;                                  // Send low nibble data and enable high
+    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns; ATMEGA clock-cycle is 50ns (so at least 5 cycles)
+    LCD_RS_HI();
+    LCD_EN_LO();
+    LCD_RS_LO();
+    PORTD |= 0x02;                                 // To support serial-interface keep LCD_D5 high, so that DVM is not pulled-down via D
+    delayMicroseconds(52);                         // Execution time  (37+4)*1.25 us
+    return 1;
+  }
+  void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
+  void cursor(){ cmd(0x0e); }
+  void noCursor(){ cmd(0x0c); }
+  void noDisplay(){ cmd(0x08); }
+  void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
+};
+
+/*
+class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
+public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
+  #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
+  #define _en  4      // PC4 - MUST have pull-up resistor
+  #define _rs  4      // PC4 - MUST have pull-up resistor
+  #define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
+  #define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
+  #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
   #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
   void begin(uint8_t x, uint8_t y){                // Send command
-    DDRD |= 0xf << _dn | 1 << _en;                 // Make data EN and RS pins outputs
+    DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN and RS pins outputs
     PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
+    delayMicroseconds(50000);                      // * At least 40ms after power rises above 2.7V before sending commands
     LCD_RS_LO();
     cmd(0x33);                                     // Ensures display is in 8-bit mode
     cmd(0x32);                                     // Puts display in 4-bit mode
@@ -111,6 +171,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void noDisplay(){ cmd(0x08); }
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
 };
+*/
 
 #include <LiquidCrystal.h>
 class LCD_ : public LiquidCrystal {
@@ -897,9 +958,9 @@ public:
       SendRegister(42+0*8, ms_regs, 8); // Write to MS0
       SendRegister(42+1*8, ms_regs, 8); // Write to MS1
       SendRegister(42+2*8, ms_regs, 8); // Write to MS2
-      SendRegister(16+0, 0x0C|3|0x40);       // CLK0: PLLA local msynth; 3=8mA; integer division
-      SendRegister(16+1, 0x0C|3|0x40);       // CLK1: PLLA local msynth; 3=8mA; integer division
-      SendRegister(16+2, 0x2C|3|0x40);       // CLK2: PLLB local msynth; 3=8mA; integer division
+      SendRegister(16+0, 0x0C|3|0x40);       // CLK0: PLLA local msynth; 3=8mA; 0x40=integer division
+      SendRegister(16+1, 0x0C|3|0x40);       // CLK1: PLLA local msynth; 3=8mA; 0x40=integer division
+      SendRegister(16+2, 0x2C|3|0x40);       // CLK2: PLLB local msynth; 3=8mA; 0x40=integer division
       SendRegister(165, i * msa / 90);  // CLK0: I-phase (on change -> Reset PLL)
       SendRegister(166, q * msa / 90);  // CLK1: Q-phase (on change -> Reset PLL)
       if(iqmsa != ((i-q)*msa/90)){ iqmsa = (i-q)*msa/90; SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
@@ -926,6 +987,9 @@ public:
   void powerDown(){
     for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b11000000);  // Conserve power when output is disabled
     SendRegister(3, 0b11111111); // Disable all CLK outputs    
+  }
+  void powerUp(){
+    for(int addr = 16; addr != 20; addr++) SendRegister(addr, 0b11000000);
   }
   #define SI_CLK_OE 3
 
@@ -2564,6 +2628,11 @@ void setup()
 
   initPins();
 
+  //Init si5351
+  si5351.powerDown();  // Disable all (and used) outputs
+  si5351.powerUp();    // Enable used outputs
+
+  delay(100);           // at least 40ms after power rises above 2.7V before sending commands
   lcd.begin(16, 2);  // Init LCD
   for(i = 0; i != N_FONTS; i++){  // Init fonts
     pgm_cache_item(fonts[i], 8);
@@ -2808,7 +2877,7 @@ void loop()
   }
 #endif
   
-  //delay(10);
+  delay(1);
 
   if(menumode == 0){
     smeter();
@@ -3161,5 +3230,11 @@ Rewire/code I/Q clk pins so that a Div/1 and Div/2 scheme is used instead of 0 a
 10,11,13,12   10,11,12,13  (pin)
 Q- I+ Q+ I-   Q- I+ Q+ I-
 90 deg.shift  div/2@S1(pin2)
+
+50MHz LSB OK, USB NOK
+LCD_ LCD timing differences
+LCD re-init
+filter setting per mode?
+Rev5
 
 */

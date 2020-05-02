@@ -50,25 +50,25 @@ Below the schematic after the modification is applied, unused components are lef
 
 ## Installation:
 This modification consists of a few component changes and wires:
-- **To simplify things, 78 components are no longer needed** (and you could omit them on an unbuilt QCX): IC6-10,R11-40,43,55,R59-64,C1,5,8,C9-28,C31,52,53,L1-3,D5,Q7,T1,JP1/DVM/FREQ.
-- **SDR receiver**: change R7,10(82k); C4,C7(1nF), remove R11,12,14,15,17,27,29,59,IC10; wire IC2(pin15) to IC10(pin1), insert 470R if you intend to use a headphones; C39(R27/R29 side) to IC5(pin1); C40(IC10 side) to IC5(pin7), and disconnect R50(5V side) and R52(5V side) and wire both to IC2(pin21). Note on a QCX Rev5 you need to restore/insert manually the missing R49,50,53,C39 (see schematic). If you want to build-up the original (analog) QCX receiver, you can skip this step and insert a SPDT switch between C21(+ side) and IC9(pin1) for CW and R27(pin2) for SSB (as was done in [original QCX-SSB modification]).
+- **To simplify things, 79 components are no longer needed** (and you could omit them on an unbuilt QCX): IC6-10,R11-40,43,55,R59-64,C1,5,8,C9-28,C31,C52-54,L1-3,D5,Q7,T1,JP1/DVM/FREQ.
+- **SDR receiver**: change R7,10(82k); C4,C7(1nF), remove R11,12,14,15,17,27,29,59,IC10; wire IC2(pin15) to IC10(pin1), insert 470R if you intend to use a headphones; C39(R27/R29 side) to IC5(pin1); C40(IC10 side) to IC5(pin7), and disconnect R50(5V side) and R52(5V side) and wire both to IC2(pin21). If you cannot wire C39,R50 then make the following Rev5 mods in addition: remove IC7, change R11(.1uF), C9(10k), R53(1k); wire 10k from R52(IC2-pin21 side) to IC7(pin5); wire R11 (C9 side) to R27(middle). If you want to build-up the original (analog) QCX receiver, you can skip this step and insert a SPDT switch between C21(+ side) and IC9(pin1) for CW and R27(pin2) for SSB (as was done in [original QCX-SSB modification]).
 - **SSB transmitter**: change D4,R56 (10k); R58 (.22uF); C32 (10uF), remove C31; wire IC2(pin21) to pin R57(side DVM-pin3); wire IC2(pin20) to DVM(pin2); wire IC2(pin18) to junction D4-C42-R58; install a microphone to tip (+ of electret) and sleeve GND of paddle-jack; PTT-switch to ring and sleeve ([X1M-mic]).
 - **Multiband support**: remove C1,5,8,R64,T1; at T1 landing pattern (see [QCX Assembly instruction] T1) install R (1k) over 6-8; R (1k) over 3-4; C (10nF) over 4-8; change C30 (30pF); L4 (1uH/16t); replace C25-28,L1-L3 with LPFs for different bands (e.g. [QRPLabs Low Pass Filter kit]).
 
 **Firmware**: download [latest released hex file] and install with [standard QCX firmware upload procedure] (see also <sup>[note 1](#note1)</sup>).
 
-Below the layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted and some must be remove (see above):
+Below the (Rev4) layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted and some must be remove (see above):
 ![layout](layout.png)
 
-Below the wires that needs to be installed on the bottom PCB. Note that a circle represents resistor R50/R52 that is in series with the wire and the pad at which the circle is drawn (the resistor is no longer connected to its original neighbour pad and its probably the best to place this wiring and resistor at the components side):
+Below the (Rev4) wires that needs to be installed on the bottom PCB. Note that a circle represents resistor R50/R52 that is in series with the wire and the pad at which the circle is drawn (the resistor is no longer connected to its original neighbour pad and its probably the best to place this wiring and resistor at the components side):
 ![pcb](pcb.png)
 
-See here the completed transceiver with the modifications applied (includes PA bias mod <sup>[note 3](#note3)</sup>, does not include LPFs):
+See here the completed transceiver with the (Rev4) modifications applied (includes PA bias mod <sup>[note 3](#note3)</sup>, does not include LPFs):
 ![](pcb-top.png)
 ![](pcb-bottom.png)
 
 **Build options:**
-1. For an unbuilt QCX, the easiest way to build this digital transceiver is to omit the 78 components and apply all above modifications, this will offer you all features described above. If you want to, you can still decide to build the original QCX from here.
+1. For an unbuilt QCX, the easiest way to build this digital transceiver is to omit the 79 components and apply all above modifications, this will offer you all features described above. If you want to, you can still decide to build the original QCX from here.
 2. If you already have a working QCX, the easiest way is to apply the SSB transmit mod and bypass the CW filter with a switch, in this way your transceiver keeps the analog receiver circuit, there are no SDR features, and you can still place the original QRP Labs CW firmware if you prefer.
 
 ## Operation:
