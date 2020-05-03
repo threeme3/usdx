@@ -28,7 +28,7 @@
 #define LCD_RS  18        //PC4    (pin 27)
 #define SDA     18        //PC4    (pin 27)
 #define SCL     19        //PC5    (pin 28)
-//#define NTX	11          //PB3    (pin 17)  - experimental: LOW on TX
+//#define NTX  11          //PB3    (pin 17)  - experimental: LOW on TX
 
 /*
 // UCX installation: On blank chip, use (standard Arduino Uno) fuse settings (E:FD, H:DE, L:FF), and use customized Optiboot bootloader for 20MHz clock, then upload via serial interface (with RX, TX and DTR lines connected to pin 1, 2, 3 respectively)
@@ -1805,12 +1805,11 @@ void sdr_rx()
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
+        ac2 >>= att2;  // digital gain control
         // post processing I and Q (down-sampled) results
-        static int16_t v[8];
-        v[7] = ac2 >> att2;
+        static int16_t v[7];
+        i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
         
-        i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7];  // Delay to match Hilbert transform on Q branch
-
         int16_t ac = i + qh;
         ac = slow_dsp(ac);
 
@@ -1865,13 +1864,12 @@ void sdr_rx_q()
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
+        ac2 >>= att2;  // digital gain control
         // Process Q (down-sampled) samples
-        static int16_t v[16];
-        v[15] = ac2 >> att2;
-
-        for(uint8_t j = 0; j != 15; j++) v[j] = v[j + 1];
+        static int16_t v[14];
         q = v[7];
-        qh = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+        qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+        for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
       }
       rx_state = 0; return;
     } else _z1 = _ac;
@@ -1959,10 +1957,10 @@ void sdr_rx()
       p->_za1 = _ac;
       if(b){
         // post processing I and Q (down-sampled) results
-        static int16_t v[8];
-        v[7] = ac2 >> att2;
-        
-        i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7];  // Delay to match Hilbert transform on Q branch
+        ac2 >>= att2;  // digital gain control
+        // post processing I and Q (down-sampled) results
+        static int16_t v[7];
+        i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
 
         int16_t ac = i + qh;
         ac = slow_dsp(ac);
@@ -1979,13 +1977,12 @@ void sdr_rx()
         #endif
         ozd1 = ac;
       } else {
+        ac2 >>= att2;  // digital gain control
         // Process Q (down-sampled) samples
-        static int16_t v[16];
-        v[15] = ac2 >> att2;
-
-        for(uint8_t j = 0; j != 15; j++) v[j] = v[j + 1];
+        static int16_t v[14];
         q = v[7];
-        qh = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+        qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+        for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
       }
     } else p->_z1 = _ac;
   } else p->z1 = ac;  // rx_state == I: 2, 6  Q: 1, 5
