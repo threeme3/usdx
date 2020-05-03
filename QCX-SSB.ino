@@ -930,7 +930,63 @@ public:
     i2c.stop();      
   }
   void SendRegister(uint8_t reg, uint8_t val){ SendRegister(reg, &val, 1); }
+/*
+  bool dirty;
 
+  void set_pll(uint8_t pll, uint32_t fvco){  // Set PLL (fractional) PLLA=0, PLLB=1
+    uint8_t msa; uint32_t msb, msc, msp1, msp2, msp3p2;
+    msa = fvco / fxtal;     // Integer part of vco/fxtal
+    msb = ((uint64_t)(fvco % fxtal)*_MSC) / fxtal; // Fractional part
+    msc = _MSC;
+
+    msp1 = 128*msa + 128*msb/msc - 512;
+    msp2 = 128*msb - 128*msb/msc * msc;    // msp3 == msc
+    msp3p2 = (((msc & 0x0F0000) <<4) | msp2);  // msp3 on top nibble
+    uint8_t pll_regs[8] = { BB1(msc), BB0(msc), BB2(msp1), BB1(msp1), BB0(msp1), BB2(msp3p2), BB1(msp2), BB0(msp2) };
+    SendRegister(26+pll*8, pll_regs, 8); // Write to PLL[pll]
+  }
+
+  void set_ms(uint8_t clk, uint8_t linked_pll, uint8_t msa, uint8_t rdiv, uint8_t phase){  // Set Multisynth divider (integer) CLK0=0, CLK1=1, CLK2=2
+    uint32_t msp1 = (128*msa - 512) | (((uint32_t)rdiv)<<20);     // msp1 and msp2=0, msp3=1, not fractional
+    uint8_t ms_regs[8] = {0, 1, BB2(msp1), BB1(msp1), BB0(msp1), 0, 0, 0};
+    SendRegister(42+clk*8, ms_regs, 8); // Write to MS[clk]
+    SendRegister(16+clk, (linked_pll*0x20)|0x0C|3|0x40);       // CLK[clk]: PLL[pll] local msynth; 3=8mA; 0x40=integer division, bit7:6=0->power-up
+    SendRegister(165+clk, phase * msa / 90);  // CLK[clk]: phase (on change -> reset PLL)
+    static uint16_t pm[3]; // to detect a need for a PLL reset
+    if(pm[clk] != ((phase)*msa/90)){ pm[clk] = (phase)*msa/90; dirty=true; } // 0x20 reset PLLA; 0x80 reset PLLB
+  }
+
+  void set_freq(uint8_t clk, uint8_t pll, uint32_t fout, uint8_t phase){
+    uint8_t rdiv = 0;             // CLK pin sees fout/(2^rdiv)
+    if(fout < 500000){ rdiv = 7; fout *= 128; }; // Divide by 128 for fout 4..500kHz
+
+    uint16_t d = (16 * fxtal) / fout;  // Integer part
+    if(fout > 30000000) d = (34 * fxtal) / fout; // when fvco is getting too low (400 MHz)
+
+    if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d--; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+    uint32_t fvco = d * fout;  // Variable PLL VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
+
+    set_pll(pll, fvco);
+    set_ms(clk, pll, fvco / fout, rdiv, phase);
+
+    _fout = fout;  // cache
+    _div = d;
+    _msa128min512 = fvco / fxtal * 128 - 512;
+    _msb128=((uint64_t)(fvco % fxtal)*_MSC*128) / fxtal;
+  }
+
+  void pll_reset(){ if(dirty){ dirty=false; SendRegister(177, 0xA0); } } // reset PLLA and PLLB, if necessary
+
+  void oe(uint8_t mask){ SendRegister(3, ~mask); } // Output-enable mask: CLK2=4; CLK1=2; CLK0=1
+
+  void freq(uint32_t f, uint8_t i, uint8_t q){  // Set CLK0,1 (PLLA) to fout Hz with phase i, q, and prepare CLK2 (PLL2).
+    set_freq(0, 0, f, i);
+    set_freq(1, 0, f, q);
+    set_freq(2, 1, f, 0);
+    pll_reset();
+    oe(3);
+  }
+*/
   int16_t iqmsa; // to detect a need for a PLL reset
 
   void freq(uint32_t fout, uint8_t i, uint8_t q){  // Set a CLK0,1 to fout Hz with phase i, q
