@@ -74,7 +74,8 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
   #define LCD_EN_HI() PORTD |= (1 << _en);         // EN high
   #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
-  void begin(uint8_t x=-1, uint8_t y=-1){                // Send command , make sure at least 40ms after power-up before sending commands
+  void begin(uint8_t x = 0, uint8_t y = 0){        // Send command , make sure at least 40ms after power-up before sending commands
+    bool reinit = (x == 0) && (y == 0);
     DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN and RS pins outputs
     PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
     //delayMicroseconds(50000);                      // *
@@ -84,6 +85,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     cmd(0x02);                                     // Puts display in 4-bit mode
     //cmd(0x28);                                     // * Function set: 2-line, 5x8 
     cmd(0x0c);                                     // Display on
+    if(reinit) return;
     cmd(0x01);                                     // Clear display
     delay(3);                                      // Allow to execute Clear on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
     //cmd(0x06);                                     // * Entrymode: left, shift-dec
@@ -958,9 +960,9 @@ public:
       SendRegister(42+0*8, ms_regs, 8); // Write to MS0
       SendRegister(42+1*8, ms_regs, 8); // Write to MS1
       SendRegister(42+2*8, ms_regs, 8); // Write to MS2
-      SendRegister(16+0, 0x0C|3|0x40);       // CLK0: PLLA local msynth; 3=8mA; 0x40=integer division
-      SendRegister(16+1, 0x0C|3|0x40);       // CLK1: PLLA local msynth; 3=8mA; 0x40=integer division
-      SendRegister(16+2, 0x2C|3|0x40);       // CLK2: PLLB local msynth; 3=8mA; 0x40=integer division
+      SendRegister(16+0, 0x0C|3|0x40);       // CLK0: PLLA local msynth; 3=8mA; 0x40=integer division; bit7:6=0->power-up
+      SendRegister(16+1, 0x0C|3|0x40);       // CLK1: PLLA local msynth; 3=8mA; 0x40=integer division; bit7:6=0->power-up
+      SendRegister(16+2, 0x2C|3|0x40);       // CLK2: PLLB local msynth; 3=8mA; 0x40=integer division; bit7:6=0->power-up
       SendRegister(165, i * msa / 90);  // CLK0: I-phase (on change -> Reset PLL)
       SendRegister(166, q * msa / 90);  // CLK1: Q-phase (on change -> Reset PLL)
       if(iqmsa != ((i-q)*msa/90)){ iqmsa = (i-q)*msa/90; SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
@@ -987,9 +989,6 @@ public:
   void powerDown(){
     for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b11000000);  // Conserve power when output is disabled
     SendRegister(3, 0b11111111); // Disable all CLK outputs    
-  }
-  void powerUp(){
-    for(int addr = 16; addr != 20; addr++) SendRegister(addr, 0b11000000);
   }
   #define SI_CLK_OE 3
 
@@ -2365,8 +2364,8 @@ void powerDown()
   lcd.setCursor(0, 1); lcd.print(F("Power-off 73 :-)")); lcd_blanks();
 
   MCUSR = ~(1<<WDRF);  // MSY be done before wdt_disable()
-  wdt_disable();
-
+  wdt_disable();   // WDTON Fuse High bit need to be 1 (0xD1), if NOT it will override and set WDE=1; WDIE=0, meaning MCU will reset when watchdog timer is zero, and this seems to happen when wdt_disable() is called
+  
   timer2_stop();
   timer1_stop();
   adc_stop();
@@ -2482,7 +2481,8 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
       break;
   }
 }
-uint32_t schedule_time = 0;
+uint32_t save_event_time = 0;
+uint32_t sec_event_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
 static uint8_t pwm_max = 220;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly
@@ -2629,8 +2629,7 @@ void setup()
   initPins();
 
   //Init si5351
-  si5351.powerDown();  // Disable all (and used) outputs
-  si5351.powerUp();    // Enable used outputs
+  si5351.powerDown();  // Disable all (used) outputs
 
   delay(100);           // at least 40ms after power rises above 2.7V before sending commands
   lcd.begin(16, 2);  // Init LCD
@@ -2878,6 +2877,13 @@ void loop()
 #endif
   
   delay(1);
+
+  if(millis() > sec_event_time){
+    sec_event_time = millis() + 1000;  // schedule time next second
+#ifndef OLED
+    lcd.begin();  // fast LCD re-init (in case LCD has been taken out and placed back when power-on)
+#endif
+  }
 
   if(menumode == 0){
     smeter();
@@ -3155,7 +3161,7 @@ void loop()
   if(change){
     change = false;
     if(prev_bandval != bandval){ freq = band[bandval]; prev_bandval = bandval; }
-    schedule_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
+    save_event_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
  
     if(menumode == 0){
       display_vfo(freq);
@@ -3178,9 +3184,9 @@ void loop()
     interrupts();
   }
   
-  if((schedule_time) && (millis() > schedule_time)){  // save freq when time has reached schedule
+  if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
     paramAction(SAVE, FREQ);  // save freq changes
-    schedule_time = 0;
+    save_event_time = 0;
     //lcd.setCursor(15, 1); lcd.print("S"); delay(100); lcd.setCursor(15, 1); lcd.print("R");
   }
   
@@ -3235,6 +3241,5 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 LCD_ LCD timing differences
 LCD re-init
 filter setting per mode?
-Rev5
 
 */
