@@ -2862,6 +2862,7 @@ void setup()
   if(!ssb_cap){ mode = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
   if(dsp_cap) cw_offset = 325; else cw_offset = 700;
+  if(dsp_cap == DSP) volume = 10;
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);

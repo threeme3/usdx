@@ -49,6 +49,8 @@ Below the schematic after the modification is applied, unused components are lef
 
 
 ## Installation:
+Please find here the latest **[PCB Rev5 Assembly Manual CLICK HERE] by Manuel, DL2MAN (document revision 1.00), 07-May-2020**, instructions for older PCB revisions can be found below:
+
 This modification consists of a few component changes and wires:
 - **To simplify things, 79 components are no longer needed** (and you could omit them on an unbuilt QCX): IC6-10,R11-40,43,55,R59-64,C1,5,8,C9-28,C31,C52-54,L1-3,D5,Q7,T1,JP1/DVM/FREQ.
 - **SDR receiver**: change R7,10(82k); C4,C7(1nF), remove R11,12,14,15,17,27,29,59,IC10; wire IC2(pin15) to IC10(pin1), insert 470R if you intend to use a headphones; C39(R27/R29 side) to IC5(pin1); C40(IC10 side) to IC5(pin7), and disconnect R50(5V side) and R52(5V side) and wire both to IC2(pin21). If you cannot wire C39,R50 then make the following Rev5 mods in addition: remove IC7, change R11(.1uF), C9(10k), R53(1k); wire 10k from R52(IC2-pin21 side) to IC7(pin5); wire R11 (C9 side) to R27(middle). If you want to build-up the original (analog) QCX receiver, you can skip this step and insert a SPDT switch between C21(+ side) and IC9(pin1) for CW and R27(pin2) for SSB (as was done in [original QCX-SSB modification]).
@@ -153,7 +155,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 ### Notes:
 1. <a name="note1"/>Firmware upload variations:
-- [AVRDudess] tool or avrdude CLI (avrdude -c avrisp -b 19200 -P /dev/ttyACM0 (or: /dev/ttyUSB0) -p m328p -e -U efuse:w:0xFD:m -U hfuse:w:0xD1:m -U lfuse:w:0xF7:m -U flash:w:R1.0xx.hex) can be used for uploading the firmware via the ISP connector on the QCX. Follow [Arduino as ISP] instructions if you have a Arduino UNO board available (tip: use female-to-male breadboard cables to connect Arduino to QCX ISP jumper); or [USBasp] instructions if you have a USBasp programmer, alternatively use [USPasp ExtremeBurner]; but many other ISP programmers can be used in similar manner such as [USBtiny] or AVRisp mkII. During ISP, mic should be disconnected, power supply should be connected; in tool do not erase, program EEPROM or set fuse settings (they are by default ok: E=FD H=D1 L=F7).
+- [AVRDudess] tool or avrdude CLI (avrdude -c avrisp -b 19200 -P /dev/ttyACM0 (or: /dev/ttyUSB0) -p m328p -e -U efuse:w:0xfd:m -U hfuse:w:0xC1:m -U lfuse:w:0xF7:m -U flash:w:firmware.hex) can be used for uploading the firmware via the ISP connector on the QCX. Follow [Arduino as ISP] instructions if you have a Arduino UNO board available (tip: use female-to-male breadboard cables to connect Arduino to QCX ISP jumper); or [USBasp] instructions if you have a USBasp programmer, alternatively use [USPasp ExtremeBurner]; but many other ISP programmers can be used in similar manner such as [USBtiny] or AVRisp mkII. During ISP, mic should be disconnected, power supply should be connected; in tool do not erase, program EEPROM or set fuse settings (they are by default ok: E=FD H=D1 L=F7).
 - Alternatively, in case you have an ATMEGA328P chip with Arduino bootloader, you can place the chip in an Arduino UNO board and upload directly (without the need for a ISP cable and QCX) by specifying 'arduino' programmer and baudrate 115200.
 - Alternatively, in case you have an [Arduino 1.8.9] (or newer) environment installed, you can upload the [QCX-SSB Sketch] directly from the Arduino environment (without using AVRDudess and firmware file); make sure "Tools > Board > Arduino/Genuino Uno",  "Tools > Port > /dev/ttyUSB0 or ttyACM0", and then "Sketch > Upload" is selected, while the ATMEGA328P chip is placed in the Arduino UNO socket. It is also possible to use [Arduino as ISP] method: upload this variation of [ArduinoISP] to the Arduino board and select "Tools > Programmer > Arduino as ISP", and "Sketch > Upload Using Programmer".
 2. <a name="note2"/>The occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to half a unit-circle _UA/2 (equivalent to 180 degrees)). Audio-input can be attenuated by increasing parameter MIC_ATTEN (6dB per step).
@@ -162,6 +164,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 ### Credits:
 [QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] transmitter and QCX-SDR receiver stage both running on a ATMEGA328P, including its multiband front-end and direct PA biasing/envelope-generation technique; its concept, circuit, code and modification to run on a QCX are a design by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi. Many thanks to all of you who got interested in this project and took the challege and effort to try out QCX-SSB. Without your valuable feedback the project could not have kept moving on, improving and challenging new ideas!
+The detailed assembly manual for Rev 5 PCB, is the work of Manuel, DL2MAN (many thanks).
 
 <!---
 ### References
@@ -261,4 +264,6 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 [Arduino PWM]: http://interface.khm.de/index.php/lab/interfaces-advanced/arduino-dds-sinewave-generator/
 
 [Serial interface]: https://groups.io/g/QRPLabs/attachment/40706/0/connections.png
+
+[PCB Rev5 Assembly Manual CLICK HERE]: QCX-SSB_assembly_Rev-5.pdf
 
