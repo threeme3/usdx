@@ -2934,8 +2934,12 @@ void loop()
 
   if(millis() > sec_event_time){
     sec_event_time = millis() + 1000;  // schedule time next second
+
+//#define LCD_REINIT
+#ifdef LCD_REINIT
 #ifndef OLED
     lcd.begin();  // fast LCD re-init (in case LCD has been taken out and placed back when power-on)
+#endif
 #endif
   }
 
