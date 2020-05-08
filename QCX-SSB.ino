@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02a"
+#define VERSION   "1.02b"
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -69,32 +69,37 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
   #define _en  4      // PC4 - MUST have pull-up resistor
   #define _rs  4      // PC4 - MUST have pull-up resistor
-  #define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
-  #define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
+  //#define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
+  //#define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
+  #define LCD_RS_LO() PORTC &= ~(1 << _rs);        // RS low
+  #define LCD_RS_HI() PORTC |= (1 << _rs);         // RS high
   #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
   #define LCD_EN_HI() PORTD |= (1 << _en);         // EN high
   #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
   void begin(uint8_t x = 0, uint8_t y = 0){        // Send command , make sure at least 40ms after power-up before sending commands
     bool reinit = (x == 0) && (y == 0);
-    DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN and RS pins outputs
-    PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
-    //delayMicroseconds(50000);                      // *
+    DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN outputs
+    DDRC |= 1 << _rs;
+    //PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
+    delayMicroseconds(50000);                      // *
     LCD_RS_LO(); LCD_EN_LO();
-    cmd(0x03);                                     // Ensures display is in 8-bit mode
-    //delayMicroseconds(4500); cmd(0x03); delayMicroseconds(4500); cmd(0x03); delayMicroseconds(150); // * Ensures display is in 8-bit mode
-    cmd(0x02);                                     // Puts display in 4-bit mode
-    //cmd(0x28);                                     // * Function set: 2-line, 5x8 
+    cmd(0x33);                                     // Ensures display is in 8-bit mode
+    delayMicroseconds(4500); cmd(0x33); delayMicroseconds(4500); cmd(0x33); delayMicroseconds(150); // * Ensures display is in 8-bit mode
+    cmd(0x32);                                     // Puts display in 4-bit mode
+    cmd(0x28);                                     // * Function set: 2-line, 5x8 
     cmd(0x0c);                                     // Display on
     if(reinit) return;
     cmd(0x01);                                     // Clear display
     delay(3);                                      // Allow to execute Clear on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
-    //cmd(0x06);                                     // * Entrymode: left, shift-dec
+    cmd(0x06);                                     // * Entrymode: left, shift-dec
   }
   void nib(uint8_t b){                             // Send four bit nibble to display
     PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
-    asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns
+    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns
+    delayMicroseconds(4);
     LCD_EN_LO();
-    delayMicroseconds(52);                         // Execution time
+    //delayMicroseconds(52);                         // Execution time
+    delayMicroseconds(60);                         // Execution time
   }
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
@@ -113,8 +118,8 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     LCD_RS_HI();
     LCD_EN_LO();
     LCD_RS_LO();
+    delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
     PORTD |= 0x02;                                 // To support serial-interface keep LCD_D5 high, so that DVM is not pulled-down via D
-    delayMicroseconds(52);                         // Execution time  (37+4)*1.25 us
     return 1;
   }
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
@@ -2681,15 +2686,15 @@ void setup()
 
   initPins();
 
-  //Init si5351
-  si5351.powerDown();  // Disable all (used) outputs
-
   delay(100);           // at least 40ms after power rises above 2.7V before sending commands
   lcd.begin(16, 2);  // Init LCD
   for(i = 0; i != N_FONTS; i++){  // Init fonts
     pgm_cache_item(fonts[i], 8);
     lcd.createChar(0x01 + i, /*fonts[i]*/_item);
   }
+
+  //Init si5351
+  si5351.powerDown();  // Disable all (used) outputs
 
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0  
