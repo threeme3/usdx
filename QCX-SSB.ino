@@ -62,7 +62,7 @@ experimentally: #define AUTO_ADC_BIAS 1
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-//FUSES = { .low = 0xF7, .high = 0xD1, .extended = 0xFD };   // Fuse settings should be E=FD H=D1 L=F7, at programming.
+//FUSES = { .low = 0xFF, .high = 0xDE, .extended = 0xFD };   // Fuse settings should be E=FD H=D1 L=F7, at programming.
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
