@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02b"
+#define VERSION   "1.02c"
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -1426,12 +1426,14 @@ void dsp_tx()
 
 volatile uint16_t acc;
 volatile uint32_t cw_offset;
+volatile uint8_t cw_tone = 1;
+const uint32_t tones[] = {325, 700};
 
 volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
 volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
 inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam.ac.uk/~am21/hakmemc.html, ITEM 149]: p_sin+=n_cos*2*PI*f/fs; n_cos-=p_sin*2*PI*f/fs;
 {
-  uint8_t alpha100 = cw_offset * 628 / F_SAMP_TX;  // alpha = f_tone * 6.28 / fs
+  uint8_t alpha100 = tones[cw_tone]/*cw_offset*/ * 628 / F_SAMP_TX;  // alpha = f_tone * 6.28 / fs
   p_sin += alpha100 * n_cos / 100;
   n_cos -= alpha100 * p_sin / 100;
 }
@@ -1673,28 +1675,37 @@ inline int16_t filt_var_cw(int16_t za0)  //filters build with www.micromodeler.c
 { //   (2nd Order (SR=4465kHz) IIR in Direct Form I, 8x8:16), adding 64x front-gain, 
   static int16_t za1,za2;
   static int16_t zb0,zb1,zb2;
-
-  switch(filt){
-    //case 4: zb0=(5*za0+9*za1+5*za2)+(30L*zb1-38L*zb2)/64; break; //720Hz+-250Hz
-    //case 5: zb0=(2*za0+4*za1+2*za2)+(51L*zb1-52L*zb2)/64; break; //720Hz+-100Hz
-    //case 6: zb0=(1*za0+2*za1+1*za2)+(59L*zb1-58L*zb2)/64; break; //720Hz+-50Hz
-    //case 7: zb0=(0*za0+1*za1+0*za2)+(66L*zb1-61L*zb2)/64; break; //720Hz+-25Hz
-    case 4: zb0=(za0+2*za1+za2)/2+(41L*zb1-23L*zb2)/32; break;   //500-1000Hz
-    case 5: zb0=5*(za0-2*za1+za2)+(105L*zb1-58L*zb2)/64; break;   //650-840Hz
-    case 6: zb0=3*(za0-2*za1+za2)+(108L*zb1-61L*zb2)/64; break;   //650-750Hz
-    case 7: zb0=(2*za0-3*za1+2*za2)+(111L*zb1-62L*zb2)/64; break; //630-680Hz
-  }
-
   static int16_t zc0,zc1,zc2;
-  switch(filt){
-    //case 4: zc0=(zb0-2*zb1+zb2)/4+(76L*zc1-44L*zc2)/64; break; //720Hz+-250Hz
-    //case 5: zc0=(zb0-2*zb1+zb2)/8+(72L*zc1-53L*zc2)/64; break; //720Hz+-100Hz
-    //case 6: zc0=(zb0-2*zb1+zb2)/16+(70L*zc1-58L*zc2)/64; break; //720Hz+-50Hz
-    //case 7: zc0=(zb0-2*zb1+zb2)/32+(70L*zc1-62L*zc2)/64; break; //720Hz+-25Hz
-    case 4: zc0=(zb0-2*zb1+zb2)/4+(105L*zc1-52L*zc2)/64; break;      //500-1000Hz
-    case 5: zc0=((zb0+2*zb1+zb2)+97L*zc1-57L*zc2)/64; break;      //650-840Hz
-    case 6: zc0=((zb0+zb1+zb2)+104L*zc1-60L*zc2)/64; break;       //650-750Hz
-    case 7: zc0=((zb1)+109L*zc1-62L*zc2)/64; break;               //630-680Hz
+
+  if(cw_tone == 0){
+    switch(filt){
+      case 4: zb0=(za0+2*za1+za2)/2+(41L*zb1-23L*zb2)/32; break;   //500-1000Hz
+      case 5: zb0=5*(za0-2*za1+za2)+(105L*zb1-58L*zb2)/64; break;   //650-840Hz
+      case 6: zb0=3*(za0-2*za1+za2)+(108L*zb1-61L*zb2)/64; break;   //650-750Hz
+      case 7: zb0=(2*za0-3*za1+2*za2)+(111L*zb1-62L*zb2)/64; break; //630-680Hz
+    }
+  
+    switch(filt){
+      case 4: zc0=(zb0-2*zb1+zb2)/4+(105L*zc1-52L*zc2)/64; break;      //500-1000Hz
+      case 5: zc0=((zb0+2*zb1+zb2)+97L*zc1-57L*zc2)/64; break;      //650-840Hz
+      case 6: zc0=((zb0+zb1+zb2)+104L*zc1-60L*zc2)/64; break;       //650-750Hz
+      case 7: zc0=((zb1)+109L*zc1-62L*zc2)/64; break;               //630-680Hz
+    }
+  }
+  if(cw_tone == 1){
+    switch(filt){
+      case 4: zb0=(5*za0+9*za1+5*za2)+(30L*zb1-38L*zb2)/64; break; //720Hz+-250Hz
+      case 5: zb0=(2*za0+4*za1+2*za2)+(51L*zb1-52L*zb2)/64; break; //720Hz+-100Hz
+      case 6: zb0=(1*za0+2*za1+1*za2)+(59L*zb1-58L*zb2)/64; break; //720Hz+-50Hz
+      case 7: zb0=(0*za0+1*za1+0*za2)+(66L*zb1-61L*zb2)/64; break; //720Hz+-25Hz
+    }
+  
+    switch(filt){
+      case 4: zc0=(zb0-2*zb1+zb2)/4+(76L*zc1-44L*zc2)/64; break; //720Hz+-250Hz
+      case 5: zc0=(zb0-2*zb1+zb2)/8+(72L*zc1-53L*zc2)/64; break; //720Hz+-100Hz
+      case 6: zc0=(zb0-2*zb1+zb2)/16+(70L*zc1-58L*zc2)/64; break; //720Hz+-50Hz
+      case 7: zc0=(zb0-2*zb1+zb2)/32+(70L*zc1-62L*zc2)/64; break; //720Hz+-25Hz
+    } 
   }
 
   zc2=zc1;
@@ -2269,19 +2280,18 @@ float smeter(float ref = 5)  //= 10*log(8000/2400)=5  ref to 2.4kHz BW.  plus so
   static uint8_t cnt;
   cnt++;
   if((cnt % 8) == 0){
-
     if(smode == 1){ // dBm meter
-      lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print(F("dBm   "));
+      lcd.noCursor(); lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print(F("dBm   "));
     }
     if(smode == 2){ // S-meter
       uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
-      lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s); 
+      lcd.noCursor(); lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s); 
     }
     dbm_max = -174.0 + 34.0;
   }
   if(smode == 3){ // S-bar
     int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
-    lcd.setCursor(12, 0); 
+    lcd.noCursor(); lcd.setCursor(12, 0); 
     char tmp[5];
     for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
     lcd.print(tmp);
@@ -2551,10 +2561,10 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 25  // number of (visible) parameters
+#define N_PARAMS 26  // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -2567,6 +2577,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* stepsize_label[10] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
   const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
   const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
+  const char* cw_tone_label[4] = { "325", "700" };
   switch(id){
     // Visible parameters
     case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false); break;
@@ -2580,7 +2591,8 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false); break;
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
-    case CWOFF:   paramAction(action, cw_offset, F("2.2"), F("CW Offset"), NULL, 300, 2000, false); break;
+    case CWTONE: paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
+    case CWOFF:   paramAction(action, cw_offset, F("2.3"), F("CW Offset"), NULL, 300, 2000, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
     case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
@@ -2866,7 +2878,7 @@ void setup()
   drive = 4;  // Init settings
   if(!ssb_cap){ mode = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
-  if(dsp_cap) cw_offset = 325; else cw_offset = 700;
+  if(dsp_cap) cw_offset = tones[0]; else cw_offset = tones[1];
   if(dsp_cap == DSP) volume = 10;
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
@@ -3188,6 +3200,9 @@ void loop()
           for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
             lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
             //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
+        }
+        if(menu == CWTONE){
+          if(dsp_cap) cw_offset = (cw_tone == 0) ? tones[0] : tones[1];
         }
 #ifdef CAL_IQ
         if(menu == CALIB){

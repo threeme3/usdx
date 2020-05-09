@@ -38,7 +38,7 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 (**current**) | 2020-04-12 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. |
+| R1.02 (**current**) | 2020-04-12 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix. |
 | R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. **See here [original QCX-SSB modification] (it is also supported by current firmware!)** |
 | R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
 
@@ -89,6 +89,8 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 1.9 ATT2            | Digital Attenuator in CIC-stage (0-16) in steps of 6dB | |
 | 1.10 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
 | 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
+| 2.2 CW Tone         | CW Filter+Side-tone (300, 700) | |
+| 2.3 CW Offset       | CW TX Offset (should align with CW Filter Tone) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | **R long** | |
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
