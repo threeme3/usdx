@@ -692,7 +692,7 @@ public:
     setCursor(0, 0);
   }
 };
-//#define OLED  1   // SDD1306 connection on display header: 1=GND(black), 2=RED(red), 13=SDA(brown), 14=SCK(orange)
+//#define OLED  1   // SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
 #ifdef OLED
 SSD1306Device lcd;
 #else
@@ -2591,7 +2591,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false); break;
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
-    case CWTONE: paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
+    case CWTONE:  paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
     case CWOFF:   paramAction(action, cw_offset, F("2.3"), F("CW Offset"), NULL, 300, 2000, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
@@ -3319,4 +3319,5 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 LCD_ LCD timing differences
 filter setting per mode?
 
+s-meter offset issue
 */

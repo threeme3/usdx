@@ -90,7 +90,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 1.10 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
 | 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
 | 2.2 CW Tone         | CW Filter+Side-tone (300, 700) | |
-| 2.3 CW Offset       | CW TX Offset (should align with CW Filter Tone) | |
+| 2.3 CW Offset       | CW RX Offset (use to align with CW Filter Tone) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | **R long** | |
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
