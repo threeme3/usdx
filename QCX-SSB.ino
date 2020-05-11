@@ -2878,7 +2878,7 @@ void setup()
   drive = 4;  // Init settings
   if(!ssb_cap){ mode = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
-  if(dsp_cap) cw_offset = tones[0]; else cw_offset = tones[1];
+  cw_offset = tones[1];
   if(dsp_cap == DSP) volume = 10;
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
@@ -3202,7 +3202,7 @@ void loop()
             //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
         }
         if(menu == CWTONE){
-          if(dsp_cap) cw_offset = (cw_tone == 0) ? tones[0] : tones[1];
+          if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] : tones[1]; paramAction(SAVE, CWOFF); }
         }
 #ifdef CAL_IQ
         if(menu == CALIB){
@@ -3286,9 +3286,7 @@ att extended agc
 configurable F_CPU
 CW-L mode
 VFO-A/B+split+RIT
-OLED display support aka http://www.technoblogy.com/list?22ML
 VOX integration in main loop
-auto-bias for AUDIO1+2 inputs
 K2/TS480 CAT control
 faster RX-TX switch to support CW
 clock
@@ -3320,4 +3318,11 @@ LCD_ LCD timing differences
 filter setting per mode?
 
 s-meter offset issue
+
+perstenncy 2.3 setting
+temp mode change for cw/ssb  - filt setting
+all filters availble for cw/ssb mode
+iq setting bug
+
+
 */
