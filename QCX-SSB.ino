@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02c"
+#define VERSION   "1.02d"
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -62,7 +62,7 @@ experimentally: #define AUTO_ADC_BIAS 1
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-//FUSES = { .low = 0xFF, .high = 0xDE, .extended = 0xFD };   // Fuse settings should be E=FD H=D1 L=F7, at programming.
+//FUSES = { .low = 0xFF, .high = 0xDE, .extended = 0xFD };   // Fuse settings should be these at programming.
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
@@ -574,6 +574,7 @@ const uint8_t font[]PROGMEM = {
 #define FONT_STRETCHH 0
 */
 
+#define BRIGHT  1
 static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence
 //  0xAE,     // Display OFF (sleep mode)
     0x20, 0b10,   // Set Memory Addressing Mode
@@ -584,7 +585,11 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
  0x00,     // Set low nibble of column address
  0x10,     // Set high nibble of column address
    0x40,     // Set display start line address
+#ifdef BRIGHT
   0x81, /*32*/ 0x7F,   // Set contrast control register
+#else
+  0x81, 32,   // Set contrast control register
+#endif
   0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
    0xA6,     // Set display mode. A6=Normal; A7=Inverse
   0xA8, 0x1F,   // Set multiplex ratio(1 to 64)
@@ -592,7 +597,11 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
           // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
   0xD3, 0x00,   // Set display offset. 00 = no offset
    0xD5, 0x80,   // --set display clock divide ratio/oscillator frequency
+#ifdef BRIGHT
   0xD9, 0xF1, // 0xF1=brighter //0x22,   // Set pre-charge period
+#else
+  0xD9, 0x22,   // Set pre-charge period
+#endif
   0xDA, 0x02,   // Set com pins hardware configuration
 //   0xDB, 0x40, //0x20,   // --set vcomh 0x20 = 0.77xVcc
   0x8D, 0x14,    // Set DC-DC enable
@@ -1035,7 +1044,6 @@ public:
       _msb128=((uint64_t)(fvcoa % fxtal)*_MSC*128) / fxtal;
   }
 
-  volatile int32_t prev_pll_freq;
   uint8_t RecvRegister(uint8_t reg){
     i2c.start();  // Data write to set the register address
     i2c.SendByte(SI5351_ADDR << 1);
@@ -1088,12 +1096,12 @@ public:
   volatile uint8_t divider;  // note: because of int8 only freq > 3.6MHz can be covered for R_DIV=1
   volatile uint8_t mult;
   volatile uint8_t pll_regs[8];
-  volatile int32_t prev_pll_freq;
+  volatile int32_t iqmsa;
   volatile int32_t pll_freq;   // temporary
   
   SI5351(){
     init();
-    prev_pll_freq = 0;
+    iqmsa = 0;
   }
   uint8_t RecvRegister(uint8_t reg)
   {
@@ -1231,8 +1239,8 @@ public:
     SendRegister(SI_CLK_OE, 0b11111100); // Enable CLK1|CLK0
     // Reset the PLL. This causes a glitch in the output. For small changes to
     // the parameters, you don't need to reset the PLL, and there is no glitch
-    if((abs(pll_freq - prev_pll_freq) > 16000000L) || divider != prev_divider){
-      prev_pll_freq = pll_freq;
+    if((abs(pll_freq - iqmsa) > 16000000L) || divider != prev_divider){
+      iqmsa = pll_freq;
       prev_divider = divider;
       SendRegister(SI_PLL_RESET, 0xA0);
     }
@@ -1630,129 +1638,89 @@ param_c = avg;
 
 #define N_FILT 7
 volatile int8_t filt = 0;
+int8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
 inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
 { 
   static int16_t za1,za2;
+  static int16_t zb0,zb1,zb2;
+  static int16_t zc0,zc1,zc2;
   
-  //if(filt < 4)
+  if(filt < 4)
   {  // for SSB filters
     // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     static int16_t zz1,zz2;
     za0=(29*(za0-zz1)+50*za1)/64;                               //300-Hz
     zz2=zz1;
     zz1=za0;
-  }
 
-  // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
-  static int16_t zb0,zb1,zb2;
-  switch(filt){
-    case 1: zb0=za0; break; //0-4000Hz (pass-through)
-    case 2: zb0=(10*(za0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
-    case 3: zb0=(7*(za0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
-  }
-
-  static int16_t zc0,zc1,zc2;
-  switch(filt){
-    case 1: zc0=zb0; break; //0-4000Hz (pass-through)
-    case 2: zc0=(8*(zb0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
-    case 3: zc0=(4*(zb0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
-  }
-
-  zc2=zc1;
-  zc1=zc0;
-
-  zb2=zb1;
-  zb1=zb0;
-
-  za2=za1;
-  za1=za0;
+    // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
+    switch(filt){
+      case 1: zb0=za0; break; //0-4000Hz (pass-through)
+      case 2: zb0=(10*(za0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
+      case 3: zb0=(7*(za0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
+    }
   
-  return zc0;
+    switch(filt){
+      case 1: zc0=zb0; break; //0-4000Hz (pass-through)
+      case 2: zc0=(8*(zb0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
+      case 3: zc0=(4*(zb0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
+    }
+  
+    zc2=zc1;
+    zc1=zc0;
+  
+    zb2=zb1;
+    zb1=zb0;
+  
+    za2=za1;
+    za1=za0;
+    
+    return zc0;
+  } else { // for CW filters
+    //   (2nd Order (SR=4465Hz) IIR in Direct Form I, 8x8:16), adding 64x front-gain (to deal with later division)
+    if(cw_tone == 0){
+      switch(filt){
+        case 4: zb0=(za0+2*za1+za2)/2+(41L*zb1-23L*zb2)/32; break;   //500-1000Hz
+        case 5: zb0=5*(za0-2*za1+za2)+(105L*zb1-58L*zb2)/64; break;   //650-840Hz
+        case 6: zb0=3*(za0-2*za1+za2)+(108L*zb1-61L*zb2)/64; break;   //650-750Hz
+        case 7: zb0=(2*za0-3*za1+2*za2)+(111L*zb1-62L*zb2)/64; break; //630-680Hz
+      }
+    
+      switch(filt){
+        case 4: zc0=(zb0-2*zb1+zb2)/4+(105L*zc1-52L*zc2)/64; break;      //500-1000Hz
+        case 5: zc0=((zb0+2*zb1+zb2)+97L*zc1-57L*zc2)/64; break;      //650-840Hz
+        case 6: zc0=((zb0+zb1+zb2)+104L*zc1-60L*zc2)/64; break;       //650-750Hz
+        case 7: zc0=((zb1)+109L*zc1-62L*zc2)/64; break;               //630-680Hz
+      }
+    }
+    if(cw_tone == 1){
+      switch(filt){
+        case 4: zb0=(5*za0+9*za1+5*za2)+(30L*zb1-38L*zb2)/64; break; //720Hz+-250Hz
+        case 5: zb0=(2*za0+4*za1+2*za2)+(51L*zb1-52L*zb2)/64; break; //720Hz+-100Hz
+        case 6: zb0=(1*za0+2*za1+1*za2)+(59L*zb1-58L*zb2)/64; break; //720Hz+-50Hz
+        case 7: zb0=(0*za0+1*za1+0*za2)+(66L*zb1-61L*zb2)/64; break; //720Hz+-25Hz
+      }
+    
+      switch(filt){
+        case 4: zc0=(zb0-2*zb1+zb2)/4+(76L*zc1-44L*zc2)/64; break; //720Hz+-250Hz
+        case 5: zc0=(zb0-2*zb1+zb2)/8+(72L*zc1-53L*zc2)/64; break; //720Hz+-100Hz
+        case 6: zc0=(zb0-2*zb1+zb2)/16+(70L*zc1-58L*zc2)/64; break; //720Hz+-50Hz
+        case 7: zc0=(zb0-2*zb1+zb2)/32+(70L*zc1-62L*zc2)/64; break; //720Hz+-25Hz
+      } 
+    }
+    zc2=zc1;
+    zc1=zc0;
+  
+    zb2=zb1;
+    zb1=zb0;
+  
+    za2=za1;
+    za1=za0;
+    
+    return zc0 / 64; // compensate the 64x front-end gain
+  }
 }
-
-inline int16_t filt_var_cw(int16_t za0)  //filters build with www.micromodeler.com
-{ //   (2nd Order (SR=4465kHz) IIR in Direct Form I, 8x8:16), adding 64x front-gain, 
-  static int16_t za1,za2;
-  static int16_t zb0,zb1,zb2;
-  static int16_t zc0,zc1,zc2;
-
-  if(cw_tone == 0){
-    switch(filt){
-      case 4: zb0=(za0+2*za1+za2)/2+(41L*zb1-23L*zb2)/32; break;   //500-1000Hz
-      case 5: zb0=5*(za0-2*za1+za2)+(105L*zb1-58L*zb2)/64; break;   //650-840Hz
-      case 6: zb0=3*(za0-2*za1+za2)+(108L*zb1-61L*zb2)/64; break;   //650-750Hz
-      case 7: zb0=(2*za0-3*za1+2*za2)+(111L*zb1-62L*zb2)/64; break; //630-680Hz
-    }
-  
-    switch(filt){
-      case 4: zc0=(zb0-2*zb1+zb2)/4+(105L*zc1-52L*zc2)/64; break;      //500-1000Hz
-      case 5: zc0=((zb0+2*zb1+zb2)+97L*zc1-57L*zc2)/64; break;      //650-840Hz
-      case 6: zc0=((zb0+zb1+zb2)+104L*zc1-60L*zc2)/64; break;       //650-750Hz
-      case 7: zc0=((zb1)+109L*zc1-62L*zc2)/64; break;               //630-680Hz
-    }
-  }
-  if(cw_tone == 1){
-    switch(filt){
-      case 4: zb0=(5*za0+9*za1+5*za2)+(30L*zb1-38L*zb2)/64; break; //720Hz+-250Hz
-      case 5: zb0=(2*za0+4*za1+2*za2)+(51L*zb1-52L*zb2)/64; break; //720Hz+-100Hz
-      case 6: zb0=(1*za0+2*za1+1*za2)+(59L*zb1-58L*zb2)/64; break; //720Hz+-50Hz
-      case 7: zb0=(0*za0+1*za1+0*za2)+(66L*zb1-61L*zb2)/64; break; //720Hz+-25Hz
-    }
-  
-    switch(filt){
-      case 4: zc0=(zb0-2*zb1+zb2)/4+(76L*zc1-44L*zc2)/64; break; //720Hz+-250Hz
-      case 5: zc0=(zb0-2*zb1+zb2)/8+(72L*zc1-53L*zc2)/64; break; //720Hz+-100Hz
-      case 6: zc0=(zb0-2*zb1+zb2)/16+(70L*zc1-58L*zc2)/64; break; //720Hz+-50Hz
-      case 7: zc0=(zb0-2*zb1+zb2)/32+(70L*zc1-62L*zc2)/64; break; //720Hz+-25Hz
-    } 
-  }
-
-  zc2=zc1;
-  zc1=zc0;
-
-  zb2=zb1;
-  zb1=zb0;
-
-  za2=za1;
-  za1=za0;
-
-  return zc0 / 64;
-}
-
-/*inline int16_t filt_var_cw(int32_t za0)  //filters build with www.micromodeler.com
-{ 
-  static int32_t za1,za2;
-  za0 *= 64;
-
-  // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
-  static int32_t zb0,zb1,zb2;
-  switch(filt){
-    case 4: zb0=(za0+2*za1+za2+41*zb1-23*zb2)/32; break;   //500-1000Hz
-    case 5: zb0=(5*(za0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
-    case 6: zb0=(3*(za0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
-    case 7: zb0=((2*za0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
-  }
-
-  static int32_t zc0,zc1,zc2;
-  switch(filt){
-    case 4: zc0=(16*(zb0-2*zb1+zb2)+105*zc1-52*zc2)/64; break;      //500-1000Hz
-    case 5: zc0=((zb0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
-    case 6: zc0=((zb0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
-    case 7: zc0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
-  }
-
-  zc2=zc1;
-  zc1=zc0;
-
-  zb2=zb1;
-  zb1=zb0;
-
-  za2=za1;
-  za1=za0;
-  
-  return zc0 / 64;
-}*/
 
 static uint32_t absavg256 = 0;
 volatile uint32_t _absavg256 = 0;
@@ -1802,8 +1770,8 @@ inline int16_t slow_dsp(int16_t ac)
   ac = ac >> (16-volume);
   if(nr) ac = process_nr(ac);
 
+  if(filt) ac = filt_var(ac) << 2;
   if(mode == CW){
-    ac = filt_var_cw(ac) << 2;
     if(cwdec){  // CW decoder enabled?
       char ch = cw(ac >> 0);
       if(ch){
@@ -1812,7 +1780,7 @@ inline int16_t slow_dsp(int16_t ac)
         cw_event = true;
       }
     }
-  } else if(filt) ac = filt_var(ac) << 2;
+  }
   //if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);  //hack
   
   //static int16_t dc;
@@ -2402,6 +2370,7 @@ uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
 volatile int8_t stepsize = STEP_1k;
+int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
 
 void process_encoder_tuning_step(int8_t steps)
 {
@@ -2893,7 +2862,7 @@ void setup()
     lcd.setCursor(0, 1); lcd.print(F("Reset settings.."));
     delay(500); wdt_reset();
   }
-  si5351.prev_pll_freq = 0;  // enforce PLL reset
+  si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
 
@@ -3034,15 +3003,23 @@ void loop()
         break;
       case BR|SC:
         if(!menumode){
+          int8_t prev_mode = mode;
           encoder_val = 1;
           paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, _N(mode_label), true);
-          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
-          //if(mode > FM) mode = LSB;
+          #define MODE_CHANGE_RESETS  1
+          #ifdef MODE_CHANGE_RESETS
+          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500; // sets suitable stepsize
+          #endif
           if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
-          if(mode == CW) filt = 4; else filt = 0;
+          #ifdef MODE_CHANGE_RESETS
+          if(mode == CW) filt = 4; else filt = 0;  // resets filter (to most BW) on mode change
+          #else
+          prev_stepsize[prev_mode == CW] = stepsize; stepsize = prev_stepsize[mode == CW]; // backup stepsize setting for previous mode, restore previous stepsize setting for current selected mode; filter settings captured for either CQ or other modes.
+          prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
+          #endif
           paramAction(SAVE, MODE); 
           paramAction(SAVE, FILTER);
-          si5351.prev_pll_freq = 0;  // enforce PLL reset
+          si5351.iqmsa = 0;  // enforce PLL reset
           change = true;
         } else {
           if(menumode == 1){ menumode = 0; show_banner(); change = true; }  // short right-click while in menu: enter value selection screen
@@ -3054,6 +3031,7 @@ void loop()
         filt++;
         _init = true;
         if(mode == CW && filt > N_FILT) filt = 4;
+        if(mode == CW && filt == 4) stepsize = STEP_500; // reset stepsize for 500Hz filter
         if(mode == CW && (filt == 5 || filt == 6) && stepsize < STEP_100) stepsize = STEP_100; // for CW BW 200, 100      -> step = 100 Hz
         if(mode == CW && filt == 7 && stepsize < STEP_10) stepsize = STEP_10;                  // for CW BW 50 -> step = 10 Hz
         if(mode != CW && filt > 3) filt = 0;
@@ -3179,7 +3157,7 @@ void loop()
         if(menu == MODE){ // post-handling Mode parameter
           delay(100);
           change = true;
-          si5351.prev_pll_freq = 0;  // enforce PLL reset
+          si5351.iqmsa = 0;  // enforce PLL reset
           // make more generic: 
           if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
           if(mode == CW) filt = 4; else filt = 0;
@@ -3206,7 +3184,7 @@ void loop()
         }
 #ifdef CAL_IQ
         if(menu == CALIB){
-          calibrate_iq(); menu = 0;
+          if(dsp_cap != SDR) calibrate_iq(); menu = 0;
         }
 #endif
       }
@@ -3316,13 +3294,8 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 50MHz LSB OK, USB NOK
 LCD_ LCD timing differences
 filter setting per mode?
-
 s-meter offset issue
-
-perstenncy 2.3 setting
 temp mode change for cw/ssb  - filt setting
-all filters availble for cw/ssb mode
-iq setting bug
 
 
 */
