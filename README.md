@@ -38,7 +38,7 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 (**current**) | 2020-04-12 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix. |
+| R1.02 (**current**) | 2020-04-12 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix, selectable CW pitch. |
 | R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. **See here [original QCX-SSB modification] (it is also supported by current firmware!)** |
 | R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
 
@@ -49,7 +49,7 @@ Below the schematic after the modification is applied, unused components are lef
 
 
 ## Installation:
-Please find here the latest **[PCB Rev5 Assembly Manual CLICK HERE] by Manuel, DL2MAN (document revision 1.00), 07-May-2020**, instructions for older PCB revisions can be found below:
+Please find here the latest **[PCB Rev5 Assembly Manual CLICK HERE] by Manuel, DL2MAN (document revision 1.01), 08-May-2020**, instructions for older PCB revisions can be found below:
 
 This modification consists of a few component changes and wires:
 - **To simplify things, 79 components are no longer needed** (and you could omit them on an unbuilt QCX): IC6-10,R11-40,43,55,R59-64,C1,5,8,C9-28,C31,C52-54,L1-3,D5,Q7,T1,JP1/DVM/FREQ.
