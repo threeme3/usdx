@@ -7,6 +7,8 @@ For the receiver, a large portion of the original QCX circuit has been removed a
 
 This experiment is created to try out what is can be achieved with minimal hardware while moving complexity towards software; here the approach followed is to simplify the design where possible while keep a reasonable performance. The result is a cheap, easy to build, versatile QRP SSB transceiver that actually is quite suitable for making QSOs (even in contest situations), however due to the experimental nature some parts are still in progress and hence limited. Feel free to try it out or to experiment with this sketch, let me know your thoughts or contribute here: https://github.com/threeme3/QCX-SSB  There is a forum discussion on the topic here: [QRPLabs Forum]
 
+FYI: Recently, a new group of people with similar interest has started a collaboration to build a lightweight, small, portable (SOTA) rig for the summer. It is based on ideas here, you can here find link to the [Forum].
+
 73, Guido
 pe1nnz@amsat.org
 
@@ -217,6 +219,8 @@ The detailed assembly manual for Rev 5 PCB, is the work of Manuel, DL2MAN (many 
 [X1M-mic]: https://vignette.wikia.nocookie.net/x1m/images/f/f1/X1M_mic_pinout_diagram.jpg/revision/latest?cb=20131028014710
 
 [QRPLabs Forum]: https://groups.io/g/QRPLabs/topic/29572792
+
+[Forum]: https://groups.io/g/ucx
 
 [Norcal 2030]: http://www.norcalqrp.org/nc2030.htm
 
