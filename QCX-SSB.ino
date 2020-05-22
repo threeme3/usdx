@@ -2915,8 +2915,10 @@ void loop()
     parse_cat(in);
   }
 #endif
-  
+
+#ifndef SIMPLE_RX
   delay(1);
+#endif
 
   if(millis() > sec_event_time){
     sec_event_time = millis() + 1000;  // schedule time next second
