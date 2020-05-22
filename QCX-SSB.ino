@@ -2939,9 +2939,9 @@ void loop()
     lcd.setCursor(0, 1); lcd.print(out);
   }
 
-  if(!digitalRead(DIT)){
+  if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
     switch_rxtx(1);
-    for(; !digitalRead(DIT);){ //until released
+    for(; !digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH)));){ //until released
       wdt_reset();
     }
     switch_rxtx(0);
