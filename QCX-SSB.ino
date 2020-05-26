@@ -62,7 +62,7 @@ experimentally: #define AUTO_ADC_BIAS 1
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-//FUSES = { .low = 0xFF, .high = 0xDE, .extended = 0xFD };   // Fuse settings should be these at programming.
+//FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be these at programming.
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
@@ -3294,10 +3294,13 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 90 deg.shift  div/2@S1(pin2)
 
 50MHz LSB OK, USB NOK
-LCD_ LCD timing differences
-filter setting per mode?
-s-meter offset issue
-temp mode change for cw/ssb  - filt setting
+s-meter offset vs DC bal.
 
+AGC DR
+auto ATT
+class-E
+PCB
+RIT, VFO-B, undersampling, IF-offset
+keyer dash-dot
 
 */
