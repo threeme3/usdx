@@ -1814,7 +1814,7 @@ void sdr_rx()
   // process I for even samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
   ADMUX = admux[1];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
-  int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  int16_t adc = ADC - 511; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   func_ptr = sdr_rx_q;    // processing function for next conversion
   sdr_rx_common();
   
@@ -1877,7 +1877,7 @@ void sdr_rx_q()
   // process Q for odd samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
   ADMUX = admux[0];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
-  int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+  int16_t adc = ADC - 511; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
   func_ptr = sdr_rx;    // processing function for next conversion
 #ifdef SECOND_ORDER_DUC
 //  sdr_rx_common();  //necessary? YES!... Maybe NOT!
