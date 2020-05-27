@@ -1554,6 +1554,7 @@ char cw(int16_t in)
 static char out[] = "                ";
 volatile bool cw_event = false;
 
+#define F_SAMP_PWM (78125/1)
 //#define F_SAMP_RX 78125
 #define F_SAMP_RX 62500  //overrun; sample rate of 55500 can be obtained
 //#define F_SAMP_RX 52083
@@ -1562,7 +1563,7 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 34722
 //#define F_SAMP_RX 31250
 //#define F_SAMP_RX 28409
-#define F_ADC_CONV (192307/1)
+#define F_ADC_CONV (192307/1)  // finding: tiny-clicks above noise-floor occur with 192kHz ADC conversion-rate and 78kHz PWM output, can be resolved by either lower down PWM or conversation-rate
 
 volatile bool agc = true;
 volatile uint8_t nr = 0;
@@ -2279,7 +2280,7 @@ void start_rx()
   } else { // ANALOG, DSP
     adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
   }
-  timer1_start(78125);
+  timer1_start(F_SAMP_PWM);
   timer2_start(F_SAMP_RX);  
   TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM
 }
@@ -2330,6 +2331,7 @@ void switch_rxtx(uint8_t tx_enable){
 
 #define CAL_IQ 1
 #ifdef CAL_IQ
+int16_t cal_iq_dummy = 0;
 // RX I/Q calibration procedure: terminate with 50 ohm, enable CW filter, adjust R27, R24, R17 subsequently to its minimum side-band rejection value in dB
 void calibrate_iq()
 {
@@ -2570,7 +2572,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PWM_MIN: paramAction(action, pwm_min, F("8.2"), F("PA Bias min"), NULL, 0, 255, false); break;
     case PWM_MAX: paramAction(action, pwm_max, F("8.3"), F("PA Bias max"), NULL, 0, 255, false); break;
 #ifdef CAL_IQ
-    case CALIB:   if(dsp_cap != SDR) paramAction(action, param_c, F("8.4"), F("IQ Test/Cal."), NULL, 0, 0, false); break;
+    case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, F("8.4"), F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
 #ifdef DEBUG
     case SR:      paramAction(action, sr, F("9.1"), F("Sample rate"), NULL, -2147483648, 2147483647, false); break;
@@ -2622,12 +2624,11 @@ void setup()
 {
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
 
-#ifdef DEBUG
   uint8_t mcusr = MCUSR;
   MCUSR = 0;
   //wdt_disable();
   wdt_enable(WDTO_4S);  // Enable watchdog
-
+#ifdef DEBUG
   // Benchmark dsp_tx() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
   rx_state = 0;
   uint32_t t0, t1;
@@ -3302,5 +3303,6 @@ class-E
 PCB
 RIT, VFO-B, undersampling, IF-offset
 keyer dash-dot
+tiny-click removal, DC offset correction
 
 */
