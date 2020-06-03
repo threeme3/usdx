@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02d"
+#define VERSION   "1.02e"
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -2699,7 +2699,7 @@ void setup()
     digitalWrite(AUDIO2, HIGH);
     v2 = analogRead(AUDIO1);
     pinMode(AUDIO2, INPUT);
-    if(!(abs(v2 - v1) > (0.010 * 1024.0 / 5.0))) dsp_cap = SDR;  // SDR capacility?
+    if(!(abs(v2 - v1) > (0.125 * 1024.0 / 5.0))) dsp_cap = SDR;  // SDR capacility?
   }
   // Test if QCX has SSB capability: DAH is connected to DVM
   delay(1); // settle
@@ -2783,7 +2783,7 @@ void setup()
   bitSet(ADCSRA, ADSC);
   for(; bit_is_set(ADCSRA, ADSC););
   float avcc = 1.1 * 1023.0 / ADC;
-  if(!(avcc > 4.6 && avcc < 5.1)){
+  if(!(avcc > 4.6 && avcc < 5.2)){
     lcd.setCursor(0, 1); lcd.print(F("!!Vavcc=")); lcd.print(avcc); lcd.print(F("V")); lcd_blanks();
     delay(1500); wdt_reset();
   }
