@@ -2366,8 +2366,8 @@ void calibrate_iq()
 
 int8_t prev_bandval = 2;
 int8_t bandval = 2;
-#define N_BANDS 11
-uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000, 70101000/*, 144125000*/ };  // { 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000 };
+#define N_BANDS 10
+uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };
 
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
@@ -2528,7 +2528,7 @@ static uint8_t pwm_max = 220;  // PWM value for which PA reaches its maximum: 96
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* filt_label[N_FILT+1] = { "Full", "4000", "2500", "1700", "500", "200", "100", "50" };
-const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "4m" };
+const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
@@ -2942,19 +2942,22 @@ void loop()
     lcd.setCursor(0, 1); lcd.print(out);
   }
 
-  if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
-    switch_rxtx(1);
-    for(; !digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH)));){ //until released
-      wdt_reset();
-    }
-    switch_rxtx(0);
-  }
-  enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
 #ifdef ONEBUTTON
   uint8_t inv = 1;
 #else
   uint8_t inv = 0;
 #endif
+
+  if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
+    switch_rxtx(1);
+    for(; !digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH)));){ // until released
+      wdt_reset();
+      if(inv ^ digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
+    }
+    switch_rxtx(0);
+  }
+
+  enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(inv ^ digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
     if(!(event & PL)){  // hack: if there was long-push before, then fast forward
       uint16_t v = analogSafeRead(BUTTONS);
@@ -3164,6 +3167,9 @@ void loop()
           // make more generic: 
           if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
           if(mode == CW) filt = 4; else filt = 0;
+        }
+        if(menu == BAND){
+          change = true;
         }
         if(menu == ATT){ // post-handling ATT parameter
           if(dsp_cap == SDR){
