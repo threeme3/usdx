@@ -2853,15 +2853,15 @@ void setup()
 
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
-  if(eeprom_version == get_version_id()){  // version signature in EEPROM corresponds with this firmware?
-    paramAction(LOAD);  // load all parameters
-  } else {
+  if((eeprom_version != get_version_id()) || !digitalRead(DIT) ){  // EEPROM clean: if PTT/onboard-key pressed or version signature in EEPROM does NOT corresponds with this firmware
     eeprom_version = get_version_id();
     //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
     //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
     paramAction(SAVE);  // save default parfameter values
     lcd.setCursor(0, 1); lcd.print(F("Reset settings.."));
     delay(500); wdt_reset();
+  } else {
+    paramAction(LOAD);  // load all parameters
   }
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
