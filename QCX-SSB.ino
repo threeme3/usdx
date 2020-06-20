@@ -2948,9 +2948,18 @@ void loop()
   uint8_t inv = 0;
 #endif
 
+#define DAH_AS_KEY  1
+#ifdef DAH_AS_KEY
   if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
+#else
+  if(!digitalRead(DIT) ){  // PTT/DIT keys transmitter
+#endif
     switch_rxtx(1);
+#ifdef DAH_AS_KEY
     for(; !digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH)));){ // until released
+#else
+    for(; !digitalRead(DIT) ;){ // until released
+#endif
       wdt_reset();
       if(inv ^ digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
     }
