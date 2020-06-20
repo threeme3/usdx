@@ -2721,7 +2721,7 @@ void setup()
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
 
 #ifdef DEBUG
-  if((mcusr & WDRF) && (!(mcusr & EXTRF)) && (!(mcusr & BORF))){
+  /*if((mcusr & WDRF) && (!(mcusr & EXTRF)) && (!(mcusr & BORF))){
     lcd.setCursor(0, 1); lcd.print(F("!!Watchdog RESET")); lcd_blanks();
     delay(1500); wdt_reset();
   }
@@ -2732,7 +2732,7 @@ void setup()
   if(mcusr & PORF){
     lcd.setCursor(0, 1); lcd.print(F("!!Power-On RESET")); lcd_blanks();
     delay(1500); wdt_reset();
-  }
+  }*/
   /*if(mcusr & EXTRF){
   lcd.setCursor(0, 1); lcd.print(F("Power-On")); lcd_blanks();
     delay(1); wdt_reset();
@@ -2793,6 +2793,12 @@ void setup()
     lcd.setCursor(0, 1); lcd.print(F("No MIC input...")); lcd_blanks();
     delay(300); wdt_reset();
   }
+
+  // Test microphone polarity
+  /*if((ssb_cap) && (!digitalRead(DAH))){
+    lcd.setCursor(0, 1); lcd.print(F("!!MIC in rev.pol")); lcd_blanks();
+    delay(300); wdt_reset();
+  }*/
 
   // Measure DVM bias; should be ~VAREF/2
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
