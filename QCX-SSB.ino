@@ -4,7 +4,9 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02f"
+#define VERSION   "1.02g"
+
+#define QCX     1         // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -2329,6 +2331,7 @@ void switch_rxtx(uint8_t tx_enable){
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
 }
 
+#ifdef QCX
 #define CAL_IQ 1
 #ifdef CAL_IQ
 int16_t cal_iq_dummy = 0;
@@ -2363,6 +2366,7 @@ void calibrate_iq()
   change = true;  //restore original frequency setting
 }
 #endif
+#endif //QCX
 
 int8_t prev_bandval = 2;
 int8_t bandval = 2;
@@ -2447,9 +2451,13 @@ void powerDown()
 
 void show_banner(){
   lcd.setCursor(0, 0);
+#ifdef QCX
   lcd.print(F("QCX"));
   const char* cap_label[] = { "SSB", "DSP", "SDR" };
   if(ssb_cap || dsp_cap){ lcd.print(F("-")); lcd.print(cap_label[dsp_cap]); }
+#else
+  lcd.print(F("uSDX"));
+#endif
   lcd.print(F("\x01 ")); lcd_blanks();
 }
 
@@ -2678,7 +2686,9 @@ void setup()
   //Init si5351
   si5351.powerDown();  // Disable all (used) outputs
 
+#ifdef QCX
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
+  ssb_cap = 0; dsp_cap = 0;
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0  
   digitalWrite(RX, HIGH);  // generate pulse on SIDETONE and test if it can be seen on AUDIO2
   delay(1); // settle
@@ -2716,6 +2726,9 @@ void setup()
   //ssb_cap = 1; dsp_cap = 0;  // force SSB and standard QCX-RX capability
   //ssb_cap = 1; dsp_cap = 1;  // force SSB and DSP capability
   //ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
+#else
+  ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
+#endif
 
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
