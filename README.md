@@ -170,7 +170,7 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 
 
 ### Credits:
-[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), and combined with popular components such as Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] transmitter and QCX-SDR receiver stage both running on a ATMEGA328P, including its multiband front-end and direct PA biasing/envelope-generation technique; its concept, circuit, code and modification to run on a QCX are a design by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi. The assembly manual for the QCX Rev 5 PCB, is the work of _Manuel (DL2MAN)_. Many thanks to all of you who got interested in this project and took the challege and effort to try out QCX-SSB. Without your valuable feedback and contributions the project could not have kept moving on, improving and challenging new ideas!
+[QCX] (QRP Labs CW Xcvr) is a kit designed by _Hans Summers (G0UPL)_, originally built for RSGB's YOTA summer camp 2017, a high performance, image rejecting DC transceiver; basically a simplified implementation of the [NorCal 2030] by _Dan Tayloe (N7VE)_ designed in 2004 combined with a [Hi-Per-Mite] Active Audio CW Filter by _David Cripe (NMØS)_, [Low Pass Filters] from _Ed (W3NQN)_ 1983 Articles, a key-shaping circuit by _Donald Huff (W6JL)_, a BS170 switched [CMOS driven MOSFET PA] architecture as used in the [ATS] designs by _Steven Weber (KD1JV)_ (originating from the [Power MOSFET revolution] in the mid 70s), a [Ghetto-class-E] filter-network published by _Paul Harden (NA5N)_ and an Atmel [ATMEGA328P] microprocessor, a Hitachi [HD44780] LCD display and a Silicon Labs [SI5351] Clock Generator (and using a [phase shift in the SI5351 clocks]). The [QCX-SSB] transmitter and QCX-SDR receiver stage both running on a ATMEGA328P, including its multiband front-end and direct PA biasing/envelope-generation technique; its concept, circuit, code and modification to run on a QCX are a design by _Guido (PE1NNZ)_; the software-based SSB transmit stage is a derivate of earlier experiments with a [digital SSB generation technique] on a Raspberry Pi. The assembly manual for the QCX Rev 5 PCB, is the work of _Manuel (DL2MAN)_. Many thanks to all of you who got interested in this project and took the challege and effort to try out QCX-SSB. Without your valuable feedback and contributions the project could not have kept moving on, improving and challenging new ideas!
 
 <!---
 ### References
@@ -274,4 +274,9 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 [Serial interface]: https://groups.io/g/QRPLabs/attachment/40706/0/connections.png
 
 [PCB Rev5 Assembly Manual CLICK HERE]: QCX-SSB_assembly_Rev-5.pdf
+
+[Ghetto-class-E]: https://www.ncqrpp.org/files/qrpp_volume_10.pdf
+
+[Ghetto-class-E-later-publication]: http://www.iw3sgt.it/IW3SGT_PRJ/IW3SGT_AMP_LF/ClassDEF1.pdf
+
 
