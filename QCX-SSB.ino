@@ -2824,12 +2824,12 @@ void setup()
   if(dsp_cap == SDR){
     float audio1 = (float)analogRead(AUDIO1) * 5.0 / 1024.0;
     if(!(audio1 > 1.8 && audio1 < 3.2)){
-      lcd.setCursor(0, 1); lcd.print(F("!!Vadc0=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
+      lcd.setCursor(0, 1); lcd.print(F("!!Vadc0=")); lcd.print(audio1); lcd.print(F("V")); lcd_blanks();
       delay(1500); wdt_reset();
     }
     float audio2 = (float)analogRead(AUDIO2) * 5.0 / 1024.0;
     if(!(audio2 > 1.8 && audio2 < 3.2)){
-      lcd.setCursor(0, 1); lcd.print(F("!!Vadc1=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
+      lcd.setCursor(0, 1); lcd.print(F("!!Vadc1=")); lcd.print(audio2); lcd.print(F("V")); lcd_blanks();
       delay(1500); wdt_reset();
     }
   }
