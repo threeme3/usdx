@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02h"
+#define VERSION   "1.02i"
 
 #define QCX     1         // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
 
@@ -875,6 +875,11 @@ public:
   inline void suspend(){
     I2C_SDA_LO();         // pin sharing SDA/LCD_RS: pull-down LCD_RS; QCXLiquidCrystal require this for any operation
   }
+
+  void begin(){};
+  void beginTransmission(uint8_t addr){ start(); SendByte(addr << 1);  };
+  bool write(uint8_t byte){ SendByte(byte); return 1; };
+  uint8_t endTransmission(){ stop(); return 0; };
 };
 
 #define log2(n) (log(n) / log(2))
@@ -1280,6 +1285,30 @@ public:
 };
 static SI5351 si5351;
  */
+
+#define LPF_SWITCHING 1
+#ifdef LPF_SWITCHING
+class PCA9536 {  //https://www.ti.com/lit/ds/symlink/pca9536.pdf
+public:
+  #define PCA9536_ADDR  0x41
+  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x03); i2c.write(0x00); i2c.endTransmission(); } // pca9536 configuration: D0-D7 as output
+  inline void write(uint8_t data){ init(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x01); i2c.write(data); i2c.endTransmission(); }  // pca9536 output port
+};
+PCA9536 ioext;
+
+void set_latch(uint8_t k){   // Pins D1-D7 control latches K1-K7, D0 is common for all latches
+  #define LATCH_TIME  15  // set/reset time latch relay
+  //#define LATCH_TIME  1000  // set/reset time latch relay (latches slowly ... for testing purpose only)
+  for(int i = 1; i != 8; i++){ ioext.write( (~(1 << i))| 0x01); delay(LATCH_TIME); } ioext.write(0x00); // reset all latches
+  ioext.write((1 << k)| 0x00); delay(LATCH_TIME); ioext.write(0x00); // set latch k
+}
+
+static uint8_t prev_lpf_bank = 0xff;
+void set_lpf(uint8_t f){
+  uint8_t lpf_bank = (f > 8) ? 3 : (f > 4) ? 2 : 1;  // mapping LPF cut-off (freq in MHz) to LPF bank relay
+  if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };
+}
+#endif
 
 #undef F_CPU
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
@@ -3267,7 +3296,9 @@ void loop()
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
-    
+#ifdef LPF_SWITCHING
+    set_lpf(freq / 1000000UL);
+#endif
     noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
