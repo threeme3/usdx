@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02i"
+#define VERSION   "1.02j"
 
 #define QCX     1         // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
 
@@ -1840,6 +1840,10 @@ volatile uint8_t rx_state = 0;
 // Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
 // H1(z) = (1 + z^-1)^2 = 1 + 2*z^-1 + z^-2 = (1 + z^-2) + (2) * z^-1 = FA(z) + FB(z) * z^-1;
 // with down-sampling before stage translates into poly-phase components: FA(z) = 1 + z^-1, FB(z) = 2
+// Non-recursive CIC Filter (M=4) implementation (for second-stage only):
+// H1(z) = (1 + z^-1)^4 = 1 + 4*z^-1 + 6*z^-2 + 4*z^-3 + z^-4 = 1 + 6*z^-2 + z^-4 + (4 + 4*z^-2) * z^-1 = FA(z) + FB(z) * z^-1;
+// with down-sampling before stage translates into poly-phase components: FA(z) = 1 + 6*z^-1 + z^-2, FB(z) = 4 + 4*z^-1
+//#define M4  1  // Enable to enable M=4 on second-stage (better alias rejection)
 // source: Lyons Understanding Digital Signal Processing 3rd edition 13.24.1
 void sdr_rx()
 {
@@ -1871,10 +1875,15 @@ void sdr_rx()
     static int16_t za1;
     int16_t _ac = ac + za1 + z1 * 2;           // 1st stage: FA + FB
     za1 = ac;
-    static int16_t _z1;
+    static int16_t _z1, _z2;
     if(rx_state == 0){                   // 2nd stage: down-sample by 2
-      static int16_t _za1;
+      static int16_t _za1, _za2;
+#ifdef M4
+      ac2 = _ac + _za1 * 6 + _za2 + _z1 + _z2; // 2nd stage: FA + FB $
+      _za2 = _za1; // $
+#else
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
+#endif
       _za1 = _ac;
       {
         ac2 >>= att2;  // digital gain control
@@ -1898,7 +1907,11 @@ void sdr_rx()
 #endif
         ozd1 = ac;
       }
+#ifdef M4
+    } else { _z2 = _z1; _z1 = _ac * 4; } // $
+#else
     } else _z1 = _ac;
+#endif
   } else z1 = ac;
 
   rx_state++;
@@ -1930,10 +1943,15 @@ void sdr_rx_q()
     static int16_t za1;
     int16_t _ac = ac + za1 + z1 * 2;           // 1st stage: FA + FB
     za1 = ac;
-    static int16_t _z1;
+    static int16_t _z1, _z2;
     if(rx_state == 7){                   // 2nd stage: down-sample by 2
-      static int16_t _za1;
+      static int16_t _za1, _za2;
+#ifdef M4
+      ac2 = _ac + _za1 * 6 + _za2 + _z1 + _z2; // 2nd stage: FA + FB $
+      _za2 = _za1; // $
+#else
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
+#endif
       _za1 = _ac;
       {
         ac2 >>= att2;  // digital gain control
@@ -1945,7 +1963,11 @@ void sdr_rx_q()
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
       }
       rx_state = 0; return;
+#ifdef M4
+    } else { _z2 = _z1; _z1 = _ac * 4; } // $
+#else
     } else _z1 = _ac;
+#endif
   } else z1 = ac;
 
   rx_state++;
@@ -1978,6 +2000,10 @@ static struct rx {
   int16_t za1;
   int16_t _z1;
   int16_t _za1;
+#ifdef M4
+  int16_t _z2;
+  int16_t _za2;
+#endif  
 } rx_inst[2];
 
 void sdr_rx()
@@ -2026,7 +2052,12 @@ void sdr_rx()
     int16_t _ac = ac + p->za1 + p->z1 * 2;           // 1st stage: FA + FB
     p->za1 = ac;
     if(_rx_state & 0x04){                   // rx_state == I: 0  Q:7   2nd stage: down-sample by 2
+#ifdef M4
+      int16_t ac2 = _ac + p->_za1 * 6 + p->_za2 + p->_z1 + p->_z2;              // 2nd stage: FA + FB
+      p->_za2 = p->_za1;
+#else
       int16_t ac2 = _ac + p->_za1 + p->_z1 * 2;              // 2nd stage: FA + FB
+#endif
       p->_za1 = _ac;
       if(b){
         // post processing I and Q (down-sampled) results
@@ -2058,7 +2089,11 @@ void sdr_rx()
         //qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
       }
+#ifdef M4
+    } else { p->_z2 = p->_z1; p->_z1 = _ac * 4; }
+#else
     } else p->_z1 = _ac;
+#endif
   } else p->z1 = ac;  // rx_state == I: 2, 6  Q: 1, 5
 
   rx_state++;
