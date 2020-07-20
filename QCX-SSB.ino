@@ -1599,7 +1599,7 @@ volatile bool cw_event = false;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
-volatile uint8_t att2 = 0;
+volatile uint8_t att2 = 3;
 volatile uint8_t _init;
 
 //static uint32_t gain = 1024;
@@ -2598,7 +2598,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false); break;
+    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 3 /*0*/, 16, false); break;
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
