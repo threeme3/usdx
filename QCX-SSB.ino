@@ -2605,7 +2605,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case CWOFF:   paramAction(action, cw_offset, F("2.3"), F("CW Offset"), NULL, 300, 2000, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
-    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
+    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 2, false); break;
     case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false); break;
     case SIFXTAL: paramAction(action, si5351.fxtal, F("8.1"), F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, F("8.2"), F("PA Bias min"), NULL, 0, 255, false); break;
