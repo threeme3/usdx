@@ -1286,7 +1286,7 @@ public:
 static SI5351 si5351;
  */
 
-#define LPF_SWITCHING 1
+#define LPF_SWITCHING 1   // Enabled filter bank switching (latching relay connected to a PCA9536 GPIO extender that is on the same SI5351 I2C bus; relays are using D0 as common, D1-D3 used by the individual latches)
 #ifdef LPF_SWITCHING
 class PCA9536 {  //https://www.ti.com/lit/ds/symlink/pca9536.pdf
 public:
@@ -1305,8 +1305,8 @@ void set_latch(uint8_t k){   // Pins D1-D7 control latches K1-K7, D0 is common f
 
 static uint8_t prev_lpf_bank = 0xff;
 void set_lpf(uint8_t f){
-  uint8_t lpf_bank = (f > 8) ? 3 : (f > 4) ? 2 : 1;  // mapping LPF cut-off (freq in MHz) to LPF bank relay
-  if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };
+  uint8_t lpf_bank = (f > 8) ? 1 : (f > 4) ? 2 : 3;  // mapping LPF cut-off (freq in MHz) to LPF bank relay: customize to your needs..
+  if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };  // set relay
 }
 #endif
 
