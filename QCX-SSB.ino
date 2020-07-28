@@ -1754,6 +1754,53 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
   }
 }
 
+/*
+inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
+{ 
+  int16_t zx0 = v;
+
+  static int16_t za1,za2;
+  if(filt < 4){  // for SSB filters
+    // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
+    static int16_t zz1,zz2;
+    zx0=(29*(zx0-zz1)+50*za1)/64;                               //300-Hz
+    zz2=zz1;
+    zz1=v;
+  }
+  za2=za1;
+  za1=zx0;
+
+  // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
+  //static int16_t za1,za2;
+  static int16_t zb1,zb2;
+  switch(filt){
+    case 1: break; //0-4000Hz (pass-through)
+    case 2: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
+    case 3: zx0=(7*(zx0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
+    case 4: zx0=(zx0+2*za1+za2+41*zb1-23*zb2)/32; break;   //500-1000Hz
+    case 5: zx0=(5*(zx0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
+    case 6: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
+    case 7: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
+  }
+  zb2=zb1;
+  zb1=zx0;
+
+  static int16_t zc1,zc2;
+  switch(filt){
+    case 1: break; //0-4000Hz (pass-through)
+    case 2: zx0=(8*(zx0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
+    case 3: zx0=(4*(zx0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
+    case 4: zx0=(16*(zx0-2*zb1+zb2)+105*zc1-52*zc2)/64; break;      //500-1000Hz
+    case 5: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
+    case 6: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
+    case 7: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
+  }
+  zc2=zc1;
+  zc1=zx0;
+  return zx0;
+}
+*/
+
 static uint32_t absavg256 = 0;
 volatile uint32_t _absavg256 = 0;
 volatile int16_t i, q;
@@ -1961,6 +2008,7 @@ void sdr_rx_q()
         qh = ((v[0] - ac2) + (v[2] - v[12]) * 4) / 64 + ((v[4] - v[10]) + (v[6] - v[8])) / 8 + ((v[4] - v[10]) * 5 - (v[6] - v[8]) ) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 43dB side-band rejection in 650..3400Hz (@8kSPS) when used in image-rejection scenario; (Hilbert transform require 4 additional bits)
         //qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
+        //v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7]; v[7] = v[8]; v[8] = v[9]; v[9] = v[10]; v[10] = v[11]; v[11] = v[12]; v[12] = v[13]; v[13] = ac2;
       }
       rx_state = 0; return;
 #ifdef M4
@@ -2088,6 +2136,7 @@ void sdr_rx()
         qh = ((v[0] - ac2) + (v[2] - v[12]) * 4) / 64 + ((v[4] - v[10]) + (v[6] - v[8])) / 8 + ((v[4] - v[10]) * 5 - (v[6] - v[8]) ) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 43dB side-band rejection in 650..3400Hz (@8kSPS) when used in image-rejection scenario; (Hilbert transform require 4 additional bits)
         //qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
+        //v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7]; v[7] = v[8]; v[8] = v[9]; v[9] = v[10]; v[10] = v[11]; v[11] = v[12]; v[12] = v[13]; v[13] = ac2;
       }
 #ifdef M4
     } else { p->_z2 = p->_z1; p->_z1 = _ac * 4; }
