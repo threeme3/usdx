@@ -9,7 +9,7 @@
 #define QCX     1         // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
 
 //dl2dbg 26.07.2020
-//#define OLED  1   //dl2dbg  SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
+#define OLED  1   //dl2dbg  SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
 #define KEYER_DEF 1 //dl2dbg
 //#define DEBUG  1   //ausschalten zuwenig Space   enable testing and diagnostics features
 // siehe ->  #define F_XTAL 25004000    //dl2dbg     
@@ -1030,7 +1030,7 @@ public:
   #define FAST __attribute__((optimize("Ofast")))
 
   #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
-  #//define F_XTAL 25004000    //dl2dbg      // Alternate SI clock
+  #define F_XTAL 25004000    //dl2dbg      // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
 
