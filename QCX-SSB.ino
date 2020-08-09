@@ -4,15 +4,21 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02h_pe1evx_cat"
+#define VERSION   "1.02h"
 
-//#define QCX 1
+#define QCX     1         // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
 
-#define CAT 1
+#define CAT	1	 // CAT-interface
 
+// QCX pin defintions
+#define LCD_D4  0         //PD0    (pin 2)
+#define LCD_D5  1         //PD1    (pin 3)
+#define LCD_D6  2         //PD2    (pin 4)
+#define LCD_D7  3         //PD3    (pin 5)
+#define LCD_EN  4         //PD4    (pin 6)
 #define FREQCNT 5         //PD5    (pin 11)
-#define ROT_A   6         //PD7    (pin 12)
-#define ROT_B   7         //PD6    (pin 13)
+#define ROT_A   6         //PD6    (pin 12)
+#define ROT_B   7         //PD7    (pin 13)
 #define RX      8         //PB0    (pin 14)
 #define SIDETONE 9        //PB1    (pin 15)
 #define KEY_OUT 10        //PB2    (pin 16)
@@ -23,60 +29,45 @@
 #define AUDIO2  15        //PC1/A1 (pin 24)
 #define DVM     16        //PC2/A2 (pin 25)
 #define BUTTONS 17        //PC3/A3 (pin 26)
+#define LCD_RS  18        //PC4    (pin 27)
 #define SDA     18        //PC4    (pin 27)
 #define SCL     19        //PC5    (pin 28)
+//#define NTX  11          //PB3    (pin 17)  - experimental: LOW on TX
 
+/*
+// UCX installation: On blank chip, use (standard Arduino Uno) fuse settings (E:FD, H:DE, L:FF), and use customized Optiboot bootloader for 20MHz clock, then upload via serial interface (with RX, TX and DTR lines connected to pin 1, 2, 3 respectively)
+// UCX pin defintions
++#define SDA     3         //PD3    (pin 5)
++#define SCL     4         //PD4    (pin 6)
++#define ROT_A   6         //PD6    (pin 12)
++#define ROT_B   7         //PD7    (pin 13)
++#define RX      8         //PB0    (pin 14)
++#define SIDETONE 9        //PB1    (pin 15)
++#define KEY_OUT 10        //PB2    (pin 16)
++#define NTX     11        //PB3    (pin 17)
++#define DAH     12        //PB4    (pin 18)
++#define DIT     13        //PB5    (pin 19)
++#define AUDIO1  14        //PC0/A0 (pin 23)
++#define AUDIO2  15        //PC1/A1 (pin 24)
++#define DVM     16        //PC2/A2 (pin 25)
++#define BUTTONS 17        //PC3/A3 (pin 26)
+// In addition set:
+#define OLED  1
+#define ONEBUTTON  1
+#undef DEBUG
+adjust I2C and I2C_ ports, 
+ssb_cap=1; dsp_cap=2;
+#define _DELAY() for(uint8_t i = 0; i != 5; i++) asm("nop");
+#define F_XTAL 20004000
+#define F_CPU F_XTAL
+experimentally: #define AUTO_ADC_BIAS 1
+*/
 
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-int8_t prev_bandval = 4;
-int8_t bandval = 4;
-#define N_BANDS 10
-uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };
-enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
-int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
-volatile int8_t stepsize = STEP_1k;
-int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
-
 //FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be these at programming.
 
-/*
- * Modifications to use pin2/3 as HW serial for CAT comm
- */
-
-///*      // STD versie
-#define LCD_D4  0         //PD0    (pin 2)
-#define LCD_D5  1         //PD1    (pin 3)
-#define LCD_D6  2         //PD2    (pin 4)
-#define LCD_D7  3         //PD3    (pin 5)
-#define LCD_EN  4         //PD4    (pin 6)
-#define LCD_RS  18        //PC4    (pin 27)
-//*/
-
-/*      // AK versie
-#define LCD_D4  2         //PD2    (pin 4)
-#define LCD_D5  3         //PD3    (pin 5)
-#define LCD_D6  4         //PD4    (pin 6)
-#define LCD_D7  5         //PD5    (pin 11)
-#define LCD_EN  11        //PB3    (pin 17)
-#define LCD_RS  18        //PC4    (pin 27)
-*/
-
-/*
-      // RCE versie
-#define LCD_D4  5         //PD5    (pin 11)
-#define LCD_D5  11        //PB3    (pin 17)
-#define LCD_D6  2         //PD2    (pin 4)
-#define LCD_D7  3         //PD3    (pin 5)
-#define LCD_EN  4         //PD4    (pin 6)
-#define LCD_RS  18        //PC4    (pin 27)
-*/
-
-/*
- * End Modifications to use pin2/3 as HW serial for CAT comm
- */
-// /*
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
   #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
@@ -114,8 +105,13 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     //delayMicroseconds(52);                         // Execution time
     delayMicroseconds(60);                         // Execution time
   }
+#ifdef CAT
   void pre(){ PORTC|=4; bitClear(UCSR0B, 3); bitClear(UCSR0B, 4); delay(1); };
   void post(){ /*delay(1);*/ bitSet(UCSR0B, 3);  bitSet(UCSR0B, 4); PORTC&=~4; /*PORTD|=0x03;*/ };
+#else
+  void pre(){};
+  void post(){};
+#endif
   void cmd(uint8_t b){ pre(); nib(b >> 4); nib(b & 0xf); post(); }// Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
     pre();
@@ -135,7 +131,6 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     LCD_EN_LO();
     LCD_RS_LO();
     delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
-//    PORTD |= 0x02;                                 // To support serial-interface keep LCD_D5 high, so that DVM is not pulled-down via D
     post();
     return 1;
   }
@@ -145,8 +140,58 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void noDisplay(){ cmd(0x08); }
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
 };
-// */
- /*
+
+/*
+class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
+public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
+  #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
+  #define _en  4      // PC4 - MUST have pull-up resistor
+  #define _rs  4      // PC4 - MUST have pull-up resistor
+  #define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
+  #define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
+  #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
+  #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
+  void begin(uint8_t x, uint8_t y){                // Send command
+    DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN and RS pins outputs
+    PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
+    delayMicroseconds(50000);                      // * At least 40ms after power rises above 2.7V before sending commands
+    LCD_RS_LO();
+    cmd(0x33);                                     // Ensures display is in 8-bit mode
+    cmd(0x32);                                     // Puts display in 4-bit mode
+    cmd(0x0e);                                     // Display and cursor on
+    cmd(0x01);                                     // Clear display
+    delay(3);                                      // Allow to execute on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
+  }
+  void nib(uint8_t b){                             // Send four bit nibble to display
+    PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
+    delayMicroseconds(4);
+    LCD_EN_LO();
+    delayMicroseconds(60);                         // Execution time  (was: 37)
+  }
+  void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
+  size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
+    uint8_t nibh = LCD_PREP_NIBBLE(b >>  4);       // Prepare high nibble data and enable high
+    uint8_t nibl = LCD_PREP_NIBBLE(b & 0xf);       // Prepare low nibble data and enable high
+    PORTD = nibh;                                  // Send high nibble data and enable high
+    LCD_RS_HI();
+    LCD_EN_LO();
+    PORTD = nibl;                                  // Send low nibble data and enable high
+    LCD_RS_LO();
+    LCD_RS_HI();
+    LCD_EN_LO();
+    LCD_RS_LO();
+    delayMicroseconds(41);                         // Execution time
+    PORTD |= 0x02;                                 // To support serial-interface keep LCD_D5 high, so that DVM is not pulled-down via D
+    return 1;
+  }
+  void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
+  void cursor(){ cmd(0x0e); }
+  void noCursor(){ cmd(0x0c); }
+  void noDisplay(){ cmd(0x08); }
+  void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
+};
+*/
+
 #include <LiquidCrystal.h>
 class LCD_ : public LiquidCrystal {
 public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
@@ -172,7 +217,6 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
     delayMicroseconds(100);   // commands need > 37us to settle
   };
 };
- */
 
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
 class I2C_ {  // direct port I/O (disregards/does-not-need pull-ups)
@@ -228,7 +272,110 @@ public:
 I2C_ Wire;
 //#include <Wire.h>
 
+/* // 6x8 technoblogy font
+const uint8_t font[]PROGMEM = {
+   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+   0x00, 0x00, 0x5F, 0x00, 0x00, 0x00, 
+   0x00, 0x07, 0x00, 0x07, 0x00, 0x00, 
+   0x14, 0x7F, 0x14, 0x7F, 0x14, 0x00, 
+   0x24, 0x2A, 0x7F, 0x2A, 0x12, 0x00, 
+   0x23, 0x13, 0x08, 0x64, 0x62, 0x00, 
+   0x36, 0x49, 0x56, 0x20, 0x50, 0x00, 
+   0x00, 0x08, 0x07, 0x03, 0x00, 0x00, 
+   0x00, 0x1C, 0x22, 0x41, 0x00, 0x00, 
+   0x00, 0x41, 0x22, 0x1C, 0x00, 0x00, 
+   0x2A, 0x1C, 0x7F, 0x1C, 0x2A, 0x00, 
+   0x08, 0x08, 0x3E, 0x08, 0x08, 0x00, 
+   0x00, 0x80, 0x70, 0x30, 0x00, 0x00, 
+   0x08, 0x08, 0x08, 0x08, 0x08, 0x00, 
+   0x00, 0x00, 0x60, 0x60, 0x00, 0x00, 
+   0x20, 0x10, 0x08, 0x04, 0x02, 0x00, 
+   0x3E, 0x51, 0x49, 0x45, 0x3E, 0x00, 
+   0x00, 0x42, 0x7F, 0x40, 0x00, 0x00, 
+   0x72, 0x49, 0x49, 0x49, 0x46, 0x00, 
+   0x21, 0x41, 0x49, 0x4D, 0x33, 0x00, 
+   0x18, 0x14, 0x12, 0x7F, 0x10, 0x00, 
+   0x27, 0x45, 0x45, 0x45, 0x39, 0x00, 
+   0x3C, 0x4A, 0x49, 0x49, 0x31, 0x00, 
+   0x41, 0x21, 0x11, 0x09, 0x07, 0x00, 
+   0x36, 0x49, 0x49, 0x49, 0x36, 0x00, 
+   0x46, 0x49, 0x49, 0x29, 0x1E, 0x00, 
+   0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 
+   0x00, 0x40, 0x34, 0x00, 0x00, 0x00, 
+   0x00, 0x08, 0x14, 0x22, 0x41, 0x00, 
+   0x14, 0x14, 0x14, 0x14, 0x14, 0x00, 
+   0x00, 0x41, 0x22, 0x14, 0x08, 0x00, 
+   0x02, 0x01, 0x59, 0x09, 0x06, 0x00, 
+   0x3E, 0x41, 0x5D, 0x59, 0x4E, 0x00, 
+   0x7C, 0x12, 0x11, 0x12, 0x7C, 0x00, 
+   0x7F, 0x49, 0x49, 0x49, 0x36, 0x00, 
+   0x3E, 0x41, 0x41, 0x41, 0x22, 0x00, 
+   0x7F, 0x41, 0x41, 0x41, 0x3E, 0x00, 
+   0x7F, 0x49, 0x49, 0x49, 0x41, 0x00, 
+   0x7F, 0x09, 0x09, 0x09, 0x01, 0x00, 
+   0x3E, 0x41, 0x41, 0x51, 0x73, 0x00, 
+   0x7F, 0x08, 0x08, 0x08, 0x7F, 0x00, 
+   0x00, 0x41, 0x7F, 0x41, 0x00, 0x00, 
+   0x20, 0x40, 0x41, 0x3F, 0x01, 0x00, 
+   0x7F, 0x08, 0x14, 0x22, 0x41, 0x00, 
+   0x7F, 0x40, 0x40, 0x40, 0x40, 0x00, 
+   0x7F, 0x02, 0x1C, 0x02, 0x7F, 0x00, 
+   0x7F, 0x04, 0x08, 0x10, 0x7F, 0x00, 
+   0x3E, 0x41, 0x41, 0x41, 0x3E, 0x00, 
+   0x7F, 0x09, 0x09, 0x09, 0x06, 0x00, 
+   0x3E, 0x41, 0x51, 0x21, 0x5E, 0x00, 
+   0x7F, 0x09, 0x19, 0x29, 0x46, 0x00, 
+   0x26, 0x49, 0x49, 0x49, 0x32, 0x00, 
+   0x03, 0x01, 0x7F, 0x01, 0x03, 0x00, 
+   0x3F, 0x40, 0x40, 0x40, 0x3F, 0x00, 
+   0x1F, 0x20, 0x40, 0x20, 0x1F, 0x00, 
+   0x3F, 0x40, 0x38, 0x40, 0x3F, 0x00, 
+   0x63, 0x14, 0x08, 0x14, 0x63, 0x00, 
+   0x03, 0x04, 0x78, 0x04, 0x03, 0x00, 
+   0x61, 0x59, 0x49, 0x4D, 0x43, 0x00, 
+   0x00, 0x7F, 0x41, 0x41, 0x41, 0x00, 
+   0x02, 0x04, 0x08, 0x10, 0x20, 0x00, 
+   0x00, 0x41, 0x41, 0x41, 0x7F, 0x00, 
+   0x04, 0x02, 0x01, 0x02, 0x04, 0x00, 
+   0x40, 0x40, 0x40, 0x40, 0x40, 0x00, 
+   0x00, 0x03, 0x07, 0x08, 0x00, 0x00, 
+   0x20, 0x54, 0x54, 0x78, 0x40, 0x00, 
+   0x7F, 0x28, 0x44, 0x44, 0x38, 0x00, 
+   0x38, 0x44, 0x44, 0x44, 0x28, 0x00, 
+   0x38, 0x44, 0x44, 0x28, 0x7F, 0x00, 
+   0x38, 0x54, 0x54, 0x54, 0x18, 0x00, 
+   0x00, 0x08, 0x7E, 0x09, 0x02, 0x00, 
+   0x18, 0xA4, 0xA4, 0x9C, 0x78, 0x00, 
+   0x7F, 0x08, 0x04, 0x04, 0x78, 0x00, 
+   0x00, 0x44, 0x7D, 0x40, 0x00, 0x00, 
+   0x20, 0x40, 0x40, 0x3D, 0x00, 0x00, 
+   0x7F, 0x10, 0x28, 0x44, 0x00, 0x00, 
+   0x00, 0x41, 0x7F, 0x40, 0x00, 0x00, 
+   0x7C, 0x04, 0x78, 0x04, 0x78, 0x00, 
+   0x7C, 0x08, 0x04, 0x04, 0x78, 0x00, 
+   0x38, 0x44, 0x44, 0x44, 0x38, 0x00, 
+   0xFC, 0x18, 0x24, 0x24, 0x18, 0x00, 
+   0x18, 0x24, 0x24, 0x18, 0xFC, 0x00, 
+   0x7C, 0x08, 0x04, 0x04, 0x08, 0x00, 
+   0x48, 0x54, 0x54, 0x54, 0x24, 0x00, 
+   0x04, 0x04, 0x3F, 0x44, 0x24, 0x00, 
+   0x3C, 0x40, 0x40, 0x20, 0x7C, 0x00, 
+   0x1C, 0x20, 0x40, 0x20, 0x1C, 0x00, 
+   0x3C, 0x40, 0x30, 0x40, 0x3C, 0x00, 
+   0x44, 0x28, 0x10, 0x28, 0x44, 0x00, 
+   0x4C, 0x90, 0x90, 0x90, 0x7C, 0x00, 
+   0x44, 0x64, 0x54, 0x4C, 0x44, 0x00, 
+   0x00, 0x08, 0x36, 0x41, 0x00, 0x00, 
+   0x00, 0x00, 0x77, 0x00, 0x00, 0x00, 
+   0x00, 0x41, 0x36, 0x08, 0x00, 0x00, 
+   0x02, 0x01, 0x02, 0x04, 0x02, 0x00, 
+   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
 
+#define FONT_W 12//6
+#define FONT_H 2
+#define FONT_STRETCHV 1
+#define FONT_STRETCHH 1//0
+*/
 
 // C64 real
 const uint8_t font[]PROGMEM = {
@@ -334,6 +481,110 @@ const uint8_t font[]PROGMEM = {
 #define FONT_STRETCHV 1
 #define FONT_STRETCHH 0
 
+/*  //16x8 C-64 kind of
+const uint8_t font[]PROGMEM = {
+   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,  // 0x20
+   0x00,0x06,0x5F,0x5F,0x06,0x00,0x00,0x00, // 0x21
+   0x00,0x07,0x07,0x00,0x07,0x07,0x00,0x00, // 0x22
+   0x14,0x7F,0x7F,0x14,0x7F,0x7F,0x14,0x00, // 0x23
+   0x24,0x2E,0x6B,0x6B,0x3A,0x12,0x00,0x00, // 0x24
+   0x46,0x66,0x30,0x18,0x0C,0x66,0x62,0x00, // 0x25
+   0x30,0x7A,0x4F,0x5D,0x37,0x7A,0x48,0x00, // 0x26
+   0x04,0x07,0x03,0x00,0x00,0x00,0x00,0x00, // 0x27
+   0x00,0x1C,0x3E,0x63,0x41,0x00,0x00,0x00, // 0x28
+   0x00,0x41,0x63,0x3E,0x1C,0x00,0x00,0x00, // 0x29
+   0x08,0x2A,0x3E,0x1C,0x1C,0x3E,0x2A,0x08, // 0x2A
+   0x08,0x08,0x3E,0x3E,0x08,0x08,0x00,0x00, // 0x2B
+   0x00,0xA0,0xE0,0x60,0x00,0x00,0x00,0x00, // 0x2C
+   0x08,0x08,0x08,0x08,0x08,0x08,0x00,0x00, // 0x2D
+   0x00,0x00,0x60,0x60,0x00,0x00,0x00,0x00, // 0x2E
+   0x60,0x30,0x18,0x0C,0x06,0x03,0x01,0x00, // 0x2F
+   0x3E,0x7F,0x59,0x4D,0x7F,0x3E,0x00,0x00, // 0x30
+   0x42,0x42,0x7F,0x7F,0x40,0x40,0x00,0x00, // 0x31
+   0x62,0x73,0x59,0x49,0x6F,0x66,0x00,0x00, // 0x32
+   0x22,0x63,0x49,0x49,0x7F,0x36,0x00,0x00, // 0x33
+   0x18,0x1C,0x16,0x13,0x7F,0x7F,0x10,0x00, // 0x34
+   0x27,0x67,0x45,0x45,0x7D,0x39,0x00,0x00, // 0x35
+   0x3C,0x7E,0x4B,0x49,0x79,0x30,0x00,0x00, // 0x36
+   0x03,0x63,0x71,0x19,0x0F,0x07,0x00,0x00, // 0x37
+   0x36,0x7F,0x49,0x49,0x7F,0x36,0x00,0x00, // 0x38
+   0x06,0x4F,0x49,0x69,0x3F,0x1E,0x00,0x00, // 0x39
+   0x00,0x00,0x6C,0x6C,0x00,0x00,0x00,0x00, // 0x3A
+   0x00,0xA0,0xEC,0x6C,0x00,0x00,0x00,0x00, // 0x3B
+   0x08,0x1C,0x36,0x63,0x41,0x00,0x00,0x00, // 0x3C
+   0x14,0x14,0x14,0x14,0x14,0x14,0x00,0x00, // 0x3D
+   0x00,0x41,0x63,0x36,0x1C,0x08,0x00,0x00, // 0x3E
+   0x02,0x03,0x51,0x59,0x0F,0x06,0x00,0x00, // 0x3F
+   0x3E,0x7F,0x41,0x5D,0x5D,0x1F,0x1E,0x00, // 0x40
+   0x7C,0x7E,0x13,0x13,0x7E,0x7C,0x00,0x00, // 0x41
+   0x41,0x7F,0x7F,0x49,0x49,0x7F,0x36,0x00, // 0x42
+   0x1C,0x3E,0x63,0x41,0x41,0x63,0x22,0x00, // 0x43
+   0x41,0x7F,0x7F,0x41,0x63,0x7F,0x1C,0x00, // 0x44
+   0x41,0x7F,0x7F,0x49,0x5D,0x41,0x63,0x00, // 0x45
+   0x41,0x7F,0x7F,0x49,0x1D,0x01,0x03,0x00, // 0x46
+   0x1C,0x3E,0x63,0x41,0x51,0x73,0x72,0x00, // 0x47
+   0x7F,0x7F,0x08,0x08,0x7F,0x7F,0x00,0x00, // 0x48
+   0x00,0x41,0x7F,0x7F,0x41,0x00,0x00,0x00, // 0x49
+   0x30,0x70,0x40,0x41,0x7F,0x3F,0x01,0x00, // 0x4A
+   0x41,0x7F,0x7F,0x08,0x1C,0x77,0x63,0x00, // 0x4B
+   0x41,0x7F,0x7F,0x41,0x40,0x60,0x70,0x00, // 0x4C
+   0x7F,0x7F,0x06,0x0C,0x06,0x7F,0x7F,0x00, // 0x4D
+   0x7F,0x7F,0x06,0x0C,0x18,0x7F,0x7F,0x00, // 0x4E
+   0x1C,0x3E,0x63,0x41,0x63,0x3E,0x1C,0x00, // 0x4F
+   0x41,0x7F,0x7F,0x49,0x09,0x0F,0x06,0x00, // 0x50
+   0x1E,0x3F,0x21,0x71,0x7F,0x5E,0x00,0x00, // 0x51
+   0x41,0x7F,0x7F,0x19,0x39,0x6F,0x46,0x00, // 0x52
+   0x26,0x67,0x4D,0x59,0x7B,0x32,0x00,0x00, // 0x53
+   0x03,0x41,0x7F,0x7F,0x41,0x03,0x00,0x00, // 0x54
+   0x7F,0x7F,0x40,0x40,0x7F,0x7F,0x00,0x00, // 0x55
+   0x1F,0x3F,0x60,0x60,0x3F,0x1F,0x00,0x00, // 0x56
+   0x7F,0x7F,0x30,0x18,0x30,0x7F,0x7F,0x00, // 0x57
+   0x63,0x77,0x1C,0x08,0x1C,0x77,0x63,0x00, // 0x58
+   0x07,0x4F,0x78,0x78,0x4F,0x07,0x00,0x00, // 0x59
+   0x67,0x73,0x59,0x4D,0x47,0x63,0x71,0x00, // 0x5A
+   0x00,0x7F,0x7F,0x41,0x41,0x00,0x00,0x00, // 0x5B
+   0x01,0x03,0x06,0x0C,0x18,0x30,0x60,0x00, // 0x5C
+   0x00,0x41,0x41,0x7F,0x7F,0x00,0x00,0x00, // 0x5D
+   0x08,0x0C,0x06,0x03,0x06,0x0C,0x08,0x00, // 0x5E
+   0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80, // 0x5F
+   0x00,0x00,0x03,0x07,0x04,0x00,0x00,0x00, // 0x60
+   0x20,0x74,0x54,0x54,0x3C,0x78,0x40,0x00, // 0x61
+   0x41,0x3F,0x7F,0x44,0x44,0x7C,0x38,0x00, // 0x62
+   0x38,0x7C,0x44,0x44,0x6C,0x28,0x00,0x00, // 0x63
+   0x30,0x78,0x48,0x49,0x3F,0x7F,0x40,0x00, // 0x64
+   0x38,0x7C,0x54,0x54,0x5C,0x18,0x00,0x00, // 0x65
+   0x48,0x7E,0x7F,0x49,0x03,0x02,0x00,0x00, // 0x66
+   0x98,0xBC,0xA4,0xA4,0xF8,0x7C,0x04,0x00, // 0x67
+   0x41,0x7F,0x7F,0x08,0x04,0x7C,0x78,0x00, // 0x68
+   0x00,0x44,0x7D,0x7D,0x40,0x00,0x00,0x00, // 0x69
+   0x40,0xC4,0x84,0xFD,0x7D,0x00,0x00,0x00, // 0x6A
+   0x41,0x7F,0x7F,0x10,0x38,0x6C,0x44,0x00, // 0x6B
+   0x00,0x41,0x7F,0x7F,0x40,0x00,0x00,0x00, // 0x6C
+   0x7C,0x7C,0x0C,0x18,0x0C,0x7C,0x78,0x00, // 0x6D
+   0x7C,0x7C,0x04,0x04,0x7C,0x78,0x00,0x00, // 0x6E
+   0x38,0x7C,0x44,0x44,0x7C,0x38,0x00,0x00, // 0x6F
+   0x84,0xFC,0xF8,0xA4,0x24,0x3C,0x18,0x00, // 0x70
+   0x18,0x3C,0x24,0xA4,0xF8,0xFC,0x84,0x00, // 0x71
+   0x44,0x7C,0x78,0x44,0x1C,0x18,0x00,0x00, // 0x72
+   0x48,0x5C,0x54,0x54,0x74,0x24,0x00,0x00, // 0x73
+   0x00,0x04,0x3E,0x7F,0x44,0x24,0x00,0x00, // 0x74
+   0x3C,0x7C,0x40,0x40,0x3C,0x7C,0x40,0x00, // 0x75
+   0x1C,0x3C,0x60,0x60,0x3C,0x1C,0x00,0x00, // 0x76
+   0x3C,0x7C,0x60,0x30,0x60,0x7C,0x3C,0x00, // 0x77
+   0x44,0x6C,0x38,0x10,0x38,0x6C,0x44,0x00, // 0x78
+   0x9C,0xBC,0xA0,0xA0,0xFC,0x7C,0x00,0x00, // 0x79
+   0x4C,0x64,0x74,0x5C,0x4C,0x64,0x00,0x00, // 0x7A
+   0x08,0x08,0x3E,0x77,0x41,0x41,0x00,0x00, // 0x7B
+   0x00,0x00,0x00,0x77,0x77,0x00,0x00,0x00, // 0x7C
+   0x41,0x41,0x77,0x3E,0x08,0x08,0x00,0x00, // 0x7D
+   0x02,0x03,0x01,0x03,0x02,0x03,0x01,0x00, // 0x7E
+   0x78,0x7C,0x46,0x43,0x46,0x7C,0x78,0x00}; // 0x7F
+
+#define FONT_W 8
+#define FONT_H 2
+#define FONT_STRETCHV 1
+#define FONT_STRETCHH 0
+*/
 
 #define BRIGHT  1
 static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence
@@ -467,13 +718,10 @@ public:
 SSD1306Device lcd;
 #else
 LCD lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
+//LCD_ lcd;  // slower LCD, suitable for non-QCX supplied displays
 //#include <LiquidCrystal.h>
 //LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 #endif
-
-
-
-
 
 volatile int8_t encoder_val = 0;
 volatile int8_t encoder_step = 0;
@@ -501,6 +749,31 @@ void encoder_setup()
   last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
   interrupts();
 }
+/*
+class Encoder {
+public:
+  volatile int8_t val = 0;
+  volatile int8_t step = 0;
+  uint8_t last_state;
+  Encoder(){
+    pinMode(ROT_A, INPUT_PULLUP);
+    pinMode(ROT_B, INPUT_PULLUP);
+    PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); // interrupt-enable for ROT_A, ROT_B pin changes; see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
+    PCICR |= (1 << PCIE2);
+    last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
+    sei();    
+  }
+  void event(){
+    switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
+      case 0x31: case 0x10: case 0x02: case 0x23: if(step < 0) step = 0; step++; if(step >  3){ step = 0; val++; } break;
+      case 0x32: case 0x20: case 0x01: case 0x13: if(step > 0) step = 0; step--; if(step < -3){ step = 0; val--; } break;  
+    }
+  }
+};
+Encoder enc;
+ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
+  enc.event();
+}*/
 
 class I2C {
 public:
@@ -633,6 +906,7 @@ public:
   #define FAST __attribute__((optimize("Ofast")))
 
   #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
+  //#define F_XTAL 25004000          // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
 
@@ -682,7 +956,63 @@ public:
     i2c.stop();      
   }
   void SendRegister(uint8_t reg, uint8_t val){ SendRegister(reg, &val, 1); }
+/*
+  bool dirty;
 
+  void set_pll(uint8_t pll, uint32_t fvco){  // Set PLL (fractional) PLLA=0, PLLB=1
+    uint8_t msa; uint32_t msb, msc, msp1, msp2, msp3p2;
+    msa = fvco / fxtal;     // Integer part of vco/fxtal
+    msb = ((uint64_t)(fvco % fxtal)*_MSC) / fxtal; // Fractional part
+    msc = _MSC;
+
+    msp1 = 128*msa + 128*msb/msc - 512;
+    msp2 = 128*msb - 128*msb/msc * msc;    // msp3 == msc
+    msp3p2 = (((msc & 0x0F0000) <<4) | msp2);  // msp3 on top nibble
+    uint8_t pll_regs[8] = { BB1(msc), BB0(msc), BB2(msp1), BB1(msp1), BB0(msp1), BB2(msp3p2), BB1(msp2), BB0(msp2) };
+    SendRegister(26+pll*8, pll_regs, 8); // Write to PLL[pll]
+  }
+
+  void set_ms(uint8_t clk, uint8_t linked_pll, uint8_t msa, uint8_t rdiv, uint8_t phase){  // Set Multisynth divider (integer) CLK0=0, CLK1=1, CLK2=2
+    uint32_t msp1 = (128*msa - 512) | (((uint32_t)rdiv)<<20);     // msp1 and msp2=0, msp3=1, not fractional
+    uint8_t ms_regs[8] = {0, 1, BB2(msp1), BB1(msp1), BB0(msp1), 0, 0, 0};
+    SendRegister(42+clk*8, ms_regs, 8); // Write to MS[clk]
+    SendRegister(16+clk, (linked_pll*0x20)|0x0C|3|0x40);       // CLK[clk]: PLL[pll] local msynth; 3=8mA; 0x40=integer division, bit7:6=0->power-up
+    SendRegister(165+clk, phase * msa / 90);  // CLK[clk]: phase (on change -> reset PLL)
+    static uint16_t pm[3]; // to detect a need for a PLL reset
+    if(pm[clk] != ((phase)*msa/90)){ pm[clk] = (phase)*msa/90; dirty=true; } // 0x20 reset PLLA; 0x80 reset PLLB
+  }
+
+  void set_freq(uint8_t clk, uint8_t pll, uint32_t fout, uint8_t phase){
+    uint8_t rdiv = 0;             // CLK pin sees fout/(2^rdiv)
+    if(fout < 500000){ rdiv = 7; fout *= 128; }; // Divide by 128 for fout 4..500kHz
+
+    uint16_t d = (16 * fxtal) / fout;  // Integer part
+    if(fout > 30000000) d = (34 * fxtal) / fout; // when fvco is getting too low (400 MHz)
+
+    if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d--; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+    uint32_t fvco = d * fout;  // Variable PLL VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
+
+    set_pll(pll, fvco);
+    set_ms(clk, pll, fvco / fout, rdiv, phase);
+
+    _fout = fout;  // cache
+    _div = d;
+    _msa128min512 = fvco / fxtal * 128 - 512;
+    _msb128=((uint64_t)(fvco % fxtal)*_MSC*128) / fxtal;
+  }
+
+  void pll_reset(){ if(dirty){ dirty=false; SendRegister(177, 0xA0); } } // reset PLLA and PLLB, if necessary
+
+  void oe(uint8_t mask){ SendRegister(3, ~mask); } // Output-enable mask: CLK2=4; CLK1=2; CLK0=1
+
+  void freq(uint32_t f, uint8_t i, uint8_t q){  // Set CLK0,1 (PLLA) to fout Hz with phase i, q, and prepare CLK2 (PLL2).
+    set_freq(0, 0, f, i);
+    set_freq(1, 0, f, q);
+    set_freq(2, 1, f, 0);
+    pll_reset();
+    oe(3);
+  }
+*/
   int16_t iqmsa; // to detect a need for a PLL reset
 
   void freq(uint32_t fout, uint8_t i, uint8_t q){  // Set a CLK0,1 to fout Hz with phase i, q
@@ -747,12 +1077,225 @@ public:
 static SI5351 si5351;
 // */
 
+ /*
+class SI5351 : public I2C {
+public:
+  #define SI_I2C_ADDR 0x60  // SI5351A I2C address: 0x60 for SI5351A-B-GT; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
+  #define SI_CLK_OE 3     // Register definitions
+  #define SI_CLK0_CONTROL 16
+  #define SI_CLK1_CONTROL 17
+  #define SI_CLK2_CONTROL 18
+  #define SI_SYNTH_PLL_A 26
+  #define SI_SYNTH_PLL_B 34
+  #define SI_SYNTH_MS_0 42
+  #define SI_SYNTH_MS_1 50
+  #define SI_SYNTH_MS_2 58
+  #define SI_CLK0_PHOFF 165
+  #define SI_CLK1_PHOFF 166
+  #define SI_CLK2_PHOFF 167
+  #define SI_PLL_RESET 177
+  #define SI_MS_INT 0b01000000  // Clock control
+  #define SI_CLK_SRC_PLL_A 0b00000000
+  #define SI_CLK_SRC_PLL_B 0b00100000
+  #define SI_CLK_SRC_MS 0b00001100
+  #define SI_CLK_IDRV_8MA 0b00000011
+  #define SI_CLK_INV 0b00010000
+  volatile uint32_t fxtal = 27004300;  //myqcx1:27003847 myqcx2:27004900  Actual crystal frequency of 27MHz XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
+  #define SI_PLL_FREQ (16*fxtal)  //900000000, with 432MHz(=16*27M) PLL freq, usable range is 3.46..100MHz
+
+  volatile uint8_t prev_divider;
+  volatile int32_t raw_freq;
+  volatile uint8_t divider;  // note: because of int8 only freq > 3.6MHz can be covered for R_DIV=1
+  volatile uint8_t mult;
+  volatile uint8_t pll_regs[8];
+  volatile int32_t iqmsa;
+  volatile int32_t pll_freq;   // temporary
+  
+  SI5351(){
+    init();
+    iqmsa = 0;
+  }
+  uint8_t RecvRegister(uint8_t reg)
+  {
+    // Data write to set the register address
+    start();
+    SendByte(SI_I2C_ADDR << 1);
+    SendByte(reg);
+    stop();
+    // Data read to retrieve the data from the set address
+    start();
+    SendByte((SI_I2C_ADDR << 1) | 1);
+    uint8_t data = RecvByte(true);
+    stop();
+    return data;
+  }
+  void SendRegister(uint8_t reg, uint8_t data)
+  {
+    start();
+    SendByte(SI_I2C_ADDR << 1);
+    SendByte(reg);
+    SendByte(data);
+    stop();
+  }
+  // Set up MultiSynth for register reg=MSNA, MNSB, MS0-5 with fractional divider, num and denom and R divider (for MSn, not for MSNA, MSNB)
+  // divider is 15..90 for MSNA, MSNB,  divider is 8..900 (and in addition 4,6 for integer mode) for MS[0-5]
+  // num is 0..1,048,575 (0xFFFFF)
+  // denom is 0..1,048,575 (0xFFFFF)
+  // num = 0, denom = 1 forces an integer value for the divider
+  // r_div = 1..128 (1,2,4,8,16,32,64,128)
+  void SetupMultisynth(uint8_t reg, uint8_t divider, uint32_t num, uint32_t denom, uint8_t r_div)
+  {
+    uint32_t P1; // Synth config register P1
+    uint32_t P2; // Synth config register P2
+    uint32_t P3; // Synth config register P3
+  
+    P1 = (uint32_t)(128 * ((float)num / (float)denom));
+    P1 = (uint32_t)(128 * (uint32_t)(divider) + P1 - 512);
+    P2 = (uint32_t)(128 * ((float)num / (float)denom));
+    P2 = (uint32_t)(128 * num - denom * P2);
+    P3 = denom;
+  
+    SendRegister(reg + 0, (P3 & 0x0000FF00) >> 8);
+    SendRegister(reg + 1, (P3 & 0x000000FF));
+    SendRegister(reg + 2, (P1 & 0x00030000) >> 16 | ((int)log2(r_div) << 4) );
+    SendRegister(reg + 3, (P1 & 0x0000FF00) >> 8);
+    SendRegister(reg + 4, (P1 & 0x000000FF));
+    SendRegister(reg + 5, ((P3 & 0x000F0000) >> 12) | ((P2 & 0x000F0000) >> 16));
+    SendRegister(reg + 6, (P2 & 0x0000FF00) >> 8);
+    SendRegister(reg + 7, (P2 & 0x000000FF));
+  }
+  inline void SendPLLBRegisterBulk()  // fast freq change of PLLB, takes about [ 2 + 7*(8+1) + 2 ] / 840000 = 80 uS
+  {
+    start();
+    SendByte(SI_I2C_ADDR << 1);
+    SendByte(SI_SYNTH_PLL_B + 3);  // Skip the first three pll_regs bytes (first two always 0xFF and third not often changing
+    SendByte(pll_regs[3]);
+    SendByte(pll_regs[4]);
+    SendByte(pll_regs[5]);
+    SendByte(pll_regs[6]);
+    SendByte(pll_regs[7]);
+    stop();
+  }
+  
+  #define FAST __attribute__((optimize("Ofast")))
+
+  // this function relies on cached (global) variables: divider, mult, raw_freq, pll_regs
+  inline void FAST freq_calc_fast(int16_t freq_offset)
+  { // freq_offset is relative to freq set in freq(freq)
+    // uint32_t num128 = ((divider * (raw_freq + offset)) % fxtal) * (float)(0xFFFFF * 128) / fxtal;
+    // Above definition (for fxtal=27.00491M) can be optimized by pre-calculating factor (0xFFFFF*128)/fxtal (=4.97) as integer constant (5) and
+    // substracting the rest error factor (0.03). Note that the latter is shifted left (0.03<<6)=2, while the other term is shifted right (>>6)
+    register int32_t z = ((divider * (raw_freq + freq_offset)) % fxtal);
+    register int32_t z2 = -(z >> 5);
+    int32_t num128 = (z * 5) + z2;
+  
+    // Set up specified PLL with mult, num and denom: mult is 15..90, num128 is 0..128*1,048,575 (128*0xFFFFF), denom is 0..1,048,575 (0xFFFFF)
+    uint32_t P1 = 128 * mult + (num128 / 0xFFFFF) - 512;
+    uint32_t P2 = num128 % 0xFFFFF;
+    //pll_regs[0] = 0xFF;
+    //pll_regs[1] = 0xFF;
+    //pll_regs[2] = (P1 >> 14) & 0x0C;
+    pll_regs[3] = P1 >> 8;
+    pll_regs[4] = P1;
+    pll_regs[5] = 0xF0 | (P2 >> 16);
+    pll_regs[6] = P2 >> 8;
+    pll_regs[7] = P2;
+  }
+  uint16_t div(uint32_t num, uint32_t denom, uint32_t* b, uint32_t* c)
+  { // returns a + b / c = num / denom, where a is the integer part and b and c is the optional fractional part 20 bits each (range 0..1048575)
+    uint16_t a = num / denom;
+    if(b && c){
+      uint64_t l = num % denom;
+      l <<= 20; l--;  // l *= 1048575;
+      l /= denom;     // normalize
+      *b = l;
+      *c = 0xFFFFF;    // for simplicity set c to the maximum 1048575
+    }
+    return a;
+  }
+  void freq(uint32_t freq, uint8_t i, uint8_t q)
+  { // Fout = Fvco / (R * [MSx_a + MSx_b/MSx_c]),  Fvco = Fxtal * [MSPLLx_a + MSPLLx_b/MSPLLx_c]; MSx as integer reduce spur
+    //uint8_t r_div = (freq > (SI_PLL_FREQ/256/1)) ? 1 : (freq > (SI_PLL_FREQ/256/32)) ? 32 : 128; // helps divider to be in range
+    uint8_t r_div = (freq < 500000) ? 128 : 1;
+    freq *= r_div;  // take r_div into account, now freq is in the range 1MHz to 150MHz
+    raw_freq = freq;   // cache frequency generated by PLL and MS stages (excluding R divider stage); used by freq_calc_fast()
+  
+    divider = SI_PLL_FREQ / freq;  // Calculate the division ratio. 900,000,000 is the maximum internal PLL freq (official range 600..900MHz but can be pushed to 300MHz..~1200Mhz)
+    if(divider % 2) divider--;  // divider in range 8.. 900 (including 4,6 for integer mode), even numbers preferred. Note that uint8 datatype is used, so 254 is upper limit
+    if( (divider * (freq - 5000) / fxtal) != (divider * (freq + 5000) / fxtal) ) divider -= 2; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+    pll_freq = divider * freq; // Calculate the pll_freq: the divider * desired output freq
+    uint32_t num, denom;
+    mult = div(pll_freq, fxtal, &num, &denom); // Determine the mult to get to the required pll_freq (in the range 15..90)
+  
+    // Set up specified PLL with mult, num and denom: mult is 15..90, num is 0..1,048,575 (0xFFFFF), denom is 0..1,048,575 (0xFFFFF)
+    // Set up PLL A and PLL B with the calculated  multiplication ratio
+    SetupMultisynth(SI_SYNTH_PLL_A, mult, num, denom, 1);
+    SetupMultisynth(SI_SYNTH_PLL_B, mult, num, denom, 1);
+    //if(denom == 1) SendRegister(22, SI_MSx_INT); // FBA_INT: MSNA operates in integer mode
+    //if(denom == 1) SendRegister(23, SI_MSx_INT); // FBB_INT: MSNB operates in integer mode
+    // Set up MultiSynth 0,1,2 with the calculated divider, from 4, 6..1800.
+    // The final R division stage can divide by a power of two, from 1..128
+    // if you want to output frequencies below 1MHz, you have to use the final R division stage
+    SetupMultisynth(SI_SYNTH_MS_0, divider, 0, 1, r_div);
+    SetupMultisynth(SI_SYNTH_MS_1, divider, 0, 1, r_div);
+    SetupMultisynth(SI_SYNTH_MS_2, divider, 0, 1, r_div);
+    //if(prev_divider != divider){ lcd.setCursor(0, 0); lcd.print(divider); lcd_blanks();
+    // Set I/Q phase
+    SendRegister(SI_CLK0_PHOFF, i * divider / 90); // one LSB equivalent to a time delay of Tvco/4 range 0..127
+    SendRegister(SI_CLK1_PHOFF, q * divider / 90); // one LSB equivalent to a time delay of Tvco/4 range 0..127
+    // Switch on the CLK0, CLK1 output to be PLL A and set multiSynth0, multiSynth1 input (0x0F = SI_CLK_SRC_MS | SI_CLK_IDRV_8MA)
+    SendRegister(SI_CLK0_CONTROL, 0x0F | SI_MS_INT | SI_CLK_SRC_PLL_A);
+    SendRegister(SI_CLK1_CONTROL, 0x0F | SI_MS_INT | SI_CLK_SRC_PLL_A);
+    // Switch on the CLK2 output to be PLL B and set multiSynth2 input
+    SendRegister(SI_CLK2_CONTROL, 0x0F | SI_MS_INT | SI_CLK_SRC_PLL_B);
+    SendRegister(SI_CLK_OE, 0b11111100); // Enable CLK1|CLK0
+    // Reset the PLL. This causes a glitch in the output. For small changes to
+    // the parameters, you don't need to reset the PLL, and there is no glitch
+    if((abs(pll_freq - iqmsa) > 16000000L) || divider != prev_divider){
+      iqmsa = pll_freq;
+      prev_divider = divider;
+      SendRegister(SI_PLL_RESET, 0xA0);
+    }
+    //SendRegister(24, 0b00000000); // CLK3-0 Disable State: CLK2=0 (BE CAREFUL TO CHANGE THIS!!!), CLK1/0=00 -> IC4-X0 selected -> 2,5V on IC5A/3(+), when IC5/2(-) leaks down below 2.5V -> 12V on IC5A/1, IC6A/2(-) -> 0V on IC6A/1, AUDIO2
+  }
+  void alt_clk2(uint32_t freq)
+  {
+    uint32_t num, denom;
+    uint16_t mult = div(pll_freq, freq, &num, &denom);
+  
+    SetupMultisynth(SI_SYNTH_MS_2, mult, num, denom, 1);
+  
+    // Switch on the CLK2 output to be PLL A and set multiSynth2 input
+    SendRegister(SI_CLK2_CONTROL, 0x0F | SI_CLK_SRC_PLL_A);
+  
+    SendRegister(SI_CLK_OE, 0b11111000); // Enable CLK2|CLK1|CLK0
+  
+    //SendRegister(SI_CLK0_PHOFF, 0 * divider / 90); // one LSB equivalent to a time delay of Tvco/4 range 0..127
+    //SendRegister(SI_CLK1_PHOFF, 90 * divider / 90); // one LSB equivalent to a time delay of Tvco/4 range 0..127
+    //SendRegister(SI_CLK2_PHOFF, 45 * divider / 90); // one LSB equivalent to a time delay of Tvco/4 range 0..127
+    //SendRegister(SI_PLL_RESET, 0xA0);
+  }
+  void powerDown()
+  {
+    SendRegister(SI_CLK0_CONTROL, 0b11000000);  // Conserve power when output is disabled
+    SendRegister(SI_CLK1_CONTROL, 0b11000000);
+    SendRegister(SI_CLK2_CONTROL, 0b11000000);
+    SendRegister(19, 0b11000000);
+    SendRegister(20, 0b11000000);
+    SendRegister(21, 0b11000000);
+    SendRegister(22, 0b11000000);
+    SendRegister(23, 0b11000000);
+    SendRegister(SI_CLK_OE, 0b11111111); // Disable all CLK outputs
+  }
+};
+static SI5351 si5351;
+ */
 
 #undef F_CPU
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 //#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
 
-//#define DEBUG  1   // enable testing and diagnostics features
+#define DEBUG  1   // enable testing and diagnostics features
 #ifdef DEBUG
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
@@ -806,7 +1349,7 @@ inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 
 uint8_t lut[256];
 volatile uint8_t amp;
-volatile uint8_t vox_thresh = 40; // (1 << 2);
+volatile uint8_t vox_thresh = (1 << 2);
 volatile uint8_t drive = 2;   // hmm.. drive>2 impacts cpu load..why?
 
 inline int16_t ssb(int16_t in)
@@ -1107,7 +1650,7 @@ param_c = avg;
 }
 
 #define N_FILT 7
-volatile int8_t filt = 1;
+volatile int8_t filt = 0;
 int8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
 inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
@@ -1701,8 +2244,7 @@ uint16_t analogSampleMic()
 }
 
 volatile bool change = true;
-//volatile int32_t freq = 7074000;
-volatile int32_t freq = band[bandval];
+volatile int32_t freq = 7074000;
 
 int8_t smode = 1;
 
@@ -1838,7 +2380,15 @@ void calibrate_iq()
 #endif
 #endif //QCX
 
+int8_t prev_bandval = 2;
+int8_t bandval = 2;
+#define N_BANDS 10
+uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };
 
+enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
+int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
+volatile int8_t stepsize = STEP_1k;
+int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
 
 void process_encoder_tuning_step(int8_t steps)
 {
@@ -1860,7 +2410,7 @@ void stepsize_change(int8_t val)
   stepsize += val;
   if(stepsize < STEP_1M) stepsize = STEP_10;
   if(stepsize > STEP_10) stepsize = STEP_1M;
-//  if(stepsize == STEP_10k || stepsize == STEP_500k) stepsize += val;
+  if(stepsize == STEP_10k || stepsize == STEP_500k) stepsize += val;
   stepsize_showcursor();
 }
 
@@ -1994,7 +2544,7 @@ uint32_t save_event_time = 0;
 uint32_t sec_event_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
-static uint8_t pwm_max = 80;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly
+static uint8_t pwm_max = 220;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* filt_label[N_FILT+1] = { "Full", "4000", "2500", "1700", "500", "200", "100", "50" };
@@ -2088,16 +2638,9 @@ void initPins(){
   digitalWrite(NTX, HIGH);
   pinMode(NTX, OUTPUT);
 #endif
-
-pinMode(LCD_RS, OUTPUT);
-pinMode(LCD_EN, OUTPUT);
-pinMode(LCD_D4, OUTPUT);
-pinMode(LCD_D5, OUTPUT);
-pinMode(LCD_D6, OUTPUT);
-pinMode(LCD_D7, OUTPUT);
-
 }
 
+#ifdef CAT
 // CAT suuport from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
 // https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
 const int CatnumChars = 32;
@@ -2299,12 +2842,10 @@ void Command_TX2()
 void Command_RS()
 {
   Serial.print("RS0;");
-
 }
 
 void Command_Vox(char mode)
 {
-
   char Catbuffer[16];
   sprintf(Catbuffer, "VX%c;",mode);
   Serial.print(Catbuffer);
@@ -2318,7 +2859,6 @@ void Command_ID()
 void Command_PS()
 {
   Serial.print("PS1;");
-
 }
 
 void Command_PS1()
@@ -2326,6 +2866,7 @@ void Command_PS1()
   Serial.print("PS1;");
 }
 // END CAT support
+#endif //CAT
 
 void setup()
 {
@@ -2433,6 +2974,23 @@ void setup()
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
 
 #ifdef DEBUG
+  /*if((mcusr & WDRF) && (!(mcusr & EXTRF)) && (!(mcusr & BORF))){
+    lcd.setCursor(0, 1); lcd.print(F("!!Watchdog RESET")); lcd_blanks();
+    delay(1500); wdt_reset();
+  }
+  if((mcusr & BORF) && (!(mcusr & WDRF))){
+    lcd.setCursor(0, 1); lcd.print(F("!!Brownout RESET")); lcd_blanks();  // Brow-out reset happened, CPU voltage not stable or make sure Brown-Out threshold is set OK (make sure E fuse is set to FD)
+    delay(1500); wdt_reset();
+  }
+  if(mcusr & PORF){
+    lcd.setCursor(0, 1); lcd.print(F("!!Power-On RESET")); lcd_blanks();
+    delay(1500); wdt_reset();
+  }*/
+  /*if(mcusr & EXTRF){
+  lcd.setCursor(0, 1); lcd.print(F("Power-On")); lcd_blanks();
+    delay(1); wdt_reset();
+  }*/
+  
   // Measure CPU loads
   if(!(load_tx <= 100.0)){
     lcd.setCursor(0, 1); lcd.print(F("!!CPU_tx=")); lcd.print(load_tx); lcd.print(F("%")); lcd_blanks();
@@ -2577,31 +3135,25 @@ void setup()
 
   start_rx();
 
-//use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
-//other versions on WSJT-X may need others speeds to work correct. V1.8.0 works with all speeds, but protocol is obsolete after 2.0
-pinMode(DVM, OUTPUT);
-
+#ifdef CAT
+  //use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
+  //other versions on WSJT-X may need others speeds to work correct. V1.8.0 works with all speeds, but protocol is obsolete after 2.0
+  pinMode(DVM, OUTPUT);
   Serial.begin(30720); // 38400 baud corrected for F_CPU=20M
 //  Serial.begin(15360); // 19200 baud corrected for F_CPU=20M
 //  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
 //  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M
 //  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M
-
-  Command_IF();
-
-}
-
-void print_char(uint8_t in){  // Print char in second line of display and scroll right.
-  for(int i = 0; i!= 15; i++) out[i] = out[i+1];
-  out[15] = in;
-  out[16] = '\0';
-  cw_event = true;
+   Command_IF();
+#endif
 }
 
 void loop()
 {
+#ifdef CAT
   rxCATcmd();
   analyseCATcmd();
+#endif
 
 #ifndef SIMPLE_RX
   delay(1);
@@ -2619,7 +3171,6 @@ void loop()
   }
 
   if(menumode == 0){
-
     smeter();
     if(!((mode == CW) && cw_event) && (smode)) stepsize_showcursor();  // restore cursor (when there is no CW text and smeter is enabled)
   }
@@ -2635,7 +3186,7 @@ void loop()
   uint8_t inv = 0;
 #endif
 
-//#define DAH_AS_KEY  1               // !AK
+#define DAH_AS_KEY  1
 #ifdef DAH_AS_KEY
   if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
 #else
@@ -2647,7 +3198,6 @@ void loop()
 #else
     for(; !digitalRead(DIT) ;){ // until released
 #endif
-
       wdt_reset();
       if(inv ^ digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
     }
@@ -2715,7 +3265,7 @@ void loop()
           #endif
           if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
           #ifdef MODE_CHANGE_RESETS
-          if(mode == CW) filt = 4; else filt = 1;  // resets filter (to most BW) on mode change
+          if(mode == CW) filt = 4; else filt = 0;  // resets filter (to most BW) on mode change
           #else
           prev_stepsize[prev_mode == CW] = stepsize; stepsize = prev_stepsize[mode == CW]; // backup stepsize setting for previous mode, restore previous stepsize setting for current selected mode; filter settings captured for either CQ or other modes.
           prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
@@ -2737,7 +3287,7 @@ void loop()
         if(mode == CW && filt == 4) stepsize = STEP_500; // reset stepsize for 500Hz filter
         if(mode == CW && (filt == 5 || filt == 6) && stepsize < STEP_100) stepsize = STEP_100; // for CW BW 200, 100      -> step = 100 Hz
         if(mode == CW && filt == 7 && stepsize < STEP_10) stepsize = STEP_10;                  // for CW BW 50 -> step = 10 Hz
-        if(mode != CW && filt > 3) filt = 1;
+        if(mode != CW && filt > 3) filt = 0;
         encoder_val = 0; 
         paramAction(UPDATE, FILTER);
         paramAction(SAVE, FILTER);
@@ -2863,7 +3413,7 @@ void loop()
           si5351.iqmsa = 0;  // enforce PLL reset
           // make more generic: 
           if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
-          if(mode == CW) filt = 4; else filt = 1;
+          if(mode == CW) filt = 4; else filt = 0;
         }
         if(menu == BAND){
           change = true;
@@ -2924,19 +3474,20 @@ void loop()
     change = false;
     if(prev_bandval != bandval){ freq = band[bandval]; prev_bandval = bandval; }
     save_event_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
-
+ 
     if(menumode == 0){
       display_vfo(freq);
       stepsize_showcursor();
-
+#ifdef CAT
       Command_GETFreqA();
-
+#endif
+ 
       // The following is a hack for SWR measurement:
       //si5351.alt_clk2(freq + 2400);
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
-
+    
     noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
@@ -2948,13 +3499,13 @@ void loop()
       si5351.freq(freq, 0, 90);  // RX in USB, ...
     interrupts();
   }
-
+  
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
     paramAction(SAVE, FREQ);  // save freq changes
     save_event_time = 0;
     //lcd.setCursor(15, 1); lcd.print("S"); delay(100); lcd.setCursor(15, 1); lcd.print("R");
   }
-
+  
   wdt_reset();
 }
 
