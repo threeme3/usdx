@@ -1573,8 +1573,8 @@ volatile uint8_t _init;
 
 /* M0PUB: Old AGC algorithm which only increases gain, but does not decrease it for very strong signals.
 // Maximum possible gain is x32 (in practice, x31) so AGC range is x1 to x31 = 30dB approx.
-// Decay time is fine (about 1s) but attack time is much slower than I like. 
-// For weak/medium signals it aims to keep the sample value between 1024 and 2048. 
+// Decay time is fine (about 1s) but attack time is much slower than I like.
+// For weak/medium signals it aims to keep the sample value between 1024 and 2048.
 static int16_t gain = 1024;
 inline int16_t process_agc(int16_t in)
 {
@@ -1617,7 +1617,7 @@ inline int16_t process_agc(int16_t in)
   else
     out = (centiGain >> 2) * (in >> 3);  // net gain < 1
   out >>= 2;
-  
+
   if (HI(abs(out)) > HI(1536)) {
     centiGain -= (centiGain >> 4);       // Fast attack time when big signal encountered (relies on CentiGain >= 16)
   } else {
@@ -1634,7 +1634,7 @@ inline int16_t process_agc(int16_t in)
       small = true;
     }
   }
-                       
+
   return out;
 }
 
@@ -1781,10 +1781,7 @@ volatile int16_t i, q;
 inline int16_t slow_dsp(int16_t ac)
 {
   static uint8_t absavg256cnt;
-  if(!(absavg256cnt--)){
-    _absavg256 = absavg256;
-    absavg256 = 0;
-     
+  if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0;
 //#define AUTO_ADC_BIAS  1
 #ifdef AUTO_ADC_BIAS
     if(param_b < 0){
@@ -1829,7 +1826,7 @@ inline int16_t slow_dsp(int16_t ac)
     if (volume <= 9)    // M0PUB: if no AGC allow volume control to boost weak signals
       ac = ac >> (9-volume);
     else
-      ac = ac << (volume-9); 
+      ac = ac << (volume-9);
   }
   if(nr) ac = process_nr(ac);
 
@@ -2309,7 +2306,7 @@ float smeter(float ref = 0)  // M0PUB: ref was 5 (= 10*log(8000/2400)) but I don
     return 0;
   }
   float rms = _absavg256 / 256.0; //sqrt(256.0);
-  
+
   //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);   // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
   if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 8.0 * 500.0 * 0.639 / 0.707);   // M0PUB updated version: 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
@@ -2332,7 +2329,7 @@ float smeter(float ref = 0)  // M0PUB: ref was 5 (= 10*log(8000/2400)) but I don
     }
     if(smode == 3){ // S-bar. M0PUB: converted to use dbm_max as well - previously just used dbm
       int8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((int8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (M0PUB: modified to work correctly above S9)
-      lcd.noCursor(); lcd.setCursor(12, 0); 
+      lcd.noCursor(); lcd.setCursor(12, 0);
       char tmp[5];
       for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
       lcd.print(tmp);
@@ -2633,7 +2630,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 2, 16, false); break;   // M0PUB: Minimum att2 increased from 0 to 2, to prevent numeric overflow on strong signals
+    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 2, 16, false); break;
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
