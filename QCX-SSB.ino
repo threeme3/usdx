@@ -5,13 +5,17 @@
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define VERSION   "1.02e"
+//#define TESTBENCH 1
 
 // QCX pin defintions
-#define LCD_D4  0         //PD0    (pin 2)
-#define LCD_D5  1         //PD1    (pin 3)
-#define LCD_D6  2         //PD2    (pin 4)
-#define LCD_D7  3         //PD3    (pin 5)
-#define LCD_EN  4         //PD4    (pin 6)
+#ifndef TESTBENCH
+  #define LCD_D4  0         //PD0    (pin 2)
+  #define LCD_D5  1         //PD1    (pin 3)
+  #define LCD_D6  2         //PD2    (pin 4)
+  #define LCD_D7  3         //PD3    (pin 5)
+  #define LCD_EN  4         //PD4    (pin 6)
+  #define LCD_RS  18        //PC4    (pin 27)
+#endif
 #define FREQCNT 5         //PD5    (pin 11)
 #define ROT_A   7         //PD6    (pin 12)
 #define ROT_B   6         //PD7    (pin 13)
@@ -25,7 +29,6 @@
 #define AUDIO2  15        //PC1/A1 (pin 24)
 #define DVM     16        //PC2/A2 (pin 25)
 #define BUTTONS 17        //PC3/A3 (pin 26)
-#define LCD_RS  18        //PC4    (pin 27)
 #define SDA     18        //PC4    (pin 27)
 #define SCL     19        //PC5    (pin 28)
 //#define NTX  11          //PB3    (pin 17)  - experimental: LOW on TX
@@ -63,6 +66,9 @@ experimentally: #define AUTO_ADC_BIAS 1
 #include <avr/wdt.h>
 
 //FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be these at programming.
+
+
+#ifndef TESTBENCH
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
@@ -205,6 +211,25 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
     delayMicroseconds(100);   // commands need > 37us to settle
   };
 };
+
+#else
+
+//M0PUB: dummy LCD functions
+class LCD {
+public :
+  LCD() { ; }
+  ~LCD() { ; }
+  void begin(uint8_t x = 0, uint8_t y = 0){ ; }
+  void setCursor(uint8_t x, uint8_t y){ ; }
+  void print(const __FlashStringHelper* fs) { ; }
+  void print(const char c) { ; }
+  void print(const char c[]) { ; }
+  void cursor(){ ; }
+  void noCursor(){ ; }
+  void noDisplay(){ ; }
+  void createChar(uint8_t l, uint8_t glyph[]){ ; }
+};
+#endif
 
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
 class I2C_ {  // direct port I/O (disregards/does-not-need pull-ups)
@@ -1854,6 +1879,47 @@ inline int16_t slow_dsp(int16_t ac)
   return ac;
 }
 
+// Sine table with 72 entries results in 868Hz sine wave at effective sampling rate of 31250 SPS
+// for each of I and Q, since thay are sampled alternately, and hence I (for example) only
+// gets 36 samples from this table before looping.
+const int8_t sine[] = {
+  11, 22, 33, 43, 54, 64, 73, 82, 90, 97, 104, 110, 115, 119, 123, 125, 127, 127,
+  127, 125, 123, 119, 115, 110, 104, 97, 90, 82, 73, 64, 54, 43, 33, 22, 11, 0,
+  -11, -22, -33, -43, -54, -64, -73, -82, -90, -97, -104, -110, -115, -119, -123, -125, -127, -127,
+  -127, -125, -123, -119, -115, -110, -104, -97, -90, -82, -73, -64, -54, -43, -33, -22, -11, 0
+};
+
+// Short Sine table with 36 entries results in 1736Hz sine wave at effective sampling rate of 62500 SPS.
+/* const int8_t sine[] = {
+  22, 43, 64, 82, 97, 110, 119, 125, 127,
+  125, 119, 110, 97, 82, 64, 43, 22, 0,
+  -22, -43, -64, -82, -97, -110, -119, -125, -127,
+  -125, -119, -110, -97, -82, -64, -43, -22, 0
+}; */
+
+uint8_t ncoIdx = 0;
+int16_t NCO_Q()
+{
+  ncoIdx++;
+  if (ncoIdx >= sizeof(sine))
+    ncoIdx = 0;
+  return (int16_t(sine[ncoIdx])) << 2;
+}
+
+int16_t NCO_I()
+{
+  uint8_t i;
+
+  ncoIdx++;
+  if (ncoIdx >= sizeof(sine))
+    ncoIdx = 0;
+
+  i = ncoIdx + (sizeof(sine) / 4);  // Advance by 90 degrees
+  if (i >= sizeof(sine))
+    i -= sizeof(sine);
+  return (int16_t(sine[i])) << 2;
+}
+
 typedef void (*func_t)(void);
 volatile func_t func_ptr;
 #undef  R  // Decimating 2nd Order CIC filter
@@ -1872,9 +1938,13 @@ volatile uint8_t rx_state = 0;
 void sdr_rx()
 {
   // process I for even samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
+#ifdef TESTBENCH
+  int16_t adc = NCO_I();
+#else  
   ADMUX = admux[1];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   int16_t adc = ADC - 511; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+#endif
   func_ptr = sdr_rx_q;    // processing function for next conversion
   sdr_rx_common();
   
@@ -1883,7 +1953,6 @@ void sdr_rx()
   int16_t corr_adc = (prev_adc + adc) / 2;
   prev_adc = adc;
   adc = corr_adc;
-
   //static int16_t dc;
   //dc += (adc - dc) / 2;  // we lose LSB with this method
   //dc = (3*dc + adc)/4;
@@ -1911,6 +1980,8 @@ void sdr_rx()
         i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
         
         int16_t ac = i + qh;
+        Serial.println(q);
+
         ac = slow_dsp(ac);
 
         // Output stage
@@ -1935,9 +2006,13 @@ void sdr_rx()
 void sdr_rx_q()
 {
   // process Q for odd samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
+#ifdef TESTBENCH
+  int16_t adc = NCO_Q();
+#else  
   ADMUX = admux[0];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   int16_t adc = ADC - 511; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+#endif
   func_ptr = sdr_rx;    // processing function for next conversion
 #ifdef SECOND_ORDER_DUC
 //  sdr_rx_common();  //necessary? YES!... Maybe NOT!
@@ -2693,6 +2768,13 @@ void initPins(){
 
 void setup()
 {
+  // M0PUB: for test bench only, open serial port for diagnostic output
+#ifdef TESTBENCH
+  Serial.begin(115200);
+  while (!Serial)
+    ;
+#endif
+
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
 
   uint8_t mcusr = MCUSR;
@@ -2750,6 +2832,7 @@ void setup()
   si5351.powerDown();  // Disable all (used) outputs
 
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
+#ifndef TESTBENCH
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0  
   digitalWrite(RX, HIGH);  // generate pulse on SIDETONE and test if it can be seen on AUDIO2
   delay(1); // settle
@@ -2786,8 +2869,7 @@ void setup()
   //ssb_cap = 0; dsp_cap = 0;  // force standard QCX capability
   //ssb_cap = 1; dsp_cap = 0;  // force SSB and standard QCX-RX capability
   //ssb_cap = 1; dsp_cap = 1;  // force SSB and DSP capability
-  ssb_cap = 1; dsp_cap = 2;  // !!! TEMP !!! force SSB and SDR capability
-
+  //ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
 
@@ -2895,7 +2977,10 @@ void setup()
   uint32_t speed = (1000000 * 8 * 7) / (t1 - t0); // speed in kbit/s
   if(false)
   {
-    lcd.setCursor(0, 1); lcd.print(F("i2cspeed=")); lcd.print(speed); lcd.print(F("kbps")); lcd_blanks();
+    lcd.setCursor(0, 1);
+    lcd.print(F("i2cspeed="));
+    lcd.print(speed);
+    lcd.print(F("kbps")); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
@@ -2911,8 +2996,12 @@ void setup()
     for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_B + j) != si5351.pll_regs[j]) i2c_error++;
   }
   if(i2c_error){
-    lcd.setCursor(0, 1); lcd.print(F("!!BER_i2c=")); lcd.print(i2c_error); lcd_blanks();
-    delay(1500); wdt_reset();
+    lcd.setCursor(0, 1);
+    lcd.print(F("!!BER_i2c="));
+    lcd.print(i2c_error);
+    lcd_blanks();
+    delay(1500);
+    wdt_reset();
   }
 #endif
 
@@ -2970,7 +3059,10 @@ void parse_cat(uint8_t in){   // TS480 CAT protocol:  https://www.kenwood.com/i/
   if(in == ';'){  // end of cat command -> parse and process
 
     switch(cat_cmd){
-      case 'I'<<8|'F': Serial.write("IF00010138000     +00000000002000000 ;"); lcd.setCursor(0, 0); lcd.print("IF"); break;
+      case 'I'<<8|'F': Serial.write("IF00010138000     +00000000002000000 ;");
+      lcd.setCursor(0, 0);
+      lcd.print("IF");
+      break;
     }
     nc = 0;       // reset
   } else {
@@ -3148,7 +3240,6 @@ void loop()
         //int16_t x = 0;
         lcd.setCursor(15, 1); lcd.print("V");
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
-          
           int16_t in = analogSampleMic() - 512;
           static int16_t dc;
           int16_t i, q;
