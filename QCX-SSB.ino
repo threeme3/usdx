@@ -9,14 +9,21 @@
 #define QCX     1         // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
 
 //dl2dbg 26.07.2020
-#define OLED  1   //dl2dbg  SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
-#define KEYER_DEF 1 //dl2dbg
-//#define DEBUG  1   //ausschalten zuwenig Space   enable testing and diagnostics features
+//dl2dbg 27.07.2020
+
+#define OLED  1     //dl2dbg  SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
+#define KEYER_DEF  //dl2dbg //Keyer_def und DEBUG can not akive at the same Time Less Codespace
+ //#define DEBUG   
+
 // siehe ->  #define F_XTAL 25004000    //dl2dbg     
 // siehe ->  #define OLED  1            //dl2dbg
+// siehe ->  keyertx = 0; // Default TX off //dl2dbg
+
 /*   
- *    Menue 10.1  KEY_WPM:   0, 35, words per minute
+ *    Menue 10.1 KEY_WPM :   0, 35, words per minute
       Menue 10.2 KEY_MODE:  Single Key, IAMBIC - Mode-A oder Mode-B
+      Menue 10.3 KEY_PIN :  Single Key, IAMBIC Pin change .- /-. 
+      Menue 10.4 Keyer TX:  on/off; TX ausschalten Cw Trainer oder absicherung save TX ohne Antenne  
 */
 
 // QCX pin defintions
@@ -138,7 +145,10 @@ int wpm_wert = 15;
 static unsigned long       ditTime ;                    // No. milliseconds per dit
 static unsigned char       keyerControl;
 static unsigned char       keyerState;
-static unsigned char       keyerModel = 2; //->  SINGLE   
+static unsigned char       keyerModel = 2; //->  SINGLE  
+static unsigned char       keyerPIN = 0; //->  DI/DAH /27.07.2020  
+static unsigned char       keyertx = 0; // Default TX off   
+ 
 
 static unsigned long ktimer;
 static int Key_state;
@@ -1030,7 +1040,7 @@ public:
   #define FAST __attribute__((optimize("Ofast")))
 
   #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
-  #define F_XTAL 25004000    //dl2dbg      // Alternate SI clock
+  #define F_XTAL 25000000    //dl2dbg      // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
 
@@ -2481,9 +2491,9 @@ void start_rx()
   timer2_start(F_SAMP_RX);  
   TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM
 }
-
 void switch_rxtx(uint8_t tx_enable){
   tx = tx_enable;
+  
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
@@ -2502,12 +2512,12 @@ void switch_rxtx(uint8_t tx_enable){
   else _init = 1;
   rx_state = 0;
   if(tx_enable){
-      digitalWrite(RX, LOW);  // TX (disable RX)
+       if(keyertx)  {digitalWrite(RX, LOW); } // TX (disable RX)//27.07.2020 keyertx Keyer ohne TX  "CW-Trainer" 
 #ifdef NTX
-      digitalWrite(NTX, LOW);  // TX (enable TX)
+       if(keyertx)  {digitalWrite(NTX, LOW) };  // TX (enable TX)
 #endif
       lcd.setCursor(15, 1); lcd.print("T");
-      si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
+      if(keyertx)  {si5351.SendRegister(SI_CLK_OE, 0b11111011);} // CLK2_EN=1, CLK1_EN,CLK0_EN=0
       //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
       OCR1AL = 0; // make sure SIDETONE is set to 0%
       TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
@@ -2515,9 +2525,9 @@ void switch_rxtx(uint8_t tx_enable){
       //TCCR1A |= (1 << COM1A1);  // enable SIDETONE
       TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
       OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
-      digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
+     // digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
 #ifdef NTX
-      digitalWrite(NTX, HIGH);  // RX (disable TX)
+     // digitalWrite(NTX, HIGH);  // RX (disable TX)
 #endif
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
       lcd.setCursor(15, 1); lcd.print((vox) ? "V" : "R");
@@ -2525,6 +2535,8 @@ void switch_rxtx(uint8_t tx_enable){
   OCR2A = (((float)F_CPU / (float)64) / (float)((tx_enable) ? F_SAMP_TX : F_SAMP_RX) + 0.5) - 1;
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
 }
+
+
 
 #ifdef QCX
 #define CAL_IQ 1
@@ -2560,6 +2572,7 @@ void calibrate_iq()
   si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   change = true;  //restore original frequency setting
 }
+
 #endif
 #endif //QCX
 
@@ -2741,8 +2754,8 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#ifdef KEYER_DEF
- #define N_PARAMS 28  // 2 mehr für Keyer number of (visible) parameters
+#ifdef KEYER_DEF //27.07.2020
+ #define N_PARAMS 25  // debug Menue ist ausgeblendet ->  mehr für Keyer number of (visible) parameters KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX,
 #else
  #define N_PARAMS 26  // number of (visible) parameters
 #endif //KEYER_DEF
@@ -2750,8 +2763,8 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-#ifdef KEYER_DEF
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, FREQ, VERS };
+#ifdef KEYER_DEF //27.07.2020
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS };
 //KEY_WPM, KEY_MODE erweitert
 #else
 enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
@@ -2770,8 +2783,9 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
   const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
   const char* cw_tone_label[4] = { "325", "700" };
-  #ifdef KEYER_DEF    
+  #ifdef KEYER_DEF    //27.07.2020
     const char* key_mode_label[4] = { "Imabic A", "Imabic B","Single" };
+    const char* key_paddel_pin[4] = { "DI/DAH .-", "DAH/DI -." };
     // 0 for Iambic A, 1 for Iambic B
 #endif 
   switch(id){
@@ -2806,10 +2820,11 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_B: paramAction(action, param_b, F("9.4"), F("Param B"), NULL, -32768, 32767, false); break;
     case PARAM_C: paramAction(action, param_c, F("9.5"), F("Param C"), NULL, -32768, 32767, false); break;
 #endif
-#ifdef KEYER_DEF    
-    case KEY_WPM: paramAction(action, wpm_wert, F("10.1"), F("Keyer WPM"), NULL, 0, 35, false); break;
+#ifdef KEYER_DEF    //27.07.2020
+    case KEY_WPM:  paramAction(action, wpm_wert,   F("10.1"), F("Keyer WPM"), NULL, 0, 35, false); break;
     case KEY_MODE: paramAction(action, keyerModel, F("10.2"), F("Mode"), key_mode_label, 0, 2, false); break; // 0-2 ->3 einträge
-   
+    case KEY_PIN:  paramAction(action, keyerPIN,   F("10.3"), F("Paddel Con"), key_paddel_pin, 0, 1, false); break;
+    case KEY_TX:   paramAction(action, keyertx,    F("10.4"), F("Keyer TX"), offon_label, 0, 1, false); break;
 
 #endif
     // Invisible parameters
@@ -3124,11 +3139,12 @@ void setup()
 #endif
 
 
-#ifdef KEYER_DEF
+#ifdef KEYER_DEF //27.07.2020
  keyerState = IDLE;
  keyerControl = IAMBICB;      // Or 0 for IAMBICA
  //keyerModel = SINGLE ;       // default Keyer wir durch Menue 10.2 später verändert 
- paramAction(LOAD, KEY_MODE); 
+ paramAction(LOAD, KEY_MODE);  
+ paramAction(LOAD, KEY_PIN);  
  loadWPM(wpm_wert);                 // Fix speed at 15 WPM
     
 #endif //KEYER_DEF
@@ -3139,6 +3155,8 @@ void print_char(uint8_t in){  // Print char in second line of display and scroll
   out[16] = '\0';
   cw_event = true;
 }
+
+
 
 static char cat[20];  // temporary here
 static uint8_t nc = 0;
@@ -3246,6 +3264,7 @@ void loop()
         //digitalWrite(ledPin, HIGH);         // turn the LED on
         Key_state = HIGH;
         switch_rxtx(Key_state);
+            
         //lcd.setCursor(15, 1); lcd.print("h");
         //lcd.noCursor(); lcd.setCursor(0, 0); lcd.print((int16_t)ditTime);
         ktimer += millis();                 // set ktimer to interval end time
@@ -3260,7 +3279,7 @@ void loop()
             Key_state = LOW;
             switch_rxtx(Key_state);
             //lcd.setCursor(15, 1); lcd.print("l");
-            
+     
             ktimer = millis() + ditTime;    // inter-element time
             keyerState = INTER_ELEMENT;     // next state
 
@@ -3576,7 +3595,7 @@ void loop()
         }
 #endif
 
-#ifdef KEYER_DEF 
+#ifdef KEYER_DEF //27.07.2020
         if(menu == KEY_WPM){
         loadWPM(wpm_wert);paramAction(SAVE, KEY_WPM);
         }
@@ -3590,7 +3609,24 @@ void loop()
         
         paramAction(SAVE, KEY_MODE);
       
+        }//27.07.2020 
+        if(menu == KEY_PIN){
+          
+          if(keyerPIN){
+          LPin     =  DIT;       
+          RPin     =  DAH;   
+        }else{
+         
+           LPin     =  DAH;       // Left paddle input
+          RPin     =  DIT;       // Right paddle input    
         }
+        paramAction(SAVE,KEY_PIN);
+  
+        }
+    if(menu == KEY_TX){
+        paramAction(SAVE, KEY_TX);
+        }
+        
 #endif
       }
 #ifdef DEBUG
