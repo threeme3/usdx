@@ -14,6 +14,7 @@
 #define KEYER_DEF     // Keyer_def und DEBUG can not akive at the same Time Less Codespace
 #define DEBUG
 //#define TESTBENCH 1
+#define CAT	1	 // CAT-interface
 
 /*   
  *    Menue 10.1 KEY_WPM :   0, 35, words per minute
@@ -172,8 +173,16 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     //delayMicroseconds(52);                         // Execution time
     delayMicroseconds(60);                         // Execution time
   }
-  void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); }// Write command: send nibbles while RS low
+#ifdef CAT
+  void pre(){ PORTC|=4; bitClear(UCSR0B, 3); bitClear(UCSR0B, 4); delay(1); };
+  void post(){ /*delay(1);*/ bitSet(UCSR0B, 3);  bitSet(UCSR0B, 4); PORTC&=~4; /*PORTD|=0x03;*/ };
+#else
+  void pre(){};
+  void post(){};
+#endif
+  void cmd(uint8_t b){ pre(); nib(b >> 4); nib(b & 0xf); post(); }// Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
+    pre();
     //LCD_EN_HI();                                   // Complete Enable cycle must be at least 500ns (so start early)
     uint8_t nibh = LCD_PREP_NIBBLE(b >>  4);       // Prepare high nibble data and enable high
     PORTD = nibh;                                  // Send high nibble data and enable high
@@ -190,7 +199,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     LCD_EN_LO();
     LCD_RS_LO();
     delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
-    PORTD |= 0x02;                                 // To support serial-interface keep LCD_D5 high, so that DVM is not pulled-down via D
+    post();
     return 1;
   }
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
@@ -2982,6 +2991,234 @@ void initPins(){
 #endif
 }
 
+#ifdef CAT
+// CAT suuport from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
+// https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
+const int CatnumChars = 32;
+boolean newCATcmd = false;
+
+char CATcmd[CatnumChars] = {'0'};    // an array to store the received CAT data
+int CATMODE = 2;
+
+
+void rxCATcmd()
+{
+  static int index = 0;
+  char endMarker = ';';
+  char data;                    // CAT commands are ASCII characters
+
+  while ((Serial.available() > 0) && (newCATcmd == false))
+  {
+    data = (char)Serial.read();
+    if (data == endMarker)
+    {
+      CATcmd[index] = ';';      // Indicate end of command
+      CATcmd[index + 1] = '\0'; // terminate the array
+      index = 0;                // reset for next CAT command
+      newCATcmd = true;
+    }
+    else
+    {
+      CATcmd[index] = data;
+      index++;
+
+      if (index >= CatnumChars)
+        {
+        index = CatnumChars - 1;   // leave space for the \0 array termination
+        index=0;
+        newCATcmd =true;
+        }
+    }
+  }
+}
+
+void analyseCATcmd()
+{
+  if (newCATcmd == true)
+  {
+    newCATcmd = false;        // reset for next CAT time
+
+    if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[2] == ';'))
+      Command_GETFreqA();
+
+    else if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[13] == ';'))
+      Command_SETFreqA();
+
+    else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'F') && (CATcmd[2] == ';'))
+      Command_IF();
+
+    else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
+      Command_ID();
+
+    else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
+      Command_PS();
+
+    else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == '1'))
+      Command_PS1();
+
+    else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == ';'))
+      Command_AI();
+
+    else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == '0'))
+      Command_AI0();
+
+    else if ((CATcmd[0] == 'M') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
+      Command_MD();
+
+    else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
+      Command_RX();
+
+    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
+      Command_TX();
+
+    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '0'))
+      Command_TX0();
+
+    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '1'))
+      Command_TX1();
+
+    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '2'))
+      Command_TX2();
+
+    else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
+      Command_RS();
+
+    else if ((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
+      Command_Vox(CATcmd[2]);
+  }
+}
+
+void Command_GETFreqA()
+{
+  char Catbuffer[32];
+  unsigned int g,m,k,h;
+  uint32_t tf;
+
+  tf=freq;
+  g=(unsigned int)(tf/1000000000lu);
+  tf-=g*1000000000lu;
+  m=(unsigned int)(tf/1000000lu);
+  tf-=m*1000000lu;
+  k=(unsigned int)(tf/1000lu);
+  tf-=k*1000lu;
+  h=(unsigned int)tf;
+
+  sprintf(Catbuffer,"FA%02u%03u",g,m);
+  Serial.print(Catbuffer);
+  sprintf(Catbuffer,"%03u%03u;",k,h);
+  Serial.print(Catbuffer);
+}
+
+void Command_SETFreqA()
+{
+  char Catbuffer[16];
+  strncpy(Catbuffer,CATcmd+2,11);
+  Catbuffer[11]='\0';
+
+  freq=(uint32_t)atol(Catbuffer);
+  change=true;
+  //Command_GETFreqA();
+  //display_vfo(freq);
+}
+
+void Command_IF()
+{
+  char Catbuffer[32];
+  unsigned int g,m,k,h;
+  uint32_t tf;
+
+  tf=freq;
+  g=(unsigned int)(tf/1000000000lu);
+  tf-=g*1000000000lu;
+  m=(unsigned int)(tf/1000000lu);
+  tf-=m*1000000lu;
+  k=(unsigned int)(tf/1000lu);
+  tf-=k*1000lu;
+  h=(unsigned int)tf;
+
+  sprintf(Catbuffer,"IF%02u%03u%03u%03u",g,m,k,h);
+  Serial.print(Catbuffer);
+  sprintf(Catbuffer,"00000+000000");
+  Serial.print(Catbuffer);
+  sprintf(Catbuffer,"000020000000;");
+  Serial.print(Catbuffer);
+}
+
+void Command_AI()
+{
+  Serial.print("AI0;");
+}
+
+void Command_MD()
+{
+  Serial.print("MD2;");
+
+}
+
+void Command_AI0()
+{
+  Serial.print("AI0;");
+}
+
+void Command_RX()
+{
+  switch_rxtx(0);
+  Serial.print("RX0;");
+}
+
+void Command_TX()
+{
+  switch_rxtx(1);
+  Serial.print("TX0;");
+}
+
+void Command_TX0()
+{
+  switch_rxtx(1);
+  Serial.print("TX0;");
+}
+
+void Command_TX1()
+{
+  switch_rxtx(1);
+  Serial.print("TX1;");
+}
+
+void Command_TX2()
+{
+  switch_rxtx(1);
+  Serial.print("TX2;");
+}
+
+void Command_RS()
+{
+  Serial.print("RS0;");
+}
+
+void Command_Vox(char mode)
+{
+  char Catbuffer[16];
+  sprintf(Catbuffer, "VX%c;",mode);
+  Serial.print(Catbuffer);
+}
+
+void Command_ID()
+{
+  Serial.print("ID020;");
+}
+
+void Command_PS()
+{
+  Serial.print("PS1;");
+}
+
+void Command_PS1()
+{
+  Serial.print("PS1;");
+}
+// END CAT support
+#endif //CAT
+
 void setup()
 {
 #ifdef TESTBENCH   // for test bench only, open serial port for diagnostic output
@@ -3251,11 +3488,17 @@ void setup()
 
   start_rx();
 
-// #define CAT 1
 #ifdef CAT
-  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
+  //use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
+  //other versions on WSJT-X may need others speeds to work correct. V1.8.0 works with all speeds, but protocol is obsolete after 2.0
+  pinMode(DVM, OUTPUT);
+  Serial.begin(30720); // 38400 baud corrected for F_CPU=20M
+//  Serial.begin(15360); // 19200 baud corrected for F_CPU=20M
+//  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
+//  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M
+//  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M
+   Command_IF();
 #endif
-
 
 #ifdef KEYER_DEF
  keyerState = IDLE;
@@ -3300,11 +3543,8 @@ void parse_cat(uint8_t in){   // TS480 CAT protocol:  https://www.kenwood.com/i/
 void loop()
 {
 #ifdef CAT
-  if(Serial.available() > 0){
-    uint8_t in = Serial.read();
-    print_char(in);
-    parse_cat(in);
-  }
+  rxCATcmd();
+  analyseCATcmd();
 #endif
 
 #ifndef SIMPLE_RX
@@ -3749,7 +3989,10 @@ void loop()
     if(menumode == 0){
       display_vfo(freq);
       stepsize_showcursor();
-  
+#ifdef CAT
+      Command_GETFreqA();
+#endif
+ 
       // The following is a hack for SWR measurement:
       //si5351.alt_clk2(freq + 2400);
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
