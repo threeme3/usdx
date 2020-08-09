@@ -4,13 +4,20 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02h"
+#define VERSION   "1.02j"
 
-//dl2dbg 24.07.2020
-#define OLED  1   //dl2dbg  SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
+#define QCX     1         // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
+
+//dl2dbg 26.07.2020
+//#define OLED  1   //dl2dbg  SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
 #define KEYER_DEF 1 //dl2dbg
-
-#define QCX     1 //dl2dbg       // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
+//#define DEBUG  1   //ausschalten zuwenig Space   enable testing and diagnostics features
+// siehe ->  #define F_XTAL 25004000    //dl2dbg     
+// siehe ->  #define OLED  1            //dl2dbg
+/*   
+ *    Menue 10.1  KEY_WPM:   0, 35, words per minute
+      Menue 10.2 KEY_MODE:  Single Key, IAMBIC - Mode-A oder Mode-B
+*/
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -64,10 +71,6 @@ ssb_cap=1; dsp_cap=2;
 #define F_CPU F_XTAL
 experimentally: #define AUTO_ADC_BIAS 1
 */
-
-
-
-
 #ifdef KEYER_DEF
   
 /////////  Keyer begin Def ... dl2dbg 23.07.2020 //////////////////////////////////////////////////////////////////////
@@ -114,7 +117,10 @@ int         RPin     =  DIT;       // Right paddle input
 #define     DIT_PROC   0x04     // Dit is being processed
 #define     PDLSWAP    0x08     // 0 for normal, 1 for swap
 #define     IAMBICB    0x10     // 0 for Iambic A, 1 for Iambic B
+#define     IAMBICA    0x00     // 0 for Iambic A, 1 for Iambic B
+#define     SINGLE     2        // Keyer Mode 0 1 -> Iambic2  2 ->SINGLE 
 //
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -132,7 +138,7 @@ int wpm_wert = 15;
 static unsigned long       ditTime ;                    // No. milliseconds per dit
 static unsigned char       keyerControl;
 static unsigned char       keyerState;
-
+static unsigned char       keyerModel = 2; //->  SINGLE   
 
 static unsigned long ktimer;
 static int Key_state;
@@ -183,7 +189,6 @@ void loadWPM (int wpm)
 /////////  Keyer End Def ... dl2dbg 23.07.2020 //////////////////////////////////////////////////////////////////////
 
 #endif //KEYER_DEF
-
 
 #include <avr/sleep.h>
 #include <avr/wdt.h>
@@ -827,7 +832,7 @@ public:
     setCursor(0, 0);
   }
 };
-//#define OLED  1   //dl2dbg  SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
+//#define OLED  1   // SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
 #ifdef OLED
 SSD1306Device lcd;
 #else
@@ -999,6 +1004,11 @@ public:
   inline void suspend(){
     I2C_SDA_LO();         // pin sharing SDA/LCD_RS: pull-down LCD_RS; QCXLiquidCrystal require this for any operation
   }
+
+  void begin(){};
+  void beginTransmission(uint8_t addr){ start(); SendByte(addr << 1);  };
+  bool write(uint8_t byte){ SendByte(byte); return 1; };
+  uint8_t endTransmission(){ stop(); return 0; };
 };
 
 #define log2(n) (log(n) / log(2))
@@ -1019,8 +1029,8 @@ public:
 
   #define FAST __attribute__((optimize("Ofast")))
 
-  //#define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
-  #define F_XTAL 25004000          // dl2dbg Alternate SI clock
+  #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
+  #//define F_XTAL 25004000    //dl2dbg      // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
 
@@ -1405,11 +1415,35 @@ public:
 static SI5351 si5351;
  */
 
+#define LPF_SWITCHING 1   // Enabled filter bank switching (latching relay connected to a PCA9536 GPIO extender that is on the same SI5351 I2C bus; relays are using D0 as common, D1-D3 used by the individual latches)
+#ifdef LPF_SWITCHING
+class PCA9536 {  //https://www.ti.com/lit/ds/symlink/pca9536.pdf
+public:
+  #define PCA9536_ADDR  0x41
+  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x03); i2c.write(0x00); i2c.endTransmission(); } // pca9536 configuration: D0-D7 as output
+  inline void write(uint8_t data){ init(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x01); i2c.write(data); i2c.endTransmission(); }  // pca9536 output port
+};
+PCA9536 ioext;
+
+void set_latch(uint8_t k){   // Pins D1-D7 control latches K1-K7, D0 is common for all latches
+  #define LATCH_TIME  15  // set/reset time latch relay
+  //#define LATCH_TIME  1000  // set/reset time latch relay (latches slowly ... for testing purpose only)
+  for(int i = 1; i != 8; i++){ ioext.write( (~(1 << i))| 0x01); delay(LATCH_TIME); } ioext.write(0x00); // reset all latches
+  ioext.write((1 << k)| 0x00); delay(LATCH_TIME); ioext.write(0x00); // set latch k
+}
+
+static uint8_t prev_lpf_bank = 0xff;
+void set_lpf(uint8_t f){
+  uint8_t lpf_bank = (f > 8) ? 1 : (f > 4) ? 2 : 3;  // mapping LPF cut-off (freq in MHz) to LPF bank relay: customize to your needs..
+  if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };  // set relay
+}
+#endif
+
 #undef F_CPU
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 //#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
 
-#define DEBUG  1   // enable testing and diagnostics features
+
 #ifdef DEBUG
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
@@ -1694,7 +1728,7 @@ volatile bool cw_event = false;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
-volatile uint8_t att2 = 0;
+volatile uint8_t att2 = 3;
 volatile uint8_t _init;
 
 //static uint32_t gain = 1024;
@@ -1935,6 +1969,10 @@ volatile uint8_t rx_state = 0;
 // Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
 // H1(z) = (1 + z^-1)^2 = 1 + 2*z^-1 + z^-2 = (1 + z^-2) + (2) * z^-1 = FA(z) + FB(z) * z^-1;
 // with down-sampling before stage translates into poly-phase components: FA(z) = 1 + z^-1, FB(z) = 2
+// Non-recursive CIC Filter (M=4) implementation (for second-stage only):
+// H1(z) = (1 + z^-1)^4 = 1 + 4*z^-1 + 6*z^-2 + 4*z^-3 + z^-4 = 1 + 6*z^-2 + z^-4 + (4 + 4*z^-2) * z^-1 = FA(z) + FB(z) * z^-1;
+// with down-sampling before stage translates into poly-phase components: FA(z) = 1 + 6*z^-1 + z^-2, FB(z) = 4 + 4*z^-1
+//#define M4  1  // Enable to enable M=4 on second-stage (better alias rejection)
 // source: Lyons Understanding Digital Signal Processing 3rd edition 13.24.1
 void sdr_rx()
 {
@@ -1966,10 +2004,15 @@ void sdr_rx()
     static int16_t za1;
     int16_t _ac = ac + za1 + z1 * 2;           // 1st stage: FA + FB
     za1 = ac;
-    static int16_t _z1;
+    static int16_t _z1, _z2;
     if(rx_state == 0){                   // 2nd stage: down-sample by 2
-      static int16_t _za1;
+      static int16_t _za1, _za2;
+#ifdef M4
+      ac2 = _ac + _za1 * 6 + _za2 + _z1 + _z2; // 2nd stage: FA + FB $
+      _za2 = _za1; // $
+#else
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
+#endif
       _za1 = _ac;
       {
         ac2 >>= att2;  // digital gain control
@@ -1993,7 +2036,11 @@ void sdr_rx()
 #endif
         ozd1 = ac;
       }
+#ifdef M4
+    } else { _z2 = _z1; _z1 = _ac * 4; } // $
+#else
     } else _z1 = _ac;
+#endif
   } else z1 = ac;
 
   rx_state++;
@@ -2025,10 +2072,15 @@ void sdr_rx_q()
     static int16_t za1;
     int16_t _ac = ac + za1 + z1 * 2;           // 1st stage: FA + FB
     za1 = ac;
-    static int16_t _z1;
+    static int16_t _z1, _z2;
     if(rx_state == 7){                   // 2nd stage: down-sample by 2
-      static int16_t _za1;
+      static int16_t _za1, _za2;
+#ifdef M4
+      ac2 = _ac + _za1 * 6 + _za2 + _z1 + _z2; // 2nd stage: FA + FB $
+      _za2 = _za1; // $
+#else
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
+#endif
       _za1 = _ac;
       {
         ac2 >>= att2;  // digital gain control
@@ -2040,7 +2092,11 @@ void sdr_rx_q()
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
       }
       rx_state = 0; return;
+#ifdef M4
+    } else { _z2 = _z1; _z1 = _ac * 4; } // $
+#else
     } else _z1 = _ac;
+#endif
   } else z1 = ac;
 
   rx_state++;
@@ -2073,6 +2129,10 @@ static struct rx {
   int16_t za1;
   int16_t _z1;
   int16_t _za1;
+#ifdef M4
+  int16_t _z2;
+  int16_t _za2;
+#endif  
 } rx_inst[2];
 
 void sdr_rx()
@@ -2121,7 +2181,12 @@ void sdr_rx()
     int16_t _ac = ac + p->za1 + p->z1 * 2;           // 1st stage: FA + FB
     p->za1 = ac;
     if(_rx_state & 0x04){                   // rx_state == I: 0  Q:7   2nd stage: down-sample by 2
+#ifdef M4
+      int16_t ac2 = _ac + p->_za1 * 6 + p->_za2 + p->_z1 + p->_z2;              // 2nd stage: FA + FB
+      p->_za2 = p->_za1;
+#else
       int16_t ac2 = _ac + p->_za1 + p->_z1 * 2;              // 2nd stage: FA + FB
+#endif
       p->_za1 = _ac;
       if(b){
         // post processing I and Q (down-sampled) results
@@ -2153,7 +2218,11 @@ void sdr_rx()
         //qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
       }
+#ifdef M4
+    } else { p->_z2 = p->_z1; p->_z1 = _ac * 4; }
+#else
     } else p->_z1 = _ac;
+#endif
   } else p->z1 = ac;  // rx_state == I: 2, 6  Q: 1, 5
 
   rx_state++;
@@ -2497,7 +2566,13 @@ void calibrate_iq()
 int8_t prev_bandval = 2;
 int8_t bandval = 2;
 #define N_BANDS 10
+
+#ifdef KEYER_DEF
+//cw Bänder
+uint32_t band[N_BANDS] = { /*472000, 1838000,*/ 3570000, 5357000, 7040000, 10310000, 14070000, 18950000, 21070000, 24915000, 28070000, 50300000/*, 70101000, 144125000*/ };
+#else
 uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };
+#endif
 
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
@@ -2666,7 +2741,6 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-
 #ifdef KEYER_DEF
  #define N_PARAMS 28  // 2 mehr für Keyer number of (visible) parameters
 #else
@@ -2684,7 +2758,6 @@ enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER
 
 #endif //KEYER_DEF
 
-
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
   if((action == SAVE) || (action == LOAD)){
@@ -2697,8 +2770,8 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
   const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
   const char* cw_tone_label[4] = { "325", "700" };
-#ifdef KEYER_DEF    
-    const char* key_mode_label[4] = { "IAMBIC A", "IAMBIC B" };
+  #ifdef KEYER_DEF    
+    const char* key_mode_label[4] = { "Imabic A", "Imabic B","Single" };
     // 0 for Iambic A, 1 for Iambic B
 #endif 
   switch(id){
@@ -2711,19 +2784,18 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false); break;
+    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 3 /*0*/, 16, false); break;
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
     case CWOFF:   paramAction(action, cw_offset, F("2.3"), F("CW Offset"), NULL, 300, 2000, false); break;
     case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
-    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 4, false); break;
+    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 2, false); break;
     case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false); break;
     case SIFXTAL: paramAction(action, si5351.fxtal, F("8.1"), F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, F("8.2"), F("PA Bias min"), NULL, 0, 255, false); break;
     case PWM_MAX: paramAction(action, pwm_max, F("8.3"), F("PA Bias max"), NULL, 0, 255, false); break;
-
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, F("8.4"), F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
@@ -2735,15 +2807,14 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_C: paramAction(action, param_c, F("9.5"), F("Param C"), NULL, -32768, 32767, false); break;
 #endif
 #ifdef KEYER_DEF    
-    case KEY_WPM: paramAction(action, wpm_wert, F("10.1"), F("Keyer WPM"), NULL, 0, 255, false); break;
-    case KEY_MODE: paramAction(action, keyerControl, F("10.2"), F("Mode"), key_mode_label, 0, _N(key_mode_label) - 1, false); break;
+    case KEY_WPM: paramAction(action, wpm_wert, F("10.1"), F("Keyer WPM"), NULL, 0, 35, false); break;
+    case KEY_MODE: paramAction(action, keyerModel, F("10.2"), F("Mode"), key_mode_label, 0, 2, false); break; // 0-2 ->3 einträge
    
 
 #endif
     // Invisible parameters
     case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false); break;
     case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false); break;
- 
   }
 }
 
@@ -3052,14 +3123,16 @@ void setup()
   Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
 #endif
 
+
 #ifdef KEYER_DEF
  keyerState = IDLE;
  keyerControl = IAMBICB;      // Or 0 for IAMBICA
+ //keyerModel = SINGLE ;       // default Keyer wir durch Menue 10.2 später verändert 
+ paramAction(LOAD, KEY_MODE); 
  loadWPM(wpm_wert);                 // Fix speed at 15 WPM
     
 #endif //KEYER_DEF
 }
-
 void print_char(uint8_t in){  // Print char in second line of display and scroll right.
   for(int i = 0; i!= 15; i++) out[i] = out[i+1];
   out[15] = in;
@@ -3083,8 +3156,6 @@ void parse_cat(uint8_t in){   // TS480 CAT protocol:  https://www.kenwood.com/i/
   } else {
     if(nc < (sizeof(cat) - 1)) cat[nc++] = in; // buffer and count-up
   }
-  
-
 }
 
 void loop()
@@ -3129,9 +3200,9 @@ void loop()
 #endif
 
 #ifdef KEYER_DEF  //Keyer dl2dbg
- if(mode == CW){  // check DIT/DAH keys for CW 
- 
 
+ if(mode == CW && keyerModel != SINGLE){  // check DIT/DAH keys for CW 
+ 
     // Basic Iambic Keyer
     // keyerControl contains processing flags and keyer mode bits
     // Supports Iambic A and B
@@ -3239,10 +3310,11 @@ void loop()
     */
     
  }
- 
-#else //dl2dbg "alter code... 
+ else 
+ {
+#endif //KEYER_DEF
 
-#define DAH_AS_KEY  1
+  #define DAH_AS_KEY  1
 #ifdef DAH_AS_KEY
   if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
 #else
@@ -3258,8 +3330,10 @@ void loop()
       if(inv ^ digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
     }
     switch_rxtx(0);
-  
- 
+   }
+
+#ifdef KEYER_DEF
+}
 #endif //KEYER_DEF
 
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
@@ -3501,13 +3575,21 @@ void loop()
           if(dsp_cap != SDR) calibrate_iq(); menu = 0;
         }
 #endif
-#ifdef KEYER_DEF
+
+#ifdef KEYER_DEF 
         if(menu == KEY_WPM){
-          loadWPM(wpm_wert);
+        loadWPM(wpm_wert);paramAction(SAVE, KEY_WPM);
         }
+        
         if(menu == KEY_MODE){
-        //#define     IAMBICB    0x10     // 0 for Iambic A, 1 for Iambic B
-          delay(300);
+        
+        
+        if(keyerModel == 0){keyerControl = IAMBICA;} 
+        if(keyerModel == 1){keyerControl = IAMBICB;}
+        if(keyerModel == 2){keyerControl = SINGLE;}
+        
+        paramAction(SAVE, KEY_MODE);
+      
         }
 #endif
       }
@@ -3551,7 +3633,9 @@ void loop()
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
-    
+#ifdef LPF_SWITCHING
+    set_lpf(freq / 1000000UL);
+#endif
     noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
@@ -3572,7 +3656,6 @@ void loop()
   
   wdt_reset();
 }
-
 
 /* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
