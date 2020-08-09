@@ -13,8 +13,8 @@
 #define LCD_D7  3         //PD3    (pin 5)
 #define LCD_EN  4         //PD4    (pin 6)
 #define FREQCNT 5         //PD5    (pin 11)
-#define ROT_A   6         //PD6    (pin 12)
-#define ROT_B   7         //PD7    (pin 13)
+#define ROT_A   7         //PD6    (pin 12)
+#define ROT_B   6         //PD7    (pin 13)
 #define RX      8         //PB0    (pin 14)
 #define SIDETONE 9        //PB1    (pin 15)
 #define KEY_OUT 10        //PB2    (pin 16)
@@ -893,8 +893,8 @@ public:
 
   #define FAST __attribute__((optimize("Ofast")))
 
-  #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
-  //#define F_XTAL 25004000          // Alternate SI clock
+  //#define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
+  #define F_XTAL 25004000          // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
 
@@ -1568,22 +1568,73 @@ volatile bool cw_event = false;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
-volatile uint8_t att2 = 0;
+volatile uint8_t att2 = 2;  // M0PUB: Minimum att2 increased from 0 to 2, to prevent numeric overflow on strong signals
 volatile uint8_t _init;
 
-//static uint32_t gain = 1024;
+/* M0PUB: Old AGC algorithm which only increases gain, but does not decrease it for very strong signals.
+// Maximum possible gain is x32 (in practice, x31) so AGC range is x1 to x31 = 30dB approx.
+// Decay time is fine (about 1s) but attack time is much slower than I like. 
+// For weak/medium signals it aims to keep the sample value between 1024 and 2048. 
 static int16_t gain = 1024;
 inline int16_t process_agc(int16_t in)
 {
-  //int16_t out = ((uint32_t)(gain) >> 20) * in;
-  //gain = gain + (1024 - abs(out) + 512);
   int16_t out = (gain >= 1024) ? (gain >> 10) * in : in;
-  //if(gain >= 1024) out = (gain >> 10) * in;  // net gain >= 1
-  //else if(gain >= 16) out = ((gain >> 4) * in) >> 6;  // net gain < 1
-  //else out = (gain * in) >> 10;
   int16_t accum = (1 - abs(out >> 10));
   if((INT16_MAX - gain) > accum) gain = gain + accum;
   if(gain < 1) gain = 1;
+  return out;
+} */
+
+// M0PUB: Experimental new AGC algorithm.
+// ASSUMES: Input sample values are constrained to a maximum of +/-4096 to avoid integer overflow in earlier
+// calculations.
+//
+// This algorithm aims to keep signals between a peak sample value of 1024 - 1536, with fast attack but slow
+// decay.
+//
+// The variable centiGain actually represents the applied gain x 128 - i.e. the numeric gain applied is centiGain/128
+//
+// Since the largest valid input sample has a value of +/- 4096, centiGain should never be less than 32 (i.e.
+// a 'gain' of 0.25). The maximum value for centiGain is 32767, and hence a gain of 255. So the AGC range
+// is 0.25:255, or approx. 60dB.
+//
+// Variable 'slowdown' allows the decay time to be slowed down so that it is not directly related to the value
+// of centiCount.
+
+static int16_t centiGain = 128;
+#define DECAY_FACTOR 400      // AGC decay occurs <DECAY_FACTOR> slower than attack.
+static uint16_t decayCount = DECAY_FACTOR;
+#define HI(x)  ((x) >> 8)
+#define LO(x)  ((x) & 0xFF)
+
+inline int16_t process_agc(int16_t in)
+{
+  static bool small = true;
+  int16_t out;
+
+  if (centiGain >= 128)
+    out = (centiGain >> 5) * in;         // net gain >= 1
+  else
+    out = (centiGain >> 2) * (in >> 3);  // net gain < 1
+  out >>= 2;
+  
+  if (HI(abs(out)) > HI(1536)) {
+    centiGain -= (centiGain >> 4);       // Fast attack time when big signal encountered (relies on CentiGain >= 16)
+  } else {
+    if (HI(abs(out)) > HI(1024))
+      small = false;
+    if (--decayCount == 0) {             // But slow ramp up of gain when signal disappears
+      if (small) {                       // 400 samples below lower threshold - increase gain
+        if (centiGain < (INT16_MAX-(INT16_MAX >> 4)))
+          centiGain += (centiGain >> 4);
+        else
+          centiGain = INT16_MAX;
+      }
+      decayCount = DECAY_FACTOR;
+      small = true;
+    }
+  }
+                       
   return out;
 }
 
@@ -1730,7 +1781,10 @@ volatile int16_t i, q;
 inline int16_t slow_dsp(int16_t ac)
 {
   static uint8_t absavg256cnt;
-  if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; 
+  if(!(absavg256cnt--)){
+    _absavg256 = absavg256;
+    absavg256 = 0;
+     
 //#define AUTO_ADC_BIAS  1
 #ifdef AUTO_ADC_BIAS
     if(param_b < 0){
@@ -1767,8 +1821,16 @@ inline int16_t slow_dsp(int16_t ac)
     //ac = ac * (F_SAMP_RX/R) / _UA;  // =ac*3.5 -> skip
   }  // needs: p.12 https://www.veron.nl/wp-content/uploads/2014/01/FmDemodulator.pdf
   else { ; }  // USB, LSB, CW
-  if(agc) ac = process_agc(ac);
-  ac = ac >> (16-volume);
+
+  if(agc) {
+    ac = process_agc(ac);
+    ac = ac >> (16-volume);
+  } else {
+    if (volume <= 9)    // M0PUB: if no AGC allow volume control to boost weak signals
+      ac = ac >> (9-volume);
+    else
+      ac = ac << (volume-9); 
+  }
   if(nr) ac = process_nr(ac);
 
   if(filt) ac = filt_var(ac) << 2;
@@ -1909,7 +1971,9 @@ void sdr_rx_q()
         // Process Q (down-sampled) samples
         static int16_t v[14];
         q = v[7];
-        qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+        // qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Old Hilbert transform, 40dB side-band rejection in 400..1900Hz (@8kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+        qh = ((v[0] - ac2) + (v[2] - v[12]) * 4) / 64 + ((v[4] - v[10]) + (v[6] - v[8])) / 8 + ((v[4] - v[10]) * 5 - (v[6] - v[8])) / 128 + (v[6] - v[8]) / 2; // New Hilbert transform, 40dB side-band rejection in 400..1900Hz (@8kSPS).
+                                                                                                                                                               // Same coefficients as before, but refactored to reduce numeric overflow.
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
       }
       rx_state = 0; return;
@@ -2232,38 +2296,48 @@ uint16_t analogSampleMic()
 volatile bool change = true;
 volatile int32_t freq = 7074000;
 
-int8_t smode = 1;
+// M0PUB: We measure the average amplitude of the signal (see slow_dsp()) but the S-meter should be based on RMS value.
+// So we multiply by 0.707/0.639 in an attempt to roughly compensate, although that only really works if the input
+// is a sine wave
 
-float dbm_max;
-float smeter(float ref = 5)  //= 10*log(8000/2400)=5  ref to 2.4kHz BW.  plus some other calibration factor
+int8_t smode = 1;
+float dbm_max = -140.0;
+
+float smeter(float ref = 0)  // M0PUB: ref was 5 (= 10*log(8000/2400)) but I don't think that is correct?
 {
   if(smode == 0){ // none, no s-meter
     return 0;
   }
   float rms = _absavg256 / 256.0; //sqrt(256.0);
+  
   //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);   // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 820.0 * 3.0/*??*/);   // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 8.0 * 500.0 * 0.639 / 0.707);   // M0PUB updated version: 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
+
   dbm_max = max(dbm_max, dbm);
   static uint8_t cnt;
   cnt++;
-  if((cnt % 8) == 0){
+  if((cnt % 32) == 0){   // M0PUB: slowed down display slightly
+    Serial.print((int)dbm_max);
+    Serial.print(" ");
+
     if(smode == 1){ // dBm meter
       lcd.noCursor(); lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print(F("dBm   "));
     }
     if(smode == 2){ // S-meter
-      uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (uint8_t)(dbm_max - -63 + 10) % 10;  // dBm to S
-      lcd.noCursor(); lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s); 
+      uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((uint8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (M0PUB: modified to work correctly above S9)
+      lcd.noCursor(); lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s);
+      Serial.println(s);
     }
-    dbm_max = -174.0 + 34.0;
-  }
-  if(smode == 3){ // S-bar
-    int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (uint8_t)(dbm - -63 + 10) % 10;  // dBm to S
-    lcd.noCursor(); lcd.setCursor(12, 0); 
-    char tmp[5];
-    for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
-    lcd.print(tmp);
+    if(smode == 3){ // S-bar. M0PUB: converted to use dbm_max as well - previously just used dbm
+      int8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((int8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (M0PUB: modified to work correctly above S9)
+      lcd.noCursor(); lcd.setCursor(12, 0); 
+      char tmp[5];
+      for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
+      lcd.print(tmp);
+    }
+    dbm_max = dbm_max - 2.0;  // Implement peak hold/decay for all meter types
   }
   return dbm;
 }
@@ -2559,7 +2633,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 0, 16, false); break;
+    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 2, 16, false); break;   // M0PUB: Minimum att2 increased from 0 to 2, to prevent numeric overflow on strong signals
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
@@ -2715,7 +2789,7 @@ void setup()
   //ssb_cap = 0; dsp_cap = 0;  // force standard QCX capability
   //ssb_cap = 1; dsp_cap = 0;  // force SSB and standard QCX-RX capability
   //ssb_cap = 1; dsp_cap = 1;  // force SSB and DSP capability
-  //ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
+  ssb_cap = 1; dsp_cap = 2;  // !!! TEMP !!! force SSB and SDR capability
 
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
@@ -2921,7 +2995,7 @@ void loop()
   delay(1);
 #endif
 
-  if(millis() > sec_event_time){
+  if (millis() > sec_event_time) {
     sec_event_time = millis() + 1000;  // schedule time next second
 
 //#define LCD_REINIT
@@ -3312,3 +3386,4 @@ keyer dash-dot
 tiny-click removal, DC offset correction
 
 */
+
