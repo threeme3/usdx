@@ -6,7 +6,7 @@
 
 #define VERSION   "1.02h_pe1evx_cat"
 
-#define QCX 1
+//#define QCX 1
 
 #define CAT 1
 
@@ -80,7 +80,77 @@ int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB
 /*
  * End Modifications to use pin2/3 as HW serial for CAT comm
  */
-
+// /*
+class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
+public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
+  #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
+  #define _en  4      // PC4 - MUST have pull-up resistor
+  #define _rs  4      // PC4 - MUST have pull-up resistor
+  //#define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
+  //#define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
+  #define LCD_RS_LO() PORTC &= ~(1 << _rs);        // RS low
+  #define LCD_RS_HI() PORTC |= (1 << _rs);         // RS high
+  #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
+  #define LCD_EN_HI() PORTD |= (1 << _en);         // EN high
+  #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
+  void begin(uint8_t x = 0, uint8_t y = 0){        // Send command , make sure at least 40ms after power-up before sending commands
+    bool reinit = (x == 0) && (y == 0);
+    DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN outputs
+    DDRC |= 1 << _rs;
+    //PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
+    delayMicroseconds(50000);                      // *
+    LCD_RS_LO(); LCD_EN_LO();
+    cmd(0x33);                                     // Ensures display is in 8-bit mode
+    delayMicroseconds(4500); cmd(0x33); delayMicroseconds(4500); cmd(0x33); delayMicroseconds(150); // * Ensures display is in 8-bit mode
+    cmd(0x32);                                     // Puts display in 4-bit mode
+    cmd(0x28);                                     // * Function set: 2-line, 5x8 
+    cmd(0x0c);                                     // Display on
+    if(reinit) return;
+    cmd(0x01);                                     // Clear display
+    delay(3);                                      // Allow to execute Clear on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
+    cmd(0x06);                                     // * Entrymode: left, shift-dec
+  }
+  void nib(uint8_t b){                             // Send four bit nibble to display
+    PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
+    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns
+    delayMicroseconds(4);
+    LCD_EN_LO();
+    //delayMicroseconds(52);                         // Execution time
+    delayMicroseconds(60);                         // Execution time
+  }
+  void pre(){ PORTC|=4; bitClear(UCSR0B, 3); bitClear(UCSR0B, 4); delay(1); };
+  void post(){ /*delay(1);*/ bitSet(UCSR0B, 3);  bitSet(UCSR0B, 4); PORTC&=~4; /*PORTD|=0x03;*/ };
+  void cmd(uint8_t b){ pre(); nib(b >> 4); nib(b & 0xf); post(); }// Write command: send nibbles while RS low
+  size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
+    pre();
+    //LCD_EN_HI();                                   // Complete Enable cycle must be at least 500ns (so start early)
+    uint8_t nibh = LCD_PREP_NIBBLE(b >>  4);       // Prepare high nibble data and enable high
+    PORTD = nibh;                                  // Send high nibble data and enable high
+    uint8_t nibl = LCD_PREP_NIBBLE(b & 0xf);       // Prepare low nibble data and enable high
+    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns; ATMEGA clock-cycle is 50ns (so at least 5 cycles)
+    LCD_RS_HI();
+    LCD_EN_LO();
+    PORTD = nibl;                                  // Send low nibble data and enable high
+    LCD_RS_LO();
+    //asm("nop"); asm("nop");                        // Complete Enable cycle must be at least 500ns
+    //PORTD = nibl;                                  // Send low nibble data and enable high
+    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns; ATMEGA clock-cycle is 50ns (so at least 5 cycles)
+    LCD_RS_HI();
+    LCD_EN_LO();
+    LCD_RS_LO();
+    delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
+//    PORTD |= 0x02;                                 // To support serial-interface keep LCD_D5 high, so that DVM is not pulled-down via D
+    post();
+    return 1;
+  }
+  void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
+  void cursor(){ cmd(0x0e); }
+  void noCursor(){ cmd(0x0c); }
+  void noDisplay(){ cmd(0x08); }
+  void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
+};
+// */
+ /*
 #include <LiquidCrystal.h>
 class LCD_ : public LiquidCrystal {
 public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
@@ -106,6 +176,7 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
     delayMicroseconds(100);   // commands need > 37us to settle
   };
 };
+ */
 
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
 class I2C_ {  // direct port I/O (disregards/does-not-need pull-ups)
@@ -395,13 +466,13 @@ public:
     setCursor(0, 0);
   }
 };
-#define OLED  1   // SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
+//#define OLED  1   // SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
 #ifdef OLED
 SSD1306Device lcd;
 #else
-//LCD lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
-#include <LiquidCrystal.h>
-LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+LCD lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
+//#include <LiquidCrystal.h>
+//LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 #endif
 
 
@@ -2029,6 +2100,7 @@ pinMode(LCD_D4, OUTPUT);
 pinMode(LCD_D5, OUTPUT);
 pinMode(LCD_D6, OUTPUT);
 pinMode(LCD_D7, OUTPUT);
+
 }
 
 // CAT suuport from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
@@ -2528,13 +2600,16 @@ void setup()
 //PE1EVX
 //use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
 //other versions on WSJT-X may need others speeds to work correct. V1.8.0 works with all speeds, but protocol is obsolete after 2.0
+pinMode(DVM, OUTPUT);
 
   Serial.begin(30720); // 38400 baud corrected for F_CPU=20M          
 //  Serial.begin(15360); // 19200 baud corrected for F_CPU=20M 
 //  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M 
 //  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M 
 //  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M 
+
   Command_IF();
+
 }
 
 void print_char(uint8_t in){  // Print char in second line of display and scroll right.
@@ -2544,11 +2619,8 @@ void print_char(uint8_t in){  // Print char in second line of display and scroll
   cw_event = true;
 }
 
-
-
 void loop()
 {
-
   rxCATcmd();
   analyseCATcmd();
 
@@ -2568,6 +2640,7 @@ void loop()
   }
 
   if(menumode == 0){
+
     smeter();
     if(!((mode == CW) && cw_event) && (smode)) stepsize_showcursor();  // restore cursor (when there is no CW text and smeter is enabled)
   }
@@ -2873,10 +2946,11 @@ void loop()
     if(prev_bandval != bandval){ freq = band[bandval]; prev_bandval = bandval; }
     save_event_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
  
-    if(menumode == 0){
-      Command_GETFreqA();
+    if(menumode == 0){      
       display_vfo(freq);
       stepsize_showcursor();
+
+      Command_GETFreqA();
   
       // The following is a hack for SWR measurement:
       //si5351.alt_clk2(freq + 2400);
