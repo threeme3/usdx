@@ -32,8 +32,8 @@
   #define LCD_RS  18        //PC4    (pin 27)
 #endif
 #define FREQCNT 5         //PD5    (pin 11)
-#define ROT_A   7         //PD6    (pin 12)
-#define ROT_B   6         //PD7    (pin 13)
+#define ROT_A   6         //PD6    (pin 12)
+#define ROT_B   7         //PD7    (pin 13)
 #define RX      8         //PB0    (pin 14)
 #define SIDETONE 9        //PB1    (pin 15)
 #define KEY_OUT 10        //PB2    (pin 16)
@@ -279,7 +279,7 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
 
 #else
 
-//M0PUB: dummy LCD functions
+// dummy LCD functions
 class LCD {
 public :
   LCD() { ; }
@@ -988,8 +988,8 @@ public:
 
   #define FAST __attribute__((optimize("Ofast")))
 
-  //#define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
-  #define F_XTAL 25004000          // Alternate SI clock
+  #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
+  //#define F_XTAL 25004000          // Alternate SI clock
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
 
@@ -1989,7 +1989,7 @@ inline int16_t slow_dsp(int16_t ac)
     ac = process_agc(ac);
     ac = ac >> (16-volume);
   } else {
-    if (volume <= 9)    // M0PUB: if no AGC allow volume control to boost weak signals
+    if (volume <= 9)    // if no AGC allow volume control to boost weak signals
       ac = ac >> (9-volume);
     else
       ac = ac << (volume-9);
@@ -2547,14 +2547,13 @@ uint16_t analogSampleMic()
 volatile bool change = true;
 volatile int32_t freq = 7074000;
 
-// M0PUB: We measure the average amplitude of the signal (see slow_dsp()) but the S-meter should be based on RMS value.
+// We measure the average amplitude of the signal (see slow_dsp()) but the S-meter should be based on RMS value.
 // So we multiply by 0.707/0.639 in an attempt to roughly compensate, although that only really works if the input
 // is a sine wave
-
 int8_t smode = 1;
 float dbm_max = -140.0;
 
-float smeter(float ref = 0)  // M0PUB: ref was 5 (= 10*log(8000/2400)) but I don't think that is correct?
+float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't think that is correct?
 {
   if(smode == 0){ // none, no s-meter
     return 0;
@@ -2562,14 +2561,14 @@ float smeter(float ref = 0)  // M0PUB: ref was 5 (= 10*log(8000/2400)) but I don
   float rms = _absavg256 / 256.0; //sqrt(256.0);
 
   //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);   // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 8.0 * 500.0 * 0.639 / 0.707);   // M0PUB updated version: 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 8.0 * 500.0 * 0.639 / 0.707);   // updated version: 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
 
   dbm_max = max(dbm_max, dbm);
   static uint8_t cnt;
   cnt++;
-  if((cnt % 32) == 0){   // M0PUB: slowed down display slightly
+  if((cnt % 32) == 0){   // slowed down display slightly
     Serial.print((int)dbm_max);
     Serial.print(" ");
 
@@ -2577,12 +2576,12 @@ float smeter(float ref = 0)  // M0PUB: ref was 5 (= 10*log(8000/2400)) but I don
       lcd.noCursor(); lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print(F("dBm   "));
     }
     if(smode == 2){ // S-meter
-      uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((uint8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (M0PUB: modified to work correctly above S9)
+      uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((uint8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
       lcd.noCursor(); lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s);
       Serial.println(s);
     }
-    if(smode == 3){ // S-bar. M0PUB: converted to use dbm_max as well - previously just used dbm
-      int8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((int8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (M0PUB: modified to work correctly above S9)
+    if(smode == 3){ // S-bar. converted to use dbm_max as well - previously just used dbm
+      int8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((int8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
       lcd.noCursor(); lcd.setCursor(12, 0);
       char tmp[5];
       for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
@@ -2985,7 +2984,7 @@ void initPins(){
 
 void setup()
 {
-#ifdef TESTBENCH // for test bench only, open serial port for diagnostic output
+#ifdef TESTBENCH   // for test bench only, open serial port for diagnostic output
   Serial.begin(115200);
   while (!Serial) ;
 #endif
@@ -3023,7 +3022,7 @@ void setup()
   load_rx_avg /= 8;
 
   //adc_stop();  // recover general ADC settings so that analogRead is working again
-#endif
+#endif //DEBUG
   ADMUX = (1 << REFS0);  // restore reference voltage AREF (5V)
 
   // disable external interrupts
@@ -3201,12 +3200,7 @@ void setup()
   for(i = 0; i != 1000; i++) si5351.SendPLLBRegisterBulk();
   t1 = micros();
   uint32_t speed = (1000000 * 8 * 7) / (t1 - t0); // speed in kbit/s
-  if(false)
-  {
-    lcd.setCursor(0, 1);
-    lcd.print(F("i2cspeed="));
-    lcd.print(speed);
-    lcd.print(F("kbps")); lcd_blanks();
+  if(false) { lcd.setCursor(0, 1); lcd.print(F("i2cspeed=")); lcd.print(speed); lcd.print(F("kbps")); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
@@ -3221,13 +3215,8 @@ void setup()
     #define SI_SYNTH_PLL_B 34
     for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_B + j) != si5351.pll_regs[j]) i2c_error++;
   }
-  if(i2c_error){
-    lcd.setCursor(0, 1);
-    lcd.print(F("!!BER_i2c="));
-    lcd.print(i2c_error);
-    lcd_blanks();
-    delay(1500);
-    wdt_reset();
+  if(i2c_error){ lcd.setCursor(0, 1); lcd.print(F("!!BER_i2c=")); lcd.print(i2c_error); lcd_blanks();
+    delay(1500); wdt_reset();
   }
 #endif //DEBUG
 
