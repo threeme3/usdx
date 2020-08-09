@@ -30,18 +30,14 @@
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-int8_t prev_bandval = 4;  ////PE1EVX
-int8_t bandval = 4;       ////PE1EVX
-#define N_BANDS 10        ////PE1EVX
-uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ }; //PE1EVX
-
+int8_t prev_bandval = 4;
+int8_t bandval = 4;
+#define N_BANDS 10
+uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
 volatile int8_t stepsize = STEP_1k;
 int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
-
-
-                                              
 
 //FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be these at programming.
 
@@ -59,22 +55,22 @@ int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB
 //*/
 
 /*      // AK versie
-#define LCD_D4  2         //PD2    (pin 4)    ////PE1EVX
-#define LCD_D5  3         //PD3    (pin 5)    ////PE1EVX
-#define LCD_D6  4         //PD4    (pin 6)    ////PE1EVX
-#define LCD_D7  5         //PD5    (pin 11)    ////PE1EVX
-#define LCD_EN  11        //PB3    (pin 17)    ////PE1EVX
-#define LCD_RS  18        //PC4    (pin 27)    ////PE1EVX
+#define LCD_D4  2         //PD2    (pin 4)
+#define LCD_D5  3         //PD3    (pin 5)
+#define LCD_D6  4         //PD4    (pin 6)
+#define LCD_D7  5         //PD5    (pin 11)
+#define LCD_EN  11        //PB3    (pin 17)
+#define LCD_RS  18        //PC4    (pin 27)
 */
 
 /*
-      // RCE PE1EVX versie
-#define LCD_D4  5         //PD5    (pin 11)    ////PE1EVX
-#define LCD_D5  11        //PB3    (pin 17)    ////PE1EVX
-#define LCD_D6  2         //PD2    (pin 4)    ////PE1EVX
-#define LCD_D7  3         //PD3    (pin 5)    ////PE1EVX
-#define LCD_EN  4         //PD4    (pin 6)    ////PE1EVX
-#define LCD_RS  18        //PC4    (pin 27)    ////PE1EVX
+      // RCE versie
+#define LCD_D4  5         //PD5    (pin 11)
+#define LCD_D5  11        //PB3    (pin 17)
+#define LCD_D6  2         //PD2    (pin 4)
+#define LCD_D7  3         //PD3    (pin 5)
+#define LCD_EN  4         //PD4    (pin 6)
+#define LCD_RS  18        //PC4    (pin 27)
 */
 
 /*
@@ -637,7 +633,6 @@ public:
   #define FAST __attribute__((optimize("Ofast")))
 
   #define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
-  //#define F_XTAL 25000230          // Alternate SI clock                  //PE1EVX
   //#define F_XTAL 20004000          // A shared-single 20MHz processor/pll clock
   volatile uint32_t fxtal = F_XTAL;
 
@@ -1112,7 +1107,7 @@ param_c = avg;
 }
 
 #define N_FILT 7
-volatile int8_t filt = 1; //PE1EVX
+volatile int8_t filt = 1;
 int8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
 inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
@@ -1707,7 +1702,7 @@ uint16_t analogSampleMic()
 
 volatile bool change = true;
 //volatile int32_t freq = 7074000;
-volatile int32_t freq = band[bandval];    ////PE1EVX
+volatile int32_t freq = band[bandval];
 
 int8_t smode = 1;
 
@@ -1865,7 +1860,7 @@ void stepsize_change(int8_t val)
   stepsize += val;
   if(stepsize < STEP_1M) stepsize = STEP_10;
   if(stepsize > STEP_10) stepsize = STEP_1M;
-//  if(stepsize == STEP_10k || stepsize == STEP_500k) stepsize += val;  //PE1EVX
+//  if(stepsize == STEP_10k || stepsize == STEP_500k) stepsize += val;
   stepsize_showcursor();
 }
 
@@ -1999,7 +1994,7 @@ uint32_t save_event_time = 0;
 uint32_t sec_event_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
-static uint8_t pwm_max = 80;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly  //PE1EVX
+static uint8_t pwm_max = 80;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* filt_label[N_FILT+1] = { "Full", "4000", "2500", "1700", "500", "200", "100", "50" };
@@ -2105,7 +2100,6 @@ pinMode(LCD_D7, OUTPUT);
 
 // CAT suuport from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
 // https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
-// CAT support PE1EVX
 const int CatnumChars = 32;
 boolean newCATcmd = false;
 
@@ -2127,8 +2121,8 @@ void rxCATcmd()
       CATcmd[index] = ';';      // Indicate end of command
       CATcmd[index + 1] = '\0'; // terminate the array
       index = 0;                // reset for next CAT command
-      newCATcmd = true;  
-    }        
+      newCATcmd = true;
+    }
     else
     {
       CATcmd[index] = data;
@@ -2144,19 +2138,16 @@ void rxCATcmd()
   }
 }
 
-
-
 void analyseCATcmd()
 {
   if (newCATcmd == true)
   {
     newCATcmd = false;        // reset for next CAT time
 
-
-    if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[2] == ';'))              
+    if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[2] == ';'))
       Command_GETFreqA();
 
-    else if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[13] == ';'))       
+    else if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[13] == ';'))
       Command_SETFreqA();
 
     else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'F') && (CATcmd[2] == ';'))
@@ -2200,13 +2191,8 @@ void analyseCATcmd()
 
     else if ((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
       Command_Vox(CATcmd[2]);
-
-
-        
   }
 }
-
-
 
 void Command_GETFreqA()
 {
@@ -2222,13 +2208,12 @@ void Command_GETFreqA()
   k=(unsigned int)(tf/1000lu);
   tf-=k*1000lu;
   h=(unsigned int)tf;
-  
+
   sprintf(Catbuffer,"FA%02u%03u",g,m);
   Serial.print(Catbuffer);
   sprintf(Catbuffer,"%03u%03u;",k,h);
   Serial.print(Catbuffer);
 }
-
 
 void Command_SETFreqA()
 {
@@ -2242,8 +2227,6 @@ void Command_SETFreqA()
   //display_vfo(freq);
 }
 
-
-                 
 void Command_IF()
 {
   char Catbuffer[32];
@@ -2258,14 +2241,13 @@ void Command_IF()
   k=(unsigned int)(tf/1000lu);
   tf-=k*1000lu;
   h=(unsigned int)tf;
-  
+
   sprintf(Catbuffer,"IF%02u%03u%03u%03u",g,m,k,h);
   Serial.print(Catbuffer);
   sprintf(Catbuffer,"00000+000000");
   Serial.print(Catbuffer);
   sprintf(Catbuffer,"000020000000;");
   Serial.print(Catbuffer);
-  
 }
 
 void Command_AI()
@@ -2321,12 +2303,12 @@ void Command_RS()
 }
 
 void Command_Vox(char mode)
-  {
-    
+{
+
   char Catbuffer[16];
-  sprintf(Catbuffer, "VX%c;",mode); 
+  sprintf(Catbuffer, "VX%c;",mode);
   Serial.print(Catbuffer);
-  }
+}
 
 void Command_ID()
 {
@@ -2343,8 +2325,7 @@ void Command_PS1()
 {
   Serial.print("PS1;");
 }
-
-// END CAT support routines PE1EVX
+// END CAT support
 
 void setup()
 {
@@ -2452,7 +2433,6 @@ void setup()
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
 
 #ifdef DEBUG
- 
   // Measure CPU loads
   if(!(load_tx <= 100.0)){
     lcd.setCursor(0, 1); lcd.print(F("!!CPU_tx=")); lcd.print(load_tx); lcd.print(F("%")); lcd_blanks();
@@ -2597,16 +2577,15 @@ void setup()
 
   start_rx();
 
-//PE1EVX
 //use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
 //other versions on WSJT-X may need others speeds to work correct. V1.8.0 works with all speeds, but protocol is obsolete after 2.0
 pinMode(DVM, OUTPUT);
 
-  Serial.begin(30720); // 38400 baud corrected for F_CPU=20M          
-//  Serial.begin(15360); // 19200 baud corrected for F_CPU=20M 
-//  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M 
-//  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M 
-//  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M 
+  Serial.begin(30720); // 38400 baud corrected for F_CPU=20M
+//  Serial.begin(15360); // 19200 baud corrected for F_CPU=20M
+//  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
+//  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M
+//  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M
 
   Command_IF();
 
@@ -2758,7 +2737,7 @@ void loop()
         if(mode == CW && filt == 4) stepsize = STEP_500; // reset stepsize for 500Hz filter
         if(mode == CW && (filt == 5 || filt == 6) && stepsize < STEP_100) stepsize = STEP_100; // for CW BW 200, 100      -> step = 100 Hz
         if(mode == CW && filt == 7 && stepsize < STEP_10) stepsize = STEP_10;                  // for CW BW 50 -> step = 10 Hz
-        if(mode != CW && filt > 3) filt = 1;  //PE1EVX
+        if(mode != CW && filt > 3) filt = 1;
         encoder_val = 0; 
         paramAction(UPDATE, FILTER);
         paramAction(SAVE, FILTER);
@@ -2945,19 +2924,19 @@ void loop()
     change = false;
     if(prev_bandval != bandval){ freq = band[bandval]; prev_bandval = bandval; }
     save_event_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
- 
-    if(menumode == 0){      
+
+    if(menumode == 0){
       display_vfo(freq);
       stepsize_showcursor();
 
       Command_GETFreqA();
-  
+
       // The following is a hack for SWR measurement:
       //si5351.alt_clk2(freq + 2400);
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
-    
+
     noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
@@ -2969,13 +2948,13 @@ void loop()
       si5351.freq(freq, 0, 90);  // RX in USB, ...
     interrupts();
   }
-  
+
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
     paramAction(SAVE, FREQ);  // save freq changes
     save_event_time = 0;
     //lcd.setCursor(15, 1); lcd.print("S"); delay(100); lcd.setCursor(15, 1); lcd.print("R");
   }
-  
+
   wdt_reset();
 }
 
