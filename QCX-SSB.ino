@@ -6,16 +6,16 @@
 
 #define VERSION   "1.02k"
 
-//#define QCX           1   // QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)
+#define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 
-//#define OLED        1     // OLED display, connect SDA (PD2), SCL (PD3)
-#define KEYER           1     // CW keyer
-//#define DEBUG       1     // Hardware diagnostics
-#define CAT	        1	    // CAT-interface
+//#define DEBUG           1   // Hardware diagnostics (disable this to safe memory)
+#define KEYER           1   // CW keyer
+#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
-//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for uSDX-Barb)
+//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for uSDX-Barb or using a si5351 break-out board)
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for uSDX-Barb)
-//#define TESTBENCH   1
+//#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
+//#define TESTBENCH     1
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -163,21 +163,28 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     cmd(0x06);                                     // * Entrymode: left, shift-dec
   }
   void nib(uint8_t b){                             // Send four bit nibble to display
+    pre();
     PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
     //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns
     delayMicroseconds(4);
     LCD_EN_LO();
+    post();
     //delayMicroseconds(52);                         // Execution time
     delayMicroseconds(60);                         // Execution time
   }
 #if defined(CAT) || defined(TESTBENCH)
-  void pre(){ UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); delayMicroseconds(1000); PORTC |= 1<<2; /*DDRC |= 1<<2;*/ };  // Disable serial port (PD0, PD1) and make PC2 high (to pull-up TXD) 
-  void post(){ DDRC &= ~(1<<2); /*PORTC &= ~(1<<2);*/ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); };  // Enable serial port (PD0, PD1) and disable PC2
+  // Since LCD is using PD0(RXD), PD1(TXD) pins in the data-path, some co-existence feature is required when using the serial port.
+  // The following functions are temporarily dsiabling the serial port when LCD writes happen, and make sure that serial transmission is ended.
+  // To prevent that LCD writes are received by the serial receiver, PC2 is made HIGH during writes to pull-up TXD via a diode.
+  // The RXD, TXD lines are connected to the host via 1k resistors, a 1N4148 is placed between PC2 (anode) and the TXD resistor.
+  // There are two drawbacks when continuous LCD writes happen: 1. noise is leaking via the AREF pull-ups into the receiver 2. serial data cannot be received.
+  void pre(){ Serial.flush(); PORTC |= 1<<2; DDRC |= 1<<2; UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); }  // Wait until serial TX stops; make PC2 high (to pull-up TXD); disable serial port (PD0, PD1)
+  void post(){ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2); }  // Enable serial port (PD0, PD1); disable PC2
 #else
-  void pre(){);
-  void post(){);
+  void pre(){}
+  void post(){}
 #endif
-  void cmd(uint8_t b){ pre(); nib(b >> 4); nib(b & 0xf); post(); }// Write command: send nibbles while RS low
+  void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); } // Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
     pre();
     //LCD_EN_HI();                                   // Complete Enable cycle must be at least 500ns (so start early)
@@ -195,8 +202,8 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     LCD_RS_HI();
     LCD_EN_LO();
     LCD_RS_LO();
-    delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
     post();
+    delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
     return 1;
   }
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
@@ -2957,7 +2964,7 @@ void initPins(){
 }
 
 #ifdef CAT
-// CAT suuport from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
+// CAT support from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
 // https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
 const int CatnumChars = 32;
 boolean newCATcmd = false;
@@ -3450,6 +3457,9 @@ void setup()
 #ifdef TESTBENCH   // for test bench only, open serial port for diagnostic output
   //Serial.begin(115200);
   Serial.begin(30720); // 38400 baud corrected for F_CPU=20M
+#ifndef OLED
+   smode = 0;  // In case of LCD, turn of smeter
+#endif
 #endif
 
 #ifdef CAT
@@ -3461,6 +3471,9 @@ void setup()
 //  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M
 //  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M
    Command_IF();
+#ifndef OLED
+   smode = 0;  // In case of LCD, turn of smeter
+#endif
 #endif //CAT
 
 #ifdef KEYER
