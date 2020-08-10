@@ -2966,96 +2966,71 @@ void initPins(){
 #ifdef CAT
 // CAT support from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
 // https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
-const int CatnumChars = 32;
-boolean newCATcmd = false;
-
-char CATcmd[CatnumChars] = {'0'};    // an array to store the received CAT data
-int CATMODE = 2;
-
-void rxCATcmd()
-{
-  static int index = 0;
-  char endMarker = ';';
-  char data;                    // CAT commands are ASCII characters
-
-  while ((Serial.available() > 0) && (newCATcmd == false))
-  {
-    data = (char)Serial.read();
-    if (data == endMarker)
-    {
-      CATcmd[index] = ';';      // Indicate end of command
-      CATcmd[index + 1] = '\0'; // terminate the array
-      index = 0;                // reset for next CAT command
-      newCATcmd = true;
-    }
-    else
-    {
-      CATcmd[index] = data;
-      index++;
-
-      if (index >= CatnumChars)
-        {
-        index = CatnumChars - 1;   // leave space for the \0 array termination
-        index=0;
-        newCATcmd =true;
-        }
-    }
-  }
-}
+#define CATCMD_SIZE   32
+char CATcmd[CATCMD_SIZE];
 
 void analyseCATcmd()
 {
-  if (newCATcmd == true)
-  {
-    newCATcmd = false;        // reset for next CAT time
+  if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[2] == ';'))
+    Command_GETFreqA();
 
-    if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[2] == ';'))
-      Command_GETFreqA();
+  else if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[13] == ';'))
+    Command_SETFreqA();
 
-    else if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[13] == ';'))
-      Command_SETFreqA();
+  else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'F') && (CATcmd[2] == ';'))
+    Command_IF();
 
-    else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'F') && (CATcmd[2] == ';'))
-      Command_IF();
+  else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
+    Command_ID();
 
-    else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
-      Command_ID();
+  else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
+    Command_PS();
 
-    else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
-      Command_PS();
+  else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == '1'))
+    Command_PS1();
 
-    else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == '1'))
-      Command_PS1();
+  else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == ';'))
+    Command_AI();
 
-    else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == ';'))
-      Command_AI();
+  else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == '0'))
+    Command_AI0();
 
-    else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == '0'))
-      Command_AI0();
+  else if ((CATcmd[0] == 'M') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
+    Command_MD();
 
-    else if ((CATcmd[0] == 'M') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
-      Command_MD();
+  else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
+    Command_RX();
 
-    else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
-      Command_RX();
+  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
+    Command_TX();
 
-    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
-      Command_TX();
+  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '0'))
+    Command_TX0();
 
-    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '0'))
-      Command_TX0();
+  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '1'))
+    Command_TX1();
 
-    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '1'))
-      Command_TX1();
+  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '2'))
+    Command_TX2();
 
-    else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '2'))
-      Command_TX2();
+  else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
+    Command_RS();
 
-    else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
-      Command_RS();
+  else if ((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
+    Command_Vox(CATcmd[2]);
+}
 
-    else if ((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
-      Command_Vox(CATcmd[2]);
+static int catidx = 0;
+void rxCATcmd(){
+  if(Serial.available()){
+    char data = Serial.read();
+    CATcmd[catidx++] = data;
+    if((data == ';') || (catidx == (CATCMD_SIZE - 2))){
+      CATcmd[catidx] = '\0'; // terminate the array
+      catidx = 0;            // reset for next CAT command
+      analyseCATcmd();
+      //break;
+    }
   }
 }
 
@@ -3490,7 +3465,6 @@ void loop()
 {
 #ifdef CAT
   rxCATcmd();
-  analyseCATcmd();
 #endif
 
 #ifndef SIMPLE_RX
