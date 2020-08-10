@@ -6,18 +6,16 @@
 
 #define VERSION   "1.02k"
 
-//#define QCX           1     // If you DO NOT have a QCX then comment-out (add two-slashes // in the beginning of this line)
+//#define QCX           1   // QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)
 
-// Line -> reenabele Line :-( digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
-
-//#define OLED        1     // SDD1306 connection on display header: 1=GND(black), 2=5V(red), 13=SDA(brown), 14=SCK(orange)
-#define CW_KEYER    1     // CW_KEYER und DEBUG can not akive at the same Time Less Codespace
-//#define DEBUG       1     // Diagnostics useful for debugging hardware (disable this to free up memory!)
-//#define TESTBENCH   1     // RX test bench
+//#define OLED        1     // OLED display, connect SDA (PD2), SCL (PD3)
+#define KEYER           1     // CW keyer
+//#define DEBUG       1     // Hardware diagnostics
 #define CAT	        1	    // CAT-interface
-#define F_XTAL 27005000            // Crystal freq in Hz, nominal frequency 27004300
-//#define F_XTAL 25004000          // Alternate SI clock
-//#define SWAP_ROTARY   1     // Swap rotary direction
+#define F_XTAL 27005000     // 27MHz SI5351 crystal
+//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for uSDX-Barb)
+//#define SWAP_ROTARY   1   // Swap rotary direction (enable for uSDX-Barb)
+//#define TESTBENCH   1
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -43,7 +41,7 @@
 #define SCL     19        //PC5    (pin 28)
 //#define NTX  11          //PB3    (pin 17)  - experimental: LOW on TX
 
-// Barb's uSDX seems has the rotary encoder pins swapped:
+
 #ifdef SWAP_ROTARY
 #undef ROT_A
 #undef ROT_B
@@ -80,7 +78,7 @@ ssb_cap=1; dsp_cap=2;
 experimentally: #define AUTO_ADC_BIAS 1
 */
 
-#ifdef CW_KEYER
+#ifdef KEYER
 // Iambic Morse Code Keyer Sketch
 // Copyright (c) 2009 Steven T. Elliott
 //
@@ -100,20 +98,20 @@ int RPin = DIT;       // Right paddle input
 #define IAMBICA  0x00     // 0 for Iambic A, 1 for Iambic B
 #define SINGLE   2        // Keyer Mode 0 1 -> Iambic2  2 ->SINGLE
 
-int wpm_wert = 15;
+int keyer_speed = 15;
 static unsigned long ditTime ;                    // No. milliseconds per dit
 static unsigned char keyerControl;
 static unsigned char keyerState;
-static unsigned char keyerModel = 2; //->  SINGLE
-static unsigned char keyerPIN = 0; //->  DI/DAH
-static unsigned char keyertx = 1; // Default TX off
- 
+static unsigned char keyer_mode = 2; //->  SINGLE
+static unsigned char keyer_swap = 0; //->  DI/DAH
+static unsigned char practice = false;  // Practice mode
+
 static unsigned long ktimer;
 static int Key_state;
 int debounce;
- 
+
 enum KSTYPE {IDLE, CHK_DIT, CHK_DAH, KEYED_PREP, KEYED, INTER_ELEMENT }; // State machine states
- 
+
 void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 {
     if (digitalRead(RPin) == LOW) {
@@ -128,7 +126,7 @@ void loadWPM (int wpm) // Calculate new time constants based on wpm value
 {
     ditTime = 1200/wpm;
 }
-#endif //CW_KEYER
+#endif //KEYER
 
 #include <avr/sleep.h>
 #include <avr/wdt.h>
@@ -172,12 +170,12 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     //delayMicroseconds(52);                         // Execution time
     delayMicroseconds(60);                         // Execution time
   }
-#ifdef CAT
-  void pre(){ PORTC|=4; bitClear(UCSR0B, 3); bitClear(UCSR0B, 4); delay(1); };
-  void post(){ /*delay(1);*/ bitSet(UCSR0B, 3);  bitSet(UCSR0B, 4); PORTC&=~4; /*PORTD|=0x03;*/ };
+#if defined(CAT) || defined(TESTBENCH)
+  void pre(){ UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); delayMicroseconds(1000); PORTC |= 1<<2; /*DDRC |= 1<<2;*/ };  // Disable serial port (PD0, PD1) and make PC2 high (to pull-up TXD) 
+  void post(){ DDRC &= ~(1<<2); /*PORTC &= ~(1<<2);*/ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); };  // Enable serial port (PD0, PD1) and disable PC2
 #else
-  void pre(){};
-  void post(){};
+  void pre(){);
+  void post(){);
 #endif
   void cmd(uint8_t b){ pre(); nib(b >> 4); nib(b & 0xf); post(); }// Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
@@ -283,22 +281,6 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
     digitalWrite(LCD_EN, LOW);
     delayMicroseconds(100);   // commands need > 37us to settle
   };
-};
-
-// dummy LCD functions
-class LCDdummy {
-public :
-  LCDdummy() { ; }
-  ~LCDdummy() { ; }
-  void begin(uint8_t x = 0, uint8_t y = 0){ ; }
-  void setCursor(uint8_t x, uint8_t y){ ; }
-  void print(const __FlashStringHelper* fs) { ; }
-  void print(const char c) { ; }
-  void print(const char c[]) { ; }
-  void cursor(){ ; }
-  void noCursor(){ ; }
-  void noDisplay(){ ; }
-  void createChar(uint8_t l, uint8_t glyph[]){ ; }
 };
 
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
@@ -800,7 +782,6 @@ public:
 SSD1306Device lcd;
 #else
 LCD lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
-//LCDdummy lcd;  // for TESTBENCH
 //LCD_ lcd;  // slower LCD, suitable for non-QCX supplied displays
 //#include <LiquidCrystal.h>
 //LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
@@ -2622,18 +2603,25 @@ void switch_rxtx(uint8_t tx_enable){
   else _init = 1;
   rx_state = 0;
   if(tx_enable){
-#ifndef CW_KEYER
-    const bool keyertx=true;
+#ifdef KEYER
+    if(practice){
+      digitalWrite(RX, LOW); // TX (disable RX)
+      lcd.setCursor(15, 1); lcd.print("P");
+      si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN,CLK1_EN,CLK0_EN=0
+      // Do not enable PWM (KEY_OUT), do not enble CLK2
+    } else
 #endif
-      if(keyertx){digitalWrite(RX, LOW); } // TX (disable RX) keyertx Keyer without TX (CW-Trainer) 
+    {
+      digitalWrite(RX, LOW); // TX (disable RX)
 #ifdef NTX
-      if(keyertx){digitalWrite(NTX, LOW) };  // TX (enable TX)
+      digitalWrite(NTX, LOW);  // TX (enable TX)
 #endif
       lcd.setCursor(15, 1); lcd.print("T");
-      if(keyertx)  {si5351.SendRegister(SI_CLK_OE, 0b11111011);} // CLK2_EN=1, CLK1_EN,CLK0_EN=0
+      si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
       //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
       OCR1AL = 0; // make sure SIDETONE is set to 0%
       TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
+    }
   } else {
       //TCCR1A |= (1 << COM1A1);  // enable SIDETONE
       TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
@@ -2693,7 +2681,7 @@ int8_t prev_bandval = 2;
 int8_t bandval = 2;
 #define N_BANDS 10
 
-#ifdef CW_KEYER
+#ifdef KEYER
 uint32_t band[N_BANDS] = { /*472000, 1810000,*/ 3560000, 5351500, 7030000, 10106000, 14060000, 18096000, 21060000, 24906000, 28060000, 50096000/*, 70160000, 144060000*/ };  // CW QRP freqs
 //uint32_t band[N_BANDS] = { /*472000, 1818000,*/ 3558000, 5351500, 7028000, 10118000, 14058000, 18085000, 21058000, 24908000, 28058000, 50058000/*, 70158000, 144058000*/ };  // CW FISTS freqs
 #else
@@ -2859,7 +2847,11 @@ uint32_t save_event_time = 0;
 uint32_t sec_event_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
-static uint8_t pwm_max = 220;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly
+#ifdef QCX
+static uint8_t pwm_max = 220;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly                        
+#else
+static uint8_t pwm_max = 128;
+#endif
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* filt_label[N_FILT+1] = { "Full", "4000", "2500", "1700", "500", "200", "100", "50" };
@@ -2881,13 +2873,12 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   }
   if(id == ALL) for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
   
-  const char* stepsize_label[10] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
+  const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
   const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
-  const char* smode_label[4] = { "OFF", "dBm", "S", "S-bar" };
-  const char* cw_tone_label[4] = { "325", "700" };
-#ifdef CW_KEYER
-  const char* key_mode_label[4] = { "Imabic A", "Imabic B","Single" };
-  const char* key_paddel_pin[4] = { "DI/DAH .-", "DAH/DI -." }; // 0 for Iambic A, 1 for Iambic B
+  const char* smode_label[] = { "OFF", "dBm", "S", "S-bar" };
+  const char* cw_tone_label[] = { "325", "700" };
+#ifdef KEYER
+  const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
 #endif
   switch(id){    // Visible parameters
     case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false); break;
@@ -2920,11 +2911,11 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_B: paramAction(action, param_b, F("9.4"), F("Param B"), NULL, -32768, 32767, false); break;
     case PARAM_C: paramAction(action, param_c, F("9.5"), F("Param C"), NULL, -32768, 32767, false); break;
 #endif
-#ifdef CW_KEYER
-    case KEY_WPM:  paramAction(action, wpm_wert,   F("10.1"), F("Keyer WPM"), NULL, 0, 35, false); break;
-    case KEY_MODE: paramAction(action, keyerModel, F("10.2"), F("Mode"), key_mode_label, 0, 2, false); break; // 0-2 ->3 einträge
-    case KEY_PIN:  paramAction(action, keyerPIN,   F("10.3"), F("Paddel Con"), key_paddel_pin, 0, 1, false); break;
-    case KEY_TX:   paramAction(action, keyertx,    F("10.4"), F("Keyer TX"), offon_label, 0, 1, false); break;
+#ifdef KEYER
+    case KEY_WPM:  paramAction(action, keyer_speed,   F("10.1"), F("Keyer speed"), NULL, 0, 35, false); break;
+    case KEY_MODE: paramAction(action, keyer_mode, F("10.2"), F("Keyer mode"), keyer_mode_label, 0, 2, false); break;
+    case KEY_PIN:  paramAction(action, keyer_swap,   F("10.3"), F("Keyer swap"), offon_label, 0, 1, false); break;
+    case KEY_TX:   paramAction(action, practice,   F("10.4"), F("Practice"), offon_label, 0, 1, false); break;
 #endif
     // Invisible parameters
     case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false); break;
@@ -3194,11 +3185,6 @@ void Command_PS1()
 
 void setup()
 {
-#ifdef TESTBENCH   // for test bench only, open serial port for diagnostic output
-  Serial.begin(115200);
-  while (!Serial) ;
-#endif
-
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
 
   uint8_t mcusr = MCUSR;
@@ -3461,10 +3447,14 @@ void setup()
 
   start_rx();
 
+#ifdef TESTBENCH   // for test bench only, open serial port for diagnostic output
+  //Serial.begin(115200);
+  Serial.begin(30720); // 38400 baud corrected for F_CPU=20M
+#endif
+
 #ifdef CAT
   //use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
   //other versions on WSJT-X may need others speeds to work correct. V1.8.0 works with all speeds, but protocol is obsolete after 2.0
-  pinMode(DVM, OUTPUT);
   Serial.begin(30720); // 38400 baud corrected for F_CPU=20M
 //  Serial.begin(15360); // 19200 baud corrected for F_CPU=20M
 //  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
@@ -3473,14 +3463,14 @@ void setup()
    Command_IF();
 #endif //CAT
 
-#ifdef CW_KEYER
+#ifdef KEYER
  keyerState = IDLE;
  keyerControl = IAMBICB;      // Or 0 for IAMBICA
- //keyerModel = SINGLE ;      // default Keyer wir durch Menue 10.2 später verändert
+ //keyer_mode = SINGLE ;      // default Keyer wir durch Menue 10.2 später verändert
  paramAction(LOAD, KEY_MODE);
  paramAction(LOAD, KEY_PIN);
- loadWPM(wpm_wert);                 // Fix speed at 15 WPM
-#endif //CW_KEYER
+ loadWPM(keyer_speed);                 // Fix speed at 15 WPM
+#endif //KEYER
 }
 
 void loop()
@@ -3514,8 +3504,8 @@ void loop()
   uint8_t inv = 0;
 #endif
 
-#ifdef CW_KEYER  //Keyer
- if(mode == CW && keyerModel != SINGLE){  // check DIT/DAH keys for CW
+#ifdef KEYER  //Keyer
+ if(mode == CW && keyer_mode != SINGLE){  // check DIT/DAH keys for CW
 
     switch(keyerState){ // Basic Iambic Keyer, keyerControl contains processing flags and keyer mode bits, Supports Iambic A and B, State machine based, uses calls to millis() for timing.
     case IDLE: // Wait for direct or latched paddle press
@@ -3601,7 +3591,7 @@ void loop()
         }
     } */
  } else {
-#endif //CW_KEYER
+#endif //KEYER
 
 //  #define DAH_AS_KEY  1
 #ifdef DAH_AS_KEY
@@ -3621,9 +3611,9 @@ void loop()
     switch_rxtx(0);
    }
 
-#ifdef CW_KEYER
+#ifdef KEYER
 }
-#endif //CW_KEYER
+#endif //KEYER
 
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(inv ^ digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
@@ -3864,18 +3854,18 @@ void loop()
         }
 #endif
 
-#ifdef CW_KEYER
+#ifdef KEYER
         if(menu == KEY_WPM){
-          loadWPM(wpm_wert);paramAction(SAVE, KEY_WPM);
+          loadWPM(keyer_speed);paramAction(SAVE, KEY_WPM);
         }
         if(menu == KEY_MODE){
-          if(keyerModel == 0){ keyerControl = IAMBICA; }
-          if(keyerModel == 1){ keyerControl = IAMBICB; }
-          if(keyerModel == 2){ keyerControl = SINGLE; }
+          if(keyer_mode == 0){ keyerControl = IAMBICA; }
+          if(keyer_mode == 1){ keyerControl = IAMBICB; }
+          if(keyer_mode == 2){ keyerControl = SINGLE; }
           paramAction(SAVE, KEY_MODE);
         }
         if(menu == KEY_PIN){
-          if(keyerPIN){
+          if(keyer_swap){
             LPin = DIT;
             RPin = DAH;
           } else {
@@ -3887,7 +3877,7 @@ void loop()
         if(menu == KEY_TX){
           paramAction(SAVE, KEY_TX);
         }
-#endif //CW_KEYER
+#endif //KEYER
       }
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate
