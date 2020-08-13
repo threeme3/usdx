@@ -8,9 +8,9 @@
 
 #define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 
-//#define DEBUG           1   // Hardware diagnostics (disable this to safe memory)
+#define DEBUG           1   // Hardware diagnostics (disable this to safe memory)
 #define KEYER           1   // CW keyer
-#define CAT           1   // CAT-interface
+//#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
 //#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for uSDX-Barb or using a si5351 break-out board)
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for uSDX-Barb)
@@ -178,8 +178,8 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   // To prevent that LCD writes are received by the serial receiver, PC2 is made HIGH during writes to pull-up TXD via a diode.
   // The RXD, TXD lines are connected to the host via 1k resistors, a 1N4148 is placed between PC2 (anode) and the TXD resistor.
   // There are two drawbacks when continuous LCD writes happen: 1. noise is leaking via the AREF pull-ups into the receiver 2. serial data cannot be received.
-  void pre(){ Serial.flush(); PORTC |= 1<<2; DDRC |= 1<<2; UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); }  // Wait until serial TX stops; make PC2 high (to pull-up TXD); disable serial port (PD0, PD1)
-  void post(){ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2); }  // Enable serial port (PD0, PD1); disable PC2
+  void pre(){ Serial.flush(); PORTC |= 1<<2; DDRC |= 1<<2; UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); }  // Wait until serial TX stops; make PC2 high (to pull-up TXD); enable PD0/PD1 - disable serial port
+  void post(){ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2); }  // Enable serial port - disable PD0, PD1; disable PC2
 #else
   void pre(){}
   void post(){}
@@ -2855,9 +2855,9 @@ uint32_t sec_event_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
 #ifdef QCX
-static uint8_t pwm_max = 220;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed; 220 for biasing BS170 directly                        
+static uint8_t pwm_max = 255;  // PWM value for which PA reaches its maximum: 96 when C31 installed; 255 when C31 removed;
 #else
-static uint8_t pwm_max = 128;
+static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:                                              128 for biasing BS170 directly
 #endif
 
 const char* offon_label[2] = {"OFF", "ON"};
@@ -2896,7 +2896,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 3 /*0*/, 16, false); break;
+    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 2 /*0*/, 16, false); break;
     case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
@@ -2964,7 +2964,7 @@ void initPins(){
 }
 
 #ifdef CAT
-// CAT support from Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
+// CAT support inspired by Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
 // https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
 #define CATCMD_SIZE   32
 char CATcmd[CATCMD_SIZE];
@@ -3435,7 +3435,7 @@ void setup()
 #ifndef OLED
    smode = 0;  // In case of LCD, turn of smeter
 #endif
-#endif
+#endif  //TESTBENCH
 
 #ifdef CAT
   //use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
