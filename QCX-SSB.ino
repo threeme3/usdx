@@ -2811,9 +2811,27 @@ uint8_t eeprom_version;
 #define EEPROM_OFFSET 0x150  // avoid collision with QCX settings, overwrites text settings though
 int eeprom_addr;
 
+// output menuid in x.y format
+void printmenuid(uint8_t menuid)
+{
+  static const char seperator[] = {'.', ' '};
+  uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
+  for(int i = 0; i < 2; i++)
+  {
+    uint8_t id = ids[i];
+    if (id >= 10) {
+      id -= 10;
+      lcd.print('1');
+    }
+    lcd.print(char('0' + id));
+
+    lcd.print(seperator[i]);
+  }
+}
+
 // Support functions for parameter and menu handling
 enum action_t { UPDATE, UPDATE_MENU, LOAD, SAVE, SKIP };
-template<typename T> void paramAction(uint8_t action, T& value, const __FlashStringHelper* menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
+template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
@@ -2824,7 +2842,7 @@ template<typename T> void paramAction(uint8_t action, T& value, const __FlashStr
       value = max(_min, min((int32_t)value, _max));
       if(action == UPDATE_MENU){
         lcd.setCursor(0, 0);
-        lcd.print(menuid); lcd.print(' ');
+        printmenuid(menuid);
         lcd.print(label); lcd_blanks(); lcd_blanks();
         lcd.setCursor(0, 1); // value on next line
       } else { // UPDATE (not in menu)
@@ -2888,45 +2906,45 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
 #endif
   switch(id){    // Visible parameters
-    case VOLUME:  paramAction(action, volume, F("1.1"), F("Volume"), NULL, -1, 16, false); break;
-    case MODE:    paramAction(action, mode, F("1.2"), F("Mode"), mode_label, 0, _N(mode_label) - 1, true); break;
-    case FILTER:  paramAction(action, filt, F("1.3"), F("Filter BW"), filt_label, 0, _N(filt_label) - 1, false); break;
-    case BAND:    paramAction(action, bandval, F("1.4"), F("Band"), band_label, 0, _N(band_label) - 1, false); break;
-    case STEP:    paramAction(action, stepsize, F("1.5"), F("Tune Rate"), stepsize_label, 0, _N(stepsize_label) - 1, false); break;
-    case AGC:     paramAction(action, agc, F("1.6"), F("AGC"), offon_label, 0, 1, false); break;
-    case NR:      paramAction(action, nr, F("1.7"), F("NR"), NULL, 0, 8, false); break;
-    case ATT:     paramAction(action, att, F("1.8"), F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, F("1.9"), F("ATT2"), NULL, 2 /*0*/, 16, false); break;
-    case SMETER:  paramAction(action, smode, F("1.10"), F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
-    case CWDEC:   paramAction(action, cwdec, F("2.1"), F("CW Decoder"), offon_label, 0, 1, false); break;
-    case CWTONE:  paramAction(action, cw_tone, F("2.2"), F("CW Tone"), cw_tone_label, 0, 1, false); break;
-    case CWOFF:   paramAction(action, cw_offset, F("2.3"), F("CW Offset"), NULL, 300, 2000, false); break;
-    case VOX:     paramAction(action, vox, F("3.1"), F("VOX"), offon_label, 0, 1, false); break;
-    case VOXGAIN: paramAction(action, vox_thresh, F("3.2"), F("VOX Level"), NULL, 0, 255, false); break;
-    case MOX:     paramAction(action, mox, F("3.3"), F("MOX"), NULL, 0, 2, false); break;
-    case DRIVE:   paramAction(action, drive, F("3.4"), F("TX Drive"), NULL, 0, 8, false); break;
-    case SIFXTAL: paramAction(action, si5351.fxtal, F("8.1"), F("Ref freq"), NULL, 14000000, 28000000, false); break;
-    case PWM_MIN: paramAction(action, pwm_min, F("8.2"), F("PA Bias min"), NULL, 0, 255, false); break;
-    case PWM_MAX: paramAction(action, pwm_max, F("8.3"), F("PA Bias max"), NULL, 0, 255, false); break;
+    case VOLUME:  paramAction(action, volume, 0x11, F("Volume"), NULL, -1, 16, false); break;
+    case MODE:    paramAction(action, mode, 0x12, F("Mode"), mode_label, 0, _N(mode_label) - 1, true); break;
+    case FILTER:  paramAction(action, filt, 0x13, F("Filter BW"), filt_label, 0, _N(filt_label) - 1, false); break;
+    case BAND:    paramAction(action, bandval, 0x14, F("Band"), band_label, 0, _N(band_label) - 1, false); break;
+    case STEP:    paramAction(action, stepsize, 0x15, F("Tune Rate"), stepsize_label, 0, _N(stepsize_label) - 1, false); break;
+    case AGC:     paramAction(action, agc, 0x16, F("AGC"), offon_label, 0, 1, false); break;
+    case NR:      paramAction(action, nr, 0x17, F("NR"), NULL, 0, 8, false); break;
+    case ATT:     paramAction(action, att, 0x18, F("ATT"), att_label, 0, 7, false); break;
+    case ATT2:    paramAction(action, att2, 0x19, F("ATT2"), NULL, 2 /*0*/, 16, false); break;
+    case SMETER:  paramAction(action, smode, 0x1A, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
+    case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
+    case CWTONE:  paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
+    case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
+    case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
+    case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("VOX Level"), NULL, 0, 255, false); break;
+    case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
+    case DRIVE:   paramAction(action, drive, 0x34, F("TX Drive"), NULL, 0, 8, false); break;
+    case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
+    case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, 255, false); break;
+    case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, 0, 255, false); break;
 #ifdef CAL_IQ
-    case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, F("8.4"), F("IQ Test/Cal."), NULL, 0, 0, false); break;
+    case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
 #ifdef DEBUG
-    case SR:      paramAction(action, sr, F("9.1"), F("Sample rate"), NULL, -2147483648, 2147483647, false); break;
-    case CPULOAD: paramAction(action, cpu_load, F("9.2"), F("CPU load %"), NULL, -2147483648, 2147483647, false); break;
-    case PARAM_A: paramAction(action, param_a, F("9.3"), F("Param A"), NULL, 0, 65535, false); break;
-    case PARAM_B: paramAction(action, param_b, F("9.4"), F("Param B"), NULL, -32768, 32767, false); break;
-    case PARAM_C: paramAction(action, param_c, F("9.5"), F("Param C"), NULL, -32768, 32767, false); break;
+    case SR:      paramAction(action, sr, 0x91, F("Sample rate"), NULL, -2147483648, 2147483647, false); break;
+    case CPULOAD: paramAction(action, cpu_load, 0x92, F("CPU load %"), NULL, -2147483648, 2147483647, false); break;
+    case PARAM_A: paramAction(action, param_a, 0x93, F("Param A"), NULL, 0, 65535, false); break;
+    case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, -32768, 32767, false); break;
+    case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, -32768, 32767, false); break;
 #endif
 #ifdef KEYER
-    case KEY_WPM:  paramAction(action, keyer_speed,   F("10.1"), F("Keyer speed"), NULL, 0, 35, false); break;
-    case KEY_MODE: paramAction(action, keyer_mode, F("10.2"), F("Keyer mode"), keyer_mode_label, 0, 2, false); break;
-    case KEY_PIN:  paramAction(action, keyer_swap,   F("10.3"), F("Keyer swap"), offon_label, 0, 1, false); break;
-    case KEY_TX:   paramAction(action, practice,   F("10.4"), F("Practice"), offon_label, 0, 1, false); break;
+    case KEY_WPM:  paramAction(action, keyer_speed,   0xA1, F("Keyer speed"), NULL, 0, 35, false); break;
+    case KEY_MODE: paramAction(action, keyer_mode, 0xA2, F("Keyer mode"), keyer_mode_label, 0, 2, false); break;
+    case KEY_PIN:  paramAction(action, keyer_swap,   0xA3, F("Keyer swap"), offon_label, 0, 1, false); break;
+    case KEY_TX:   paramAction(action, practice,   0xA4, F("Practice"), offon_label, 0, 1, false); break;
 #endif
     // Invisible parameters
-    case FREQ:    paramAction(action, freq, NULL, NULL, NULL, 0, 0, false); break;
-    case VERS:    paramAction(action, eeprom_version, NULL, NULL, NULL, 0, 0, false); break;
+    case FREQ:    paramAction(action, freq, 0, NULL, NULL, 0, 0, false); break;
+    case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0, false); break;
   }
 }
 
