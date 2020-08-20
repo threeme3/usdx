@@ -2841,6 +2841,7 @@ template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, 
         printmenuid(menuid);
         lcd.print(label); lcd_blanks(); lcd_blanks();
         lcd.setCursor(0, 1); // value on next line
+        if (menumode == 2) lcd.print('>');
       } else { // UPDATE (not in menu)
         lcd.setCursor(0, 1); lcd.print(label); lcd.print(F(": "));
       }
