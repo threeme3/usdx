@@ -85,10 +85,6 @@ experimentally: #define AUTO_ADC_BIAS 1
 // This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version. This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details: Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA.
 // Source: http://openqrp.org/?p=343,  Trimmed by Bill Bishop - wrb[at]wrbishop.com
 
-// Digital Pins
-int LPin = DAH;       // Left paddle input
-int RPin = DIT;       // Right paddle input
-
 // keyerControl bit definitions
 #define DIT_L    0x01     // Dit latch
 #define DAH_L    0x02     // Dah latch
@@ -114,11 +110,11 @@ enum KSTYPE {IDLE, CHK_DIT, CHK_DAH, KEYED_PREP, KEYED, INTER_ELEMENT }; // Stat
 
 void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 {
-    if (digitalRead(RPin) == LOW) {
-        keyerControl |= DIT_L;
+    if (digitalRead(DIT) == LOW) {
+        keyerControl |= keyer_swap?DAH_L:DIT_L;
     }
-    if (digitalRead(LPin) == LOW) {
-        keyerControl |= DAH_L;
+    if (digitalRead(DAH) == LOW) {
+        keyerControl |= keyer_swap?DIT_L:DAH_L;
     }
 }
 
@@ -3496,8 +3492,8 @@ void loop()
 
     switch(keyerState){ // Basic Iambic Keyer, keyerControl contains processing flags and keyer mode bits, Supports Iambic A and B, State machine based, uses calls to millis() for timing.
     case IDLE: // Wait for direct or latched paddle press
-        if ((digitalRead(LPin) == LOW) ||
-            (digitalRead(RPin) == LOW) ||
+        if ((digitalRead(DAH) == LOW) ||
+            (digitalRead(DIT) == LOW) ||
             (keyerControl & 0x03))
         {
             update_PaddleLatch();
@@ -3852,13 +3848,6 @@ void loop()
           paramAction(SAVE, KEY_MODE);
         }
         if(menu == KEY_PIN){
-          if(keyer_swap){
-            LPin = DIT;
-            RPin = DAH;
-          } else {
-            LPin = DAH;       // Left paddle input
-            RPin = DIT;       // Right paddle input
-          }
           paramAction(SAVE,KEY_PIN);
         }
         if(menu == KEY_TX){
