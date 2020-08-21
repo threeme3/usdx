@@ -1427,7 +1427,11 @@ volatile int16_t param_b = 0;
 volatile int16_t param_c = 0;
 #endif
 
-enum mode_t { LSB, USB, CW, AM, FM };
+// DO NOT CHANGE THE ORDER
+// this order is aligned with CAT specification. The CAT implementation
+// took the dependency on this order.
+// LSB = 0, USB = 1, AM = 4
+enum mode_t { LSB, USB, CW, FM, AM };
 volatile uint8_t mode = USB;
 volatile uint16_t numSamples = 0;
 
@@ -2952,53 +2956,36 @@ char CATcmd[CATCMD_SIZE];
 
 void analyseCATcmd()
 {
-  if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[2] == ';'))
-    Command_GETFreqA();
+  const char* parameter = &CATcmd[2];
+  if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A'))
+    Command_GETFreqA(parameter);
 
-  else if ((CATcmd[0] == 'F') && (CATcmd[1] == 'A') && (CATcmd[13] == ';'))
-    Command_SETFreqA();
+  else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'F'))
+    Command_IF(parameter);
 
-  else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'F') && (CATcmd[2] == ';'))
-    Command_IF();
+  else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'D'))
+    Command_ID(parameter);
 
-  else if ((CATcmd[0] == 'I') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
-    Command_ID();
+  else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S'))
+    Command_PS(parameter);
 
-  else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
-    Command_PS();
+  else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I'))
+    Command_AI(parameter);
 
-  else if ((CATcmd[0] == 'P') && (CATcmd[1] == 'S') && (CATcmd[2] == '1'))
-    Command_PS1();
+  else if ((CATcmd[0] == 'M') && (CATcmd[1] == 'D'))
+    Command_MD(parameter);
 
-  else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == ';'))
-    Command_AI();
+  else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'X'))
+    Command_RX(parameter);
 
-  else if ((CATcmd[0] == 'A') && (CATcmd[1] == 'I') && (CATcmd[2] == '0'))
-    Command_AI0();
+  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X'))
+    Command_TX(parameter);
 
-  else if ((CATcmd[0] == 'M') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
-    Command_MD();
+  else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'S'))
+    Command_RS(parameter);
 
-  else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
-    Command_RX();
-
-  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
-    Command_TX();
-
-  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '0'))
-    Command_TX0();
-
-  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '1'))
-    Command_TX1();
-
-  else if ((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '2'))
-    Command_TX2();
-
-  else if ((CATcmd[0] == 'R') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
-    Command_RS();
-
-  else if ((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
-    Command_Vox(CATcmd[2]);
+  else if ((CATcmd[0] == 'V') && (CATcmd[1] == 'X'))
+    Command_VX(parameter);
 }
 
 static int catidx = 0;
@@ -3006,16 +2993,18 @@ void rxCATcmd(){
   if(Serial.available()){
     char data = Serial.read();
     CATcmd[catidx++] = data;
-    if((data == ';') || (catidx == (CATCMD_SIZE - 2))){
-      CATcmd[catidx] = '\0'; // terminate the array
+    if (catidx == (CATCMD_SIZE - 2)) {
+      // invalid string
+      catidx = 0;            // reset for next CAT command
+    } else if(data == ';'){
+      CATcmd[catidx - 1] = '\0'; // replace ; with '\0'
       catidx = 0;            // reset for next CAT command
       analyseCATcmd();
-      //break;
     }
   }
 }
 
-void Command_GETFreqA()
+void sendFreq()
 {
   char Catbuffer[32];
   unsigned int g,m,k,h;
@@ -3030,119 +3019,206 @@ void Command_GETFreqA()
   tf-=k*1000lu;
   h=(unsigned int)tf;
 
-  sprintf(Catbuffer,"FA%02u%03u",g,m);
-  Serial.print(Catbuffer);
-  sprintf(Catbuffer,"%03u%03u;",k,h);
+  sprintf(Catbuffer,"%02u%03u%03u%03u",g,m,k,h);
   Serial.print(Catbuffer);
 }
 
-void Command_SETFreqA()
+// FA Reads and sets the VFO A frequency.
+// Digit 3 - 13: frequency
+void Command_GETFreqA(const char* parameter)
 {
-  char Catbuffer[16];
-  strncpy(Catbuffer,CATcmd+2,11);
-  Catbuffer[11]='\0';
-
-  freq=(uint32_t)atol(Catbuffer);
+  if (*parameter != '\0')
+  {
+    // Set
+    freq=(uint32_t)atol(parameter);
   change=true;
-  //Command_GETFreqA();
   //display_vfo(freq);
 }
 
-void Command_IF()
+  // Read & Answer
+  Serial.print("FA");
+  sendFreq();
+  Serial.print(';');
+}
+
+// IF: Retrieves the transceiver status
+// Only read
+// P1 (11)
+//    Specify the frequency in Hz (11-digit).
+//    The blank digits must be '0'.
+// P2 (5)
+//    5 spaces for the TS-480.
+// P3 (5)
+//    RIT/ XIT frequency +/-9990 in Hz
+// P4 (1)
+//    0: RIT OFF, 1: RIT ON
+// P5 (1)
+//    0: XIT OFF, 1: XIT ON
+// P6: (1)
+//    Always 0 for the TS-480 (Memory channel bank number).
+// P7: (2)
+//    Memory channel number (00 ~ 99).
+// P8: (1)
+//    0: RX, 1: TX
+// P9 (1)
+//    Operating mode. Refer to the MD commands for details.
+// P10 (1)
+//    See FR and FT commands.
+// P11 (1)
+//    Scan status. Refer to the SC command.
+// P12 (1)
+//    0: Simplex operation, 1: Split operation
+// P13 (1)
+//    0: OFF, 1: TONE, 2: CTCSS
+// P14 (2)
+//    Tone number (00 ~ 42). Refer to the TN and CN command.
+// P15 (1)
+//    A space character for the TS-480.
+void Command_IF(const char* parameter)
 {
   char Catbuffer[32];
   unsigned int g,m,k,h;
   uint32_t tf;
 
-  tf=freq;
-  g=(unsigned int)(tf/1000000000lu);
-  tf-=g*1000000000lu;
-  m=(unsigned int)(tf/1000000lu);
-  tf-=m*1000000lu;
-  k=(unsigned int)(tf/1000lu);
-  tf-=k*1000lu;
-  h=(unsigned int)tf;
-
-  sprintf(Catbuffer,"IF%02u%03u%03u%03u",g,m,k,h);
+  Serial.print("IF");
+  sendFreq();
+  sprintf(Catbuffer,"00000+0000"); // P2, P3
   Serial.print(Catbuffer);
-  sprintf(Catbuffer,"00000+000000");
-  Serial.print(Catbuffer);
-  sprintf(Catbuffer,"000020000000;");
+  sprintf(Catbuffer,"00000%d%d0000000;", (tx > 0), mode + 1); // rest
   Serial.print(Catbuffer);
 }
 
-void Command_AI()
+// AI - Sets or reads the Auto Information (AI) function ON/ OFF
+// P1
+//    0: AI OFF
+//    1: Only old AI format is ON
+//    2: Only extended AI format is ON
+//    3: Both formats are ON
+void Command_AI(const char* parameter)
 {
   Serial.print("AI0;");
 }
 
-void Command_MD()
+// MD - Recalls or reads the operating mode status.
+// P1
+//    0: No mode (Not used for the TS-480)
+//    1: LSB
+//    2: USB
+//    3: CW
+//    4: FM
+//    5: AM
+//    6: FSK
+//    7: CWR (CW Reverse)
+//    8: Tune (Not used for the TS-480)
+//    9: FSR (FSK Reverse)
+void Command_MD(const char* parameter)
 {
-  Serial.print("MD2;");
+/*
+  switch(*parameter)
+{
+    case '1': mode = LSB;
+    case '2': mode = USB;
+    case '3': mode = CW;
+    case '4': mode = FM;
+    case '5': mode = AM;
+  }
+*/
+  if (*parameter)
+    mode = *parameter - '1';
 
+  char Catbuffer[] = "MD0;";
+
+/*
+  switch(mode) {
+    case LSB: Catbuffer[2] = '1';
+    case USB: Catbuffer[2] = '2';
+    case CW:  Catbuffer[2] = '3';
+    case FM:  Catbuffer[2] = '4';
+    case AM:  Catbuffer[2] = '5';
+}
+*/
+  Catbuffer[2] = '1' + mode;
+
+  Serial.print(Catbuffer);
 }
 
-void Command_AI0()
-{
-  Serial.print("AI0;");
-}
-
-void Command_RX()
+// RX - Sets the receiver function status.
+// P1
+//    0: Always 0 for the TS-480
+void Command_RX(const char* parameter)
 {
   switch_rxtx(0);
   Serial.print("RX0;");
 }
 
-void Command_TX()
+// TX - Sets the transceiver in TX mode
+//    0: Normal (SEND) transmission using MIC input
+//    1: DTS transmission using ANI input
+//    2: TX Tune transmission
+// If no P1 parameter is specified, P1=0 is used.
+void Command_TX(const char* parameter)
 {
+  /*
+  switch (*parameter) {
+    case '\0': // no P1 parameter
+    case '0':
+    case '1':
+      break;
+  }
+  */
   switch_rxtx(1);
+
   Serial.print("TX0;");
 }
 
-void Command_TX0()
-{
-  switch_rxtx(1);
-  Serial.print("TX0;");
-}
-
-void Command_TX1()
-{
-  switch_rxtx(1);
-  Serial.print("TX1;");
-}
-
-void Command_TX2()
-{
-  switch_rxtx(1);
-  Serial.print("TX2;");
-}
-
-void Command_RS()
+// RS - Reads the transceiver status
+// Read only
+// P1
+//    0: Normal
+//    1: The transceiver is busy configuring the various settings,
+//    such as M.SCR mode, Menu mode, or direct frequency
+//    entry mode.
+void Command_RS(const char* parameter)
 {
   Serial.print("RS0;");
 }
 
-void Command_Vox(char mode)
+// VX - Sets or reads the VOX function status
+// P1
+//    0: VOX function OFF
+//    1: VOX function ON
+void Command_VX(const char* parameter)
 {
-  char Catbuffer[16];
-  sprintf(Catbuffer, "VX%c;",mode);
+  if (*parameter)
+      vox = *parameter - '0';
+
+  char Catbuffer[] = "VX0;";
+  Catbuffer[2] = '0' + vox;
+
   Serial.print(Catbuffer);
 }
 
-void Command_ID()
+// ID - Reads the transceiver ID number
+// readonly
+// P1
+//    020: TS-480
+void Command_ID(const char* parameter)
 {
   Serial.print("ID020;");
 }
 
-void Command_PS()
+// PS - Sets or reads the Power ON/ OFF status.
+// P1
+//    0: Power OFF (The transceiver's CPU is in active mode.)
+//    1: Power ON
+//    9: Power OFF (The transceiver's CPU is in sleep mode.)
+void Command_PS(const char* parameter)
 {
+  // TODO: can we switch off si5351 to save some power?
+
   Serial.print("PS1;");
 }
 
-void Command_PS1()
-{
-  Serial.print("PS1;");
-}
 // END CAT support
 #endif //CAT
 
@@ -3426,7 +3502,6 @@ void setup()
 //  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
 //  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M
 //  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M
-   Command_IF();
 #ifndef OLED
    smode = 0;  // In case of LCD, turn of smeter
 #endif
@@ -3900,9 +3975,6 @@ void loop()
     if(menumode == 0){
       display_vfo(freq);
       stepsize_showcursor();
-#ifdef CAT
-      Command_GETFreqA();
-#endif
 
       // The following is a hack for SWR measurement:
       //si5351.alt_clk2(freq + 2400);
