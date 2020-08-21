@@ -2807,6 +2807,8 @@ uint8_t eeprom_version;
 #define EEPROM_OFFSET 0x150  // avoid collision with QCX settings, overwrites text settings though
 int eeprom_addr;
 
+// Support functions for parameter and menu handling
+enum action_t { UPDATE, UPDATE_MENU, LOAD, SAVE, SKIP };
 // output menuid in x.y format
 void printmenuid(uint8_t menuid)
 {
@@ -2825,8 +2827,33 @@ void printmenuid(uint8_t menuid)
   }
 }
 
-// Support functions for parameter and menu handling
-enum action_t { UPDATE, UPDATE_MENU, LOAD, SAVE, SKIP };
+void printlabel(uint8_t action, uint8_t menuid, const __FlashStringHelper* label) {
+  if(action == UPDATE_MENU){
+    lcd.setCursor(0, 0);
+    printmenuid(menuid);
+    lcd.print(label); lcd_blanks(); lcd_blanks();
+    lcd.setCursor(0, 1); // value on next line
+    if (menumode == 2) lcd.print('>');
+  } else { // UPDATE (not in menu)
+    lcd.setCursor(0, 1); lcd.print(label); lcd.print(F(": "));
+  }
+}
+
+void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size) {
+  uint8_t n;
+  switch(action) {
+    case LOAD:
+      for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
+      break;
+    case SAVE:
+      for(n = size; n; --n) eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++);
+      break;
+    case SKIP:
+      eeprom_addr += size;
+      break;
+  }
+}
+
 template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
   switch(action){
     case UPDATE:
@@ -2836,15 +2863,8 @@ template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, 
       encoder_val = 0;
       if(continuous) value = (value % (_max+1));
       value = max(_min, min((int32_t)value, _max));
-      if(action == UPDATE_MENU){
-        lcd.setCursor(0, 0);
-        printmenuid(menuid);
-        lcd.print(label); lcd_blanks(); lcd_blanks();
-        lcd.setCursor(0, 1); // value on next line
-        if (menumode == 2) lcd.print('>');
-      } else { // UPDATE (not in menu)
-        lcd.setCursor(0, 1); lcd.print(label); lcd.print(F(": "));
-      }
+
+      printlabel(action, menuid, label);
       if(enumArray == NULL){
         if((_min < 0) && (value >= 0)) lcd.print('+');
         lcd.print(value);
@@ -2854,15 +2874,9 @@ template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, 
       lcd_blanks(); lcd_blanks();
       //if(action == UPDATE) paramAction(SAVE, value, menuid, label, enumArray, _min, _max, continuous, init_val);
       break;
-    case LOAD:
-      for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
-      break;
-    case SAVE:
-      for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++);
-      break;
-    case SKIP:
-      eeprom_addr += sizeof(value);
-      break;
+      default:
+        actionCommon(action, (uint8_t *)&value, sizeof(value));
+        break;
   }
 }
 uint32_t save_event_time = 0;
