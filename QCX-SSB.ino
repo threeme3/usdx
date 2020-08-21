@@ -6,11 +6,11 @@
 
 #define VERSION   "1.02k"
 
-#define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
+//#define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 
 #define DEBUG           1   // Hardware diagnostics (disable this to safe memory)
 #define KEYER           1   // CW keyer
-//#define CAT           1   // CAT-interface
+#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
 //#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for uSDX-Barb or using a si5351 break-out board)
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for uSDX-Barb)
@@ -3031,9 +3031,9 @@ void Command_GETFreqA(const char* parameter)
   {
     // Set
     freq=(uint32_t)atol(parameter);
-  change=true;
-  //display_vfo(freq);
-}
+    change=true;
+    //display_vfo(freq);
+  }
 
   // Read & Answer
   Serial.print("FA");
@@ -3115,7 +3115,7 @@ void Command_MD(const char* parameter)
 {
 /*
   switch(*parameter)
-{
+  {
     case '1': mode = LSB;
     case '2': mode = USB;
     case '3': mode = CW;
@@ -3135,7 +3135,7 @@ void Command_MD(const char* parameter)
     case CW:  Catbuffer[2] = '3';
     case FM:  Catbuffer[2] = '4';
     case AM:  Catbuffer[2] = '5';
-}
+  }
 */
   Catbuffer[2] = '1' + mode;
 
