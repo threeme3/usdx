@@ -2910,8 +2910,8 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case STEP:    paramAction(action, stepsize, 0x15, F("Tune Rate"), stepsize_label, 0, _N(stepsize_label) - 1, false); break;
     case AGC:     paramAction(action, agc, 0x16, F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, 0x17, F("NR"), NULL, 0, 8, false); break;
-    case ATT:     paramAction(action, att, 0x18, F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, 0x19, F("ATT2"), NULL, 2 /*0*/, 16, false); break;
+    case ATT:     paramAction(action, att, 0x18, F("Hardware ATT"), att_label, 0, 7, false); break;
+    case ATT2:    paramAction(action, att2, 0x19, F("Software ATT"), NULL, 2 /*0*/, 16, false); break;
     case SMETER:  paramAction(action, smode, 0x1A, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
