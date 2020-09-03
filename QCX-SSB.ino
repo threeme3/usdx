@@ -1360,28 +1360,56 @@ public:
 static SI5351 si5351;
  */
 
-#define LPF_SWITCHING 1   // Enabled filter bank switching (latching relay connected to a PCA9536 GPIO extender that is on the same SI5351 I2C bus; relays are using D0 as common, D1-D3 used by the individual latches)
-#ifdef LPF_SWITCHING
+//#define LPF_SWITCHING_DL2MAN_USDX_REV1  1   // Enable filter bank switching: latching relays wired to a PCA9536D   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV1
 class PCA9536 {  //https://www.ti.com/lit/ds/symlink/pca9536.pdf
 public:
   #define PCA9536_ADDR  0x41
-  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x03); i2c.write(0x00); i2c.endTransmission(); } // pca9536 configuration: D0-D7 as output
-  inline void write(uint8_t data){ init(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x01); i2c.write(data); i2c.endTransmission(); }  // pca9536 output port
+  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x03); i2c.write(0x00); i2c.endTransmission(); } // configuration cmd: IO0-IO7 as output
+  inline void write(uint8_t data){ init(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x01); i2c.write(data); i2c.endTransmission(); }  // output port cmd: write bits D7-D0 to IO7-IO0
 };
 PCA9536 ioext;
 
-void set_latch(uint8_t k){   // Pins D1-D7 control latches K1-K7, D0 is common for all latches
-  #define LATCH_TIME  15  // set/reset time latch relay
-  //#define LATCH_TIME  1000  // set/reset time latch relay (latches slowly ... for testing purpose only)
-  for(int i = 1; i != 8; i++){ ioext.write( (~(1 << i))| 0x01); delay(LATCH_TIME); } ioext.write(0x00); // reset all latches
+void set_latch(uint8_t k){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+  #define LATCH_TIME  15   // set/reset time latch relay
+  for(int i = 0; i != 8; i++){ ioext.write( (~(1 << i))| 0x01); delay(LATCH_TIME); } ioext.write(0x00); // reset all latches
   ioext.write((1 << k)| 0x00); delay(LATCH_TIME); ioext.write(0x00); // set latch k
 }
 
 static uint8_t prev_lpf_bank = 0xff;
 void set_lpf(uint8_t f){
-  uint8_t lpf_bank = (f > 8) ? 1 : (f > 4) ? 2 : 3;  // mapping LPF cut-off (freq in MHz) to LPF bank relay: customize to your needs..
+  uint8_t lpf_bank = (f >  8) ? 1 : (f > 4) ? 2 : /*(f > 2)*/ 3; // cut-off freq in MHz to LPF bank relay
   if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };  // set relay
 }
+#endif  //LPF_SWITCHING_DL2MAN_USDX_REV1
+
+#define LPF_SWITCHING_DL2MAN_USDX_REV2  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
+class PCA9539 {  //https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
+public:
+  #define PCA9539_ADDR  0x74  // with A1..A0 set to 0
+  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(0x06); i2c.write(0x00); i2c.write(0x07); i2c.write(0x00); i2c.endTransmission(); } // configuration cmd: IO0.0-1.7 as output
+  inline void write(uint16_t data){ init(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(0x02); i2c.write(data); i2c.write(0x03); i2c.write(data >> 8); i2c.endTransmission(); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
+};
+PCA9539 ioext;
+
+void set_latch(uint8_t k){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+  #define LATCH_TIME  15   // set/reset time latch relay
+  for(int i = 0; i != 16; i++){ ioext.write( (~(1U << i))| 0x0002); delay(LATCH_TIME); } ioext.write(0x0000); // reset all latches
+  //uint8_t d = (k == 1) ? 3 : (k == 2) ? 5 : (k == 3) ? 7 : (k == 4) ? 9 : /*(k == 5)*/ 11; // map latch k to IO bit d
+  uint8_t d = (k * 2) + 1; // map latch k to IO bit d
+  ioext.write((1U << d)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch k
+}
+
+static uint8_t prev_lpf_bank = 0xff;
+void set_lpf(uint8_t f){
+  uint8_t lpf_bank = (f > 12) ? 1 : (f > 8) ? 2 : (f > 6) ? 3 : (f > 4) ? 4 : /*(f > 2)*/ 5; // cut-off freq in MHz to LPF bank relay
+  if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };  // set relay
+}
+#endif  //LPF_SWITCHING_DL2MAN_USDX_REV2
+
+#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2)
+void set_lpf(uint8_t f){} // dummy
 #endif
 
 #undef F_CPU
