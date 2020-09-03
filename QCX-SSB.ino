@@ -1370,16 +1370,16 @@ public:
 };
 PCA9536 ioext;
 
-void set_latch(uint8_t k){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
   #define LATCH_TIME  15   // set/reset time latch relay
   for(int i = 0; i != 8; i++){ ioext.write( (~(1 << i))| 0x01); delay(LATCH_TIME); } ioext.write(0x00); // reset all latches
-  ioext.write((1 << k)| 0x00); delay(LATCH_TIME); ioext.write(0x00); // set latch k
+  ioext.write((1 << io)| 0x00); delay(LATCH_TIME); ioext.write(0x00); // set latch wired to io port
 }
 
-static uint8_t prev_lpf_bank = 0xff;
+static uint8_t prev_lpf_io = 0xff;
 void set_lpf(uint8_t f){
-  uint8_t lpf_bank = (f >  8) ? 1 : (f > 4) ? 2 : /*(f > 2)*/ 3; // cut-off freq in MHz to LPF bank relay
-  if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };  // set relay
+  uint8_t lpf_io = (f >  8) ? 1 : (f > 4) ? 2 : /*(f > 2)*/ 3; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ prev_lpf_io = lpf_io; set_latch(lpf_io); };  // set relay
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV1
 
@@ -1393,18 +1393,16 @@ public:
 };
 PCA9539 ioext;
 
-void set_latch(uint8_t k){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
   #define LATCH_TIME  15   // set/reset time latch relay
   for(int i = 0; i != 16; i++){ ioext.write( (~(1U << i))| 0x0002); delay(LATCH_TIME); } ioext.write(0x0000); // reset all latches
-  //uint8_t d = (k == 1) ? 3 : (k == 2) ? 5 : (k == 3) ? 7 : (k == 4) ? 9 : /*(k == 5)*/ 11; // map latch k to IO bit d
-  uint8_t d = (k * 2) + 1; // map latch k to IO bit d
-  ioext.write((1U << d)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch k
+  ioext.write((1U << io)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch wired to io port
 }
 
-static uint8_t prev_lpf_bank = 0xff;
+static uint8_t prev_lpf_io = 0xff;
 void set_lpf(uint8_t f){
-  uint8_t lpf_bank = (f > 12) ? 1 : (f > 8) ? 2 : (f > 6) ? 3 : (f > 4) ? 4 : /*(f > 2)*/ 5; // cut-off freq in MHz to LPF bank relay
-  if(prev_lpf_bank != lpf_bank){ prev_lpf_bank = lpf_bank; set_latch(lpf_bank); };  // set relay
+  uint8_t lpf_io = (f > 12) ? 3 : (f > 8) ? 5 : (f > 6) ? 7 : (f > 4) ? 9 : /*(f > 2)*/ 11; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ prev_lpf_io = lpf_io; set_latch(lpf_io); };  // set relay
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV2
 
