@@ -1388,12 +1388,16 @@ void set_lpf(uint8_t f){
 class PCA9539 {  //https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
 public:
   #define PCA9539_ADDR  0x74  // with A1..A0 set to 0
-  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(0x06); i2c.write(0x00); i2c.write(0x07); i2c.write(0x00); i2c.endTransmission(); } // configuration cmd: IO0.0-1.7 as output
-  inline void write(uint16_t data){ init(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(0x02); i2c.write(data); i2c.write(0x03); i2c.write(data >> 8); i2c.endTransmission(); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
+  inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
+  //inline void init(){ SendRegister(0x02, 0x00); SendRegister(0x03, 0x00); SendRegister(0x06, 0x00); SendRegister(0x07, 0x00); } // output port cmd: write 0 to IO1.7-0.0, configuration cmd: IO0.0-1.7 as output
+  //inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0xff); SendRegister(0x06, 0x00); SendRegister(0x03, 0xff); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 1, IO0 as output, IO1 to 1, IO1 as output
+  inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0x00); SendRegister(0x06, 0x00); SendRegister(0x03, 0x00); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 0, IO0 as output, IO1 to 0, IO1 as output
+  inline void write(uint16_t data){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, data); SendRegister(0x06, 0x00); SendRegister(0x03, data >> 8); SendRegister(0x07, 0x00); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
 };
 PCA9539 ioext;
 
 void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+  ioext.init();
   #define LATCH_TIME  15   // set/reset time latch relay
   for(int i = 0; i != 16; i++){ ioext.write( (~(1U << i))| 0x0002); delay(LATCH_TIME); } ioext.write(0x0000); // reset all latches
   ioext.write((1U << io)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch wired to io port
@@ -3943,9 +3947,8 @@ void loop()
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
-#ifdef LPF_SWITCHING
     set_lpf(freq / 1000000UL);
-#endif
+
     noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
