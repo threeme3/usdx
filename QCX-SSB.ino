@@ -4,11 +4,11 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02k"
+#define VERSION   "1.02m"
 
-#define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
+//#define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 
-#define DEBUG           1   // Hardware diagnostics (disable this to safe memory)
+#define DEBUG           1   // Hardware diagnostics (disable this to save memory)
 #define KEYER           1   // CW keyer
 //#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
@@ -1039,19 +1039,20 @@ public:
     msp3p2 = (((msc & 0x0F0000) <<4) | msp2);  // msp3 on top nibble
     uint8_t pll_regs[8] = { BB1(msc), BB0(msc), BB2(msp1), BB1(msp1), BB0(msp1), BB2(msp3p2), BB1(msp2), BB0(msp2) };
     SendRegister(26+pll*8, pll_regs, 8); // Write to PLL[pll]
+    SendRegister(16+6_pll, 0x80); // PLL[pll] in fractional mode (FBA_INT=0x40), CLK6 power-down
   }
 
-  void set_ms(uint8_t clk, uint8_t linked_pll, uint8_t msa, uint8_t rdiv, uint8_t phase){  // Set Multisynth divider (integer) CLK0=0, CLK1=1, CLK2=2
+  void set_ms(uint8_t clk, uint8_t linked_pll, uint8_t msa, uint8_t rdiv, uint16_t phase){  // Set Multisynth divider (integer) CLK0=0, CLK1=1, CLK2=2
     uint32_t msp1 = (128*msa - 512) | (((uint32_t)rdiv)<<20);     // msp1 and msp2=0, msp3=1, not fractional
     uint8_t ms_regs[8] = {0, 1, BB2(msp1), BB1(msp1), BB0(msp1), 0, 0, 0};
     SendRegister(42+clk*8, ms_regs, 8); // Write to MS[clk]
-    SendRegister(16+clk, (linked_pll*0x20)|0x0C|3|0x40);       // CLK[clk]: PLL[pll] local msynth; 3=8mA; 0x40=integer division, bit7:6=0->power-up
+    SendRegister(16+clk, (linked_pll*0x20)|0x0C|3|0x00);       // CLK[clk]: PLL[pll] local msynth; 3=8mA; 0x40=integer division, bit7:6=0->power-up
     SendRegister(165+clk, phase * msa / 90);  // CLK[clk]: phase (on change -> reset PLL)
     static uint16_t pm[3]; // to detect a need for a PLL reset
     if(pm[clk] != ((phase)*msa/90)){ pm[clk] = (phase)*msa/90; dirty=true; } // 0x20 reset PLLA; 0x80 reset PLLB
   }
 
-  void set_freq(uint8_t clk, uint8_t pll, uint32_t fout, uint8_t phase){
+  void set_freq(uint8_t clk, uint8_t pll, uint32_t fout, uint16_t phase){
     uint8_t rdiv = 0;             // CLK pin sees fout/(2^rdiv)
     if(fout < 500000){ rdiv = 7; fout *= 128; }; // Divide by 128 for fout 4..500kHz
 
@@ -1084,18 +1085,19 @@ public:
 */
   int16_t iqmsa; // to detect a need for a PLL reset
 
-  void freq(uint32_t fout, uint8_t i, uint8_t q){  // Set a CLK0,1 to fout Hz with phase i, q
-      uint8_t msa; uint32_t msb, msc, msp1, msp2, msp3p2;
+  void freq(uint32_t fout, uint16_t i, uint16_t q){  // Set a CLK0,1 to fout Hz with phase i, q
+      uint16_t msa; uint32_t msb, msc, msp1, msp2, msp3p2;
       uint8_t rdiv = 0;             // CLK pin sees fout/(2^rdiv)
       if(fout < 500000){ rdiv = 7; fout *= 128; }; // Divide by 128 for fout 4..500kHz
 
       uint16_t d = (16 * fxtal) / fout;  // Integer part
-      if(fout > 30000000) d = (34 * fxtal) / fout; // when fvco is getting too low (400 MHz)
+      //if(fout > 7000000) d = (33 * fxtal) / fout;
+      if(fout < 3500000) d = (7 * fxtal) / fout;  // PLL at 189MHz to cover 160m (freq>1.48MHz) when using 27MHz crystal
 
       if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d--; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
       uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
-      msa = fvcoa / fxtal;     // Integer part of vco/fxtal
-      msb = ((uint64_t)(fvcoa % fxtal)*_MSC) / fxtal; // Fractional part
+      msa = fvcoa / fxtal;     // Integer part of vco/fxtal. msa must be in range 15..90
+      msb = ((uint64_t)(fvcoa % fxtal)*_MSC) / fxtal; // fractional part
       msc = _MSC;
       
       msp1 = 128*msa + 128*msb/msc - 512;
@@ -1104,16 +1106,19 @@ public:
       uint8_t pll_regs[8] = { BB1(msc), BB0(msc), BB2(msp1), BB1(msp1), BB0(msp1), BB2(msp3p2), BB1(msp2), BB0(msp2) };
       SendRegister(26+0*8, pll_regs, 8); // Write to PLLA
       SendRegister(26+1*8, pll_regs, 8); // Write to PLLB
+      SendRegister(16+6, 0x80); // PLLA in fractional mode (FBA_INT=0x40), CLK6 power-down
+      SendRegister(16+7, 0x80); // PLLB in fractional mode (FBB_INT=0x40), CLK7 power-down
 
-      msa = fvcoa / fout;     // Integer part of vco/fout
-      msp1 = (128*msa - 512) | (((uint32_t)rdiv)<<20);     // msp1 and msp2=0, msp3=1, not fractional
-      uint8_t ms_regs[8] = {0, 1, BB2(msp1), BB1(msp1), BB0(msp1), 0, 0, 0};
+      msa = fvcoa / fout;     // Integer part of vco/fout. msa must be in range 6..127 (support for integer and initial phase offset)
+      //lcd.setCursor(0, 0); lcd.print(fvcoa/fxtal); lcd.print(" "); lcd.print(msb); lcd.print(" "); lcd.print(msa); lcd.print(F("     "));
+      msp1 = (128*msa /*+ 128 (-> AN619 wrong here?)*/ - 512) | (((uint32_t)rdiv)<<20);     // msp1 and msp2=0, msp3=0x80000, integer division
+      uint8_t ms_regs[8] = {0, 0, BB2(msp1), BB1(msp1), BB0(msp1), 0x80, 0, 0};
       SendRegister(42+0*8, ms_regs, 8); // Write to MS0
       SendRegister(42+1*8, ms_regs, 8); // Write to MS1
       SendRegister(42+2*8, ms_regs, 8); // Write to MS2
-      SendRegister(16+0, 0x0C|3|0x40);  // CLK0: 0x0C=PLLA local msynth; 3=8mA; 0x40=integer division; bit7:6=0->power-up
-      SendRegister(16+1, 0x0C|3|0x40);  // CLK1: 0x0C=PLLA local msynth; 3=8mA; 0x40=integer division; bit7:6=0->power-up
-      SendRegister(16+2, 0x2C|3|0x40);  // CLK2: 0x2C=PLLB local msynth; 3=8mA; 0x40=integer division; bit7:6=0->power-up
+      SendRegister(16+0, 0x0C|3|0x00);  // CLK0: 0x0C=PLLA local msynth; 3=8mA; 0x40=integer division; bit7=0->power-up
+      SendRegister(16+1, 0x0C|3|0x00);  // CLK1: 0x0C=PLLA local msynth; 3=8mA; 0x40=integer division; bit7=0->power-up
+      SendRegister(16+2, 0x2C|3|0x00);  // CLK2: 0x2C=PLLB local msynth; 3=8mA; 0x40=integer division; bit7=0->power-up
       SendRegister(165, i * msa / 90);  // CLK0: I-phase (on change -> Reset PLL)
       SendRegister(166, q * msa / 90);  // CLK1: Q-phase (on change -> Reset PLL)
       if(iqmsa != ((i-q)*msa/90)){ iqmsa = (i-q)*msa/90; SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
@@ -1137,8 +1142,9 @@ public:
     return data;
   }
   void powerDown(){
-    for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b11000000);  // Conserve power when output is disabled
+    for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b10000000);  // Conserve power when output is disabled
     SendRegister(3, 0b11111111); // Disable all CLK outputs    
+    SendRegister(187, 0);        // Disable fanout (power-safe)
   }
   #define SI_CLK_OE 3
 
@@ -1388,6 +1394,7 @@ void set_lpf(uint8_t f){
 class PCA9539 {  //https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
 public:
   #define PCA9539_ADDR  0x74  // with A1..A0 set to 0
+  #define TCA9555_ADDR  0x24  // with A2=1 A1..A0=0  // https://www.ti.com/lit/ds/symlink/tca9555.pdf
   inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
   //inline void init(){ SendRegister(0x02, 0x00); SendRegister(0x03, 0x00); SendRegister(0x06, 0x00); SendRegister(0x07, 0x00); } // output port cmd: write 0 to IO1.7-0.0, configuration cmd: IO0.0-1.7 as output
   //inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0xff); SendRegister(0x06, 0x00); SendRegister(0x03, 0xff); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 1, IO0 as output, IO1 to 1, IO1 as output
@@ -1418,12 +1425,11 @@ void set_lpf(uint8_t f){} // dummy
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 //#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
 
-
 #ifdef DEBUG
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
 volatile uint16_t param_a = 0;  // registers for debugging, testing and experimental purposes
-volatile int16_t param_b = 0;
+volatile int16_t param_b = 90; //0;
 volatile int16_t param_c = 0;
 #endif
 
@@ -1690,8 +1696,8 @@ static char out[] = "                ";
 volatile bool cw_event = false;
 
 #define F_SAMP_PWM (78125/1)
-//#define F_SAMP_RX 78125
-#define F_SAMP_RX 62500  //overrun; sample rate of 55500 can be obtained
+//#define F_SAMP_RX 78125  // overrun, do not use
+#define F_SAMP_RX 62500
 //#define F_SAMP_RX 52083
 //#define F_SAMP_RX 44643
 //#define F_SAMP_RX 39062
@@ -1703,8 +1709,8 @@ volatile bool cw_event = false;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
-volatile uint8_t att2 = 3;  // Minimum att2 increased, to prevent numeric overflow on strong signals
-volatile uint8_t _init;
+volatile uint8_t att2 = 0;  // Minimum att2 increased, to prevent numeric overflow on strong signals
+volatile uint8_t _init = 0;
 
 /* Old AGC algorithm which only increases gain, but does not decrease it for very strong signals.
 // Maximum possible gain is x32 (in practice, x31) so AGC range is x1 to x31 = 30dB approx.
@@ -2033,7 +2039,11 @@ inline int16_t slow_dsp(int16_t ac)
 
   ac = min(max(ac, -512), 511);
   //ac = min(max(ac, -128), 127);
+#ifdef QCX
+  return (volume) ? ac : 0;  // in QCX-SSB, at volume 0 slow_dsp() should return 0 (in order to prevent upsampling filter to generate audio)
+#else
   return ac;
+#endif
 }
 
 #ifdef TESTBENCH
@@ -2081,8 +2091,11 @@ volatile func_t func_ptr;
 //#define SIMPLE_RX  1
 #ifndef SIMPLE_RX
 volatile uint8_t admux[3];
-volatile int16_t ocomb, qh;
+volatile int16_t ocomb, qh, q_ac2;
 volatile uint8_t rx_state = 0;
+
+#pragma GCC push_options
+#pragma GCC optimize ("Ofast")  // compiler-optimization for speed
 
 // Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
 // H1(z) = (1 + z^-1)^2 = 1 + 2*z^-1 + z^-2 = (1 + z^-2) + (2) * z^-1 = FA(z) + FB(z) * z^-1;
@@ -2090,8 +2103,229 @@ volatile uint8_t rx_state = 0;
 // Non-recursive CIC Filter (M=4) implementation (for second-stage only):
 // H1(z) = (1 + z^-1)^4 = 1 + 4*z^-1 + 6*z^-2 + 4*z^-3 + z^-4 = 1 + 6*z^-2 + z^-4 + (4 + 4*z^-2) * z^-1 = FA(z) + FB(z) * z^-1;
 // with down-sampling before stage translates into poly-phase components: FA(z) = 1 + 6*z^-1 + z^-2, FB(z) = 4 + 4*z^-1
-//#define M4  1  // Enable to enable M=4 on second-stage (better alias rejection)
+// M=3 FA(z) = 1 + 3*z^-1, FB(z) = 3 + z^-1
 // source: Lyons Understanding Digital Signal Processing 3rd edition 13.24.1
+
+#define NEW_RX  1
+#ifdef NEW_RX
+
+void process(int16_t ac2, int16_t q_ac2)
+{
+  static int16_t ac3;
+  static int16_t ozd1, ozd2;  // Output stage
+  if(_init){ ac3 = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
+  int16_t od1 = ac3 - ozd1; // Comb section
+  ocomb = od1 - ozd2;
+  interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling
+  ozd2 = od1;
+  ozd1 = ac3;
+  {
+    q_ac2 >>= att2;  // digital gain control
+    static int16_t v[14];  // Process Q (down-sampled) samples
+    // Hilbert transform, BasicDSP model:  outi= fir(inl,  0, 0, 0, 0, 0,  0,  0, 1,   0, 0,   0, 0,  0, 0, 0, 0); outq = fir(inr, 2, 0, 8, 0, 21, 0, 79, 0, -79, 0, -21, 0, -8, 0, -2, 0) / 128;
+    qh = ((v[0] - q_ac2) + (v[2] - v[12]) * 4) / 64 + ((v[4] - v[10]) + (v[6] - v[8])) / 8 + ((v[4] - v[10]) * 5 - (v[6] - v[8]) ) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 43dB side-band rejection in 650..3400Hz (@8kSPS) when used in image-rejection scenario; (Hilbert transform require 4 additional bits)
+    //qh = ((v[0] - q_ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+    v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7]; v[7] = v[8]; v[8] = v[9]; v[9] = v[10]; v[10] = v[11]; v[11] = v[12]; v[12] = v[13]; v[13] = q_ac2;
+  }
+  ac2 >>= att2;  // digital gain control
+  static int16_t v[7];  // Post processing I and Q (down-sampled) results
+  int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
+  ac3 = slow_dsp(i + qh);
+}
+
+static int16_t i_s0za1, i_s0za2, i_s0zb0, i_s0zb1, i_s1za1, i_s1za2, i_s1zb0, i_s1zb1;
+static int16_t q_s0za1, q_s0za2, q_s0zb0, q_s0zb1, q_s1za1, q_s1za2, q_s1zb0, q_s1zb1;
+
+///*
+#define M_SR  2  // CIC N=3
+void sdr_rx  (){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_1;  int16_t i_s1za0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + (i_s1za1 + i_s1zb0) * 3 + i_s1zb1); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
+void sdr_rx_2(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_3;  i_s0zb1 = i_s0zb0; i_s0zb0 = ac; }
+void sdr_rx_4(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_5;  i_s1zb1 = i_s1zb0; i_s1zb0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; }
+void sdr_rx_6(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_7;  i_s0zb1 = i_s0zb0; i_s0zb0 = ac; }
+void sdr_rx_1(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_2;  q_s0zb1 = q_s0zb0; q_s0zb0 = ac; }
+void sdr_rx_3(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_4;  q_s1zb1 = q_s1zb0; q_s1zb0 = (ac + (q_s0za1 + q_s0zb0) * 3 + q_s0zb1) >> M_SR; q_s0za1 = ac; }
+void sdr_rx_5(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_6;  q_s0zb1 = q_s0zb0; q_s0zb0 = ac; }
+void sdr_rx_7(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx  ;  int16_t q_s1za0 = (ac + (q_s0za1 + q_s0zb0) * 3 + q_s0zb1) >> M_SR; q_s0za1 = ac; q_ac2 = (q_s1za0 + (q_s1za1 + q_s1zb0) * 3 + q_s1zb1); q_s1za1 = q_s1za0; }
+//*/
+
+/*
+#define M_SR  0  // CIC N=2
+void sdr_rx  (){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_1;  int16_t i_s1za0 = (ac + i_s0za1 + i_s0zb0 * 2 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + i_s1za1 + i_s1zb0 * 2); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
+void sdr_rx_2(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_3;  i_s0zb0 = ac; }
+void sdr_rx_4(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_5;  i_s1zb0 = (ac + i_s0za1 + i_s0zb0 * 2) >> M_SR; i_s0za1 = ac; }
+void sdr_rx_6(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_7;  i_s0zb0 = ac; }
+void sdr_rx_1(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_2;  q_s0zb0 = ac; }
+void sdr_rx_3(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_4;  q_s1zb0 = (ac + q_s0za1 + q_s0zb0 * 2) >> M_SR; q_s0za1 = ac; }
+void sdr_rx_5(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_6;  q_s0zb0 = ac; }
+void sdr_rx_7(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx  ;  int16_t q_s1za0 = (ac + q_s0za1 + q_s0zb0 * 2 + q_s0zb1) >> M_SR; q_s0za1 = ac; q_ac2 = (q_s1za0 + q_s1za1 + q_s1zb0 * 2); q_s1za1 = q_s1za0; }
+*/
+
+static int16_t ozi1, ozi2;
+
+inline int16_t sdr_rx_common_q(){
+  ADMUX = admux[0]; ADCSRA |= (1 << ADSC); return ADC - 511;
+///*
+  ozi2 = ozi1 + ozi2;          // Integrator section
+  ozi1 = ocomb + ozi1;
+  OCR1AL = min(max((ozi2>>5) + 128, 0), 255);
+//*/
+}
+
+inline int16_t sdr_rx_common_i()
+{
+  ADMUX = admux[1]; ADCSRA |= (1 << ADSC); int16_t adc = ADC - 511; 
+
+  if(_init){ ocomb=0; ozi1 = 0; ozi2 = 0; } // hack
+  ozi2 = ozi1 + ozi2;          // Integrator section
+  ozi1 = ocomb + ozi1;
+  OCR1AL = min(max((ozi2>>5) + 128, 0), 255);
+
+  static int16_t prev_adc;
+  int16_t ac = (prev_adc + adc) / 2; prev_adc = adc;
+  return ac;
+}
+#endif //NEW_RX
+
+ /*
+#define M_SR  2  // CIC N=3
+static uint8_t nested = false;
+
+void sdr_rx()
+{
+#ifdef TESTBENCH
+  int16_t adc = NCO_I();
+#else
+  ADMUX = admux[1];  // set MUX for next conversion
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion
+  int16_t adc = ADC - 511; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+#endif
+  func_ptr = sdr_rx_q;    // processing function for next conversion
+  sdr_rx_common();
+  
+  static int16_t prev_adc;
+  int16_t corr_adc = (prev_adc + adc) / 2;  // Only for I: correct I/Q sample delay by means of linear interpolation
+  prev_adc = adc;
+  adc = corr_adc;
+  //static int16_t dc;
+  //dc += (adc - dc) / 2;  // we lose LSB with this method
+  //dc = (3*dc + adc)/4;
+  //int16_t ac = adc - dc;     // DC decoupling
+  int16_t ac = adc;
+
+  static int16_t s0zb0, s0zb1;
+  if(rx_state == 0 || rx_state == 4){  // stage s0: down-sample by 2
+    static int16_t s0za1, s0za2;
+    int16_t s1za0 = (ac + (s0za1 + s0zb0) * 3 + s0zb1) >> M_SR;           // FA + FB
+    //int16_t s1za0 = (ac + s0za1 * 6 + s0za2 + s0zb0 + s0zb1);
+    //s0za2 = s0za1;
+    s0za1 = ac;
+    static int16_t s1zb0, s1zb1;
+    if(rx_state == 0){                   // stage s1: down-sample by 2
+      static int16_t s1za1, s1za2;
+      int16_t ac2 = (s1za0 + (s1za1 + s1zb0) * 3 + s1zb1) >> M_SR; // FA + FB $
+      //int16_t ac2 = (s1za0 + s1za1 * 6 + s1za2 + s1zb0 + s1zb1); // FA + FB $
+      //s1za2 = s1za1; // $
+      s1za1 = s1za0;
+      {
+        rx_state++;
+
+        static int16_t ac3;
+        static int16_t ozd1, ozd2;  // Output stage
+        if(_init){ ac3 = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
+        int16_t od1 = ac3 - ozd1; // Comb section
+        ocomb = od1 - ozd2;
+        interrupts();
+        ozd2 = od1;
+        ozd1 = ac3;
+        
+        //if(nested){ return; } // fuse for too many nested interrupts (prevent stack overflow)
+        //nested++;
+        //interrupts();  // hack: post processing may be extend until next sample time: allow next sample to be processed while postprocessing        
+
+        {
+          q_ac2 >>= att2;  // digital gain control
+          static int16_t v[14];  // Process Q (down-sampled) samples
+          q = v[7];
+          // Hilbert transform, BasicDSP model:  outi= fir(inl,  0, 0, 0, 0, 0,  0,  0, 1,   0, 0,   0, 0,  0, 0, 0, 0); outq = fir(inr, 2, 0, 8, 0, 21, 0, 79, 0, -79, 0, -21, 0, -8, 0, -2, 0) / 128;
+          qh = ((v[0] - q_ac2) + (v[2] - v[12]) * 4) / 64 + ((v[4] - v[10]) + (v[6] - v[8])) / 8 + ((v[4] - v[10]) * 5 - (v[6] - v[8]) ) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 43dB side-band rejection in 650..3400Hz (@8kSPS) when used in image-rejection scenario; (Hilbert transform require 4 additional bits)
+          //qh = ((v[0] - q_ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+          v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7]; v[7] = v[8]; v[8] = v[9]; v[9] = v[10]; v[10] = v[11]; v[11] = v[12]; v[12] = v[13]; v[13] = q_ac2;
+        }
+        ac2 >>= att2;  // digital gain control
+        static int16_t v[7];  // Post processing I and Q (down-sampled) results
+        i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
+        ac3 = slow_dsp(i + qh);
+
+        //nested--;
+        return;
+      }
+    } else { s1zb1 = s1zb0; s1zb0 = s1za0; } // rx_state == 4 // *4
+  } else { s0zb1 = s0zb0; s0zb0 = ac; }  // rx_state == 2 || rx_state == 6  // *4
+
+  rx_state++;
+}
+
+void sdr_rx_q()
+{
+#ifdef TESTBENCH
+  int16_t adc = NCO_Q();
+#else
+  ADMUX = admux[0];  // set MUX for next conversion
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion
+  int16_t adc = ADC - 511; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
+#endif
+  func_ptr = sdr_rx;    // processing function for next conversion
+  //sdr_rx_common();  //necessary? YES!... Maybe NOT!
+
+  //static int16_t dc;
+  //dc += (adc - dc) / 2;  // we lose LSB with this method
+  //dc = (3*dc + adc)/4;
+  //int16_t ac = adc - dc;     // DC decoupling
+  int16_t ac = adc;
+
+  static int16_t s0zb0, s0zb1;
+  if(rx_state == 3 || rx_state == 7){  // stage s0: down-sample by 2
+    static int16_t s0za1, s0za2;
+    int16_t s1za0 = (ac + (s0za1 + s0zb0) * 3 + s0zb1) >> M_SR;           // FA + FB
+    //int16_t s1za0 = (ac + s0za1 * 6 + s0za2 + s0zb0 + s0zb1);
+    //s0za2 = s0za1;
+    s0za1 = ac;
+    static int16_t s1zb0, s1zb1;
+    if(rx_state == 7){                   // stage s1: down-sample by 2
+      static int16_t s1za1, s1za2;
+      q_ac2 = (s1za0 + (s1za1 + s1zb0) * 3 + s1zb1) >> M_SR; // FA + FB $
+      //q_ac2 = (s1za0 + s1za1 * 6 + s1za2 + s1zb0 + s1zb1); // FA + FB $
+      //s1za2 = s1za1; // $
+      s1za1 = s1za0;
+      rx_state = 0; return;
+    } else { s1zb1 = s1zb0; s1zb0 = s1za0; } // rx_state == 3  // *4
+  } else { s0zb1 = s0zb0; s0zb0 = ac; }  // rx_state == 1 || rx_state == 5  // *4
+
+  rx_state++;
+}
+
+inline void sdr_rx_common()
+{
+  static int16_t ozi1, ozi2;
+  if(_init){ ocomb=0; ozi1 = 0; ozi2 = 0; } // hack
+  // Output stage [25% CPU@R=4;Fs=62.5k]
+#ifdef SECOND_ORDER_DUC
+  ozi2 = ozi1 + ozi2;          // Integrator section
+#endif
+  ozi1 = ocomb + ozi1;
+#ifdef SECOND_ORDER_DUC
+  if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+#else
+  if(volume) OCR1AL = (ozi1>>5) + 128;
+  //if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+#endif
+}
+*/
+
+//#define OLD_RX  1
+#ifdef OLD_RX    //Orginal 2nd-order CIC:
+//#define M4  1  // Enable to enable M=4 on second-stage (better alias rejection)
+
 void sdr_rx()
 {
   // process I for even samples  [75% CPU@R=4;Fs=62.5k] (excluding the Comb branch and output stage)
@@ -2213,7 +2447,7 @@ void sdr_rx_q()
         // Process Q (down-sampled) samples
         static int16_t v[14];
         q = v[7];
-	// Hilbert transform, BasicDSP model:  outi= fir(inl,  0, 0, 0, 0, 0,  0,  0, 1,   0, 0,   0, 0,  0, 0, 0, 0); outq = fir(inr, 2, 0, 8, 0, 21, 0, 79, 0, -79, 0, -21, 0, -8, 0, -2, 0) / 128;
+  // Hilbert transform, BasicDSP model:  outi= fir(inl,  0, 0, 0, 0, 0,  0,  0, 1,   0, 0,   0, 0,  0, 0, 0, 0); outq = fir(inr, 2, 0, 8, 0, 21, 0, 79, 0, -79, 0, -21, 0, -8, 0, -2, 0) / 128;
         qh = ((v[0] - ac2) + (v[2] - v[12]) * 4) / 64 + ((v[4] - v[10]) + (v[6] - v[8])) / 8 + ((v[4] - v[10]) * 5 - (v[6] - v[8]) ) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 43dB side-band rejection in 650..3400Hz (@8kSPS) when used in image-rejection scenario; (Hilbert transform require 4 additional bits)
         //qh = ((v[0] - ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
         for(uint8_t j = 0; j != 13; j++) v[j] = v[j + 1]; v[13] = ac2;
@@ -2246,6 +2480,9 @@ inline void sdr_rx_common()
   //if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #endif
 }
+#endif //OLD_RX
+
+
 #endif
 
 #ifdef SIMPLE_RX
@@ -2369,6 +2606,16 @@ ISR(TIMER2_COMPA_vect)  // Timer2 COMPA interrupt
   numSamples++;
 #endif
 }
+
+#pragma GCC pop_options  // end of DSP section
+
+/*ISR (TIMER2_COMPA_vect  ,ISR_NAKED) {
+asm("push r24         \n\t"
+    "lds r24,  0\n\t"
+    "sts 0xB4, r24    \n\t"
+    "pop r24          \n\t"
+    "reti             \n\t");
+}*/
 
 void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
 {
@@ -2576,7 +2823,9 @@ float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't thin
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
 
-  dbm_max = max(dbm_max, dbm);
+  //dbm_max = max(dbm_max, dbm); // peak
+  dbm_max = dbm;
+
   static uint8_t cnt;
   cnt++;
   if((cnt % 32) == 0){   // slowed down display slightly
@@ -2941,7 +3190,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case AGC:     paramAction(action, agc, 0x16, F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, 0x17, F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, 0x18, F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, 0x19, F("ATT2"), NULL, 2 /*0*/, 16, false); break;
+    case ATT2:    paramAction(action, att2, 0x19, F("ATT2"), NULL, 0, 16, false); break;
     case SMETER:  paramAction(action, smode, 0x1A, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
@@ -3220,26 +3469,26 @@ void setup()
   wdt_enable(WDTO_4S);  // Enable watchdog
 #ifdef DEBUG
   // Benchmark dsp_tx() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
-  rx_state = 0;
   uint32_t t0, t1;
   func_ptr = dsp_tx;
   t0 = micros();
   TIMER2_COMPA_vect();
   //func_ptr();
   t1 = micros();
-  float load_tx = (t1 - t0) * F_SAMP_TX * 100.0 / 1000000.0;
+  float load_tx = (float)(t1 - t0) * (float)F_SAMP_TX * 100.0 / 1000000.0 * 16000000.0/(float)F_CPU;
   // benchmark sdr_rx() ISR
   func_ptr = sdr_rx;
-  rx_state = 8;
+  rx_state = 0;
   float load_rx[8];
   float load_rx_avg = 0;
   uint16_t i;
   for(i = 0; i != 8; i++){
+    rx_state = i;
     t0 = micros();
     TIMER2_COMPA_vect();
     //func_ptr();
     t1 = micros();
-    load_rx[i] = (t1 - t0) * F_SAMP_RX * 100.0 / 1000000.0;
+    load_rx[i] = (float)(t1 - t0) * (float)F_SAMP_RX * 100.0 / 1000000.0 * 16000000.0/(float)F_CPU;
     load_rx_avg += load_rx[i];
   }
   load_rx_avg /= 8;
@@ -3339,11 +3588,12 @@ void setup()
     delay(1500); wdt_reset();
   }
 
-  if(!(load_rx_avg <= 100.0)){
+  //if(!(load_rx_avg <= 100.0))
+  {
     lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(F("=")); lcd.print(load_rx_avg); lcd.print(F("%")); lcd_blanks();
     delay(1500); wdt_reset();
     // and specify individual timings for each of the eight alternating processing functions:
-    for(i = 1; i != 8; i++){
+    for(i = 0; i != 8; i++){
       if(!(load_rx[i] <= 100.0))
       {
         lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(i); lcd.print(F("=")); lcd.print(load_rx[i]); lcd.print(F("%")); lcd_blanks();
@@ -3951,13 +4201,13 @@ void loop()
 
     noInterrupts();
     if(mode == CW){
-      si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
+      si5351.freq(freq + cw_offset, param_b, param_c/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
       si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
     } else
     if(mode == LSB)
-      si5351.freq(freq, 90, 0);  // RX in LSB
+      si5351.freq(freq, param_b, param_c/*90, 0*/);  // RX in LSB
     else
-      si5351.freq(freq, 0, 90);  // RX in USB, ...
+      si5351.freq(freq, param_c, param_b/*0, 90*/);  // RX in USB, ...
     interrupts();
   }
   
@@ -4022,5 +4272,7 @@ PCB
 RIT, VFO-B, undersampling, IF-offset
 keyer dash-dot
 tiny-click removal, DC offset correction
+
+atmega328p signature: https://forum.arduino.cc/index.php?topic=341799.15   https://www.eevblog.com/forum/microcontrollers/bootloader-on-smd-atmega328p-au/msg268938/#msg268938 https://www.avrfreaks.net/forum/undocumented-signature-row-contents
 
 */
