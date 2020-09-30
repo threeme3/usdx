@@ -1843,12 +1843,26 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
   {  // for SSB filters
     // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     static int16_t zz1,zz2;
-    za0=(29*(za0-zz1)+50*za1)/64;                               //300-Hz
+    //za0=(29*(za0-zz1)+50*za1)/64;                                //300-Hz
     zz2=zz1;
     zz1=za0;
+    za0=(30*(za0-zz2)+25*za1)/32;                                  //300-Hz
 
     // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     switch(filt){
+      case 1: zb0=(za0+2*za1+za2)/2-(13*zb1+11*zb2)/16; break;   // 0-2900Hz filter, first biquad section
+      case 2: zb0=(za0+2*za1+za2)/2-(2*zb1+8*zb2)/16; break;     // 0-2400Hz filter, first biquad section
+      case 3: zb0=(za0+2*za1+za2)/2-(1*zb1+4*zb2)/16; break;     //0-1800Hz  elliptic
+      //case 3: zb0=(za0+7*za1+za2)/16-(-24*zb1+9*zb2)/16; break;     //0-1700Hz  elliptic with slope
+    }
+  
+    switch(filt){
+      case 1: zc0=(zb0+2*zb1+zb2)/2-(18*zc1+11*zc2)/16; break;   // 0-2900Hz filter, second biquad section
+      case 2: zc0=(zb0+2*zb1+zb2)/4-(4*zc1+8*zc2)/16; break;     // 0-2400Hz filter, second biquad section
+      case 3: zc0=(zb0+2*zb1+zb2)/8-(2*zc1+6*zc2)/16; break;   //0-1800Hz  elliptic
+      //case 3: zc0=(zb0+zb1+zb2)/16-(-22*zc1+47*zc2)/64; break;   //0-1700Hz  elliptic with slope
+    }
+   /*switch(filt){
       case 1: zb0=za0; break; //0-4000Hz (pass-through)
       case 2: zb0=(10*(za0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
       case 3: zb0=(7*(za0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
@@ -1858,7 +1872,7 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
       case 1: zc0=zb0; break; //0-4000Hz (pass-through)
       case 2: zc0=(8*(zb0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
       case 3: zc0=(4*(zb0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
-    }
+    }*/
   
     zc2=zc1;
     zc1=zc0;
@@ -1911,7 +1925,8 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     za2=za1;
     za1=za0;
     
-    return zc0 / 64; // compensate the 64x front-end gain
+    //return zc0 / 64; // compensate the 64x front-end gain
+    return zc0 / 8; // compensate the front-end gain
   }
 }
 
@@ -2018,7 +2033,8 @@ inline int16_t slow_dsp(int16_t ac)
   }
   if(nr) ac = process_nr(ac);
 
-  if(filt) ac = filt_var(ac) << 2;
+//  if(filt) ac = filt_var(ac) << 2;
+  if(filt) ac = filt_var(ac);
   if(mode == CW){
     if(cwdec){  // CW decoder enabled?
       char ch = cw(ac >> 0);
@@ -3155,7 +3171,7 @@ static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:   
 #endif
 
 const char* offon_label[2] = {"OFF", "ON"};
-const char* filt_label[N_FILT+1] = { "Full", "4000", "2500", "1700", "500", "200", "100", "50" };
+const char* filt_label[N_FILT+1] = { "Full", "3000", "2400", "1800", "500", "200", "100", "50" };
 const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
