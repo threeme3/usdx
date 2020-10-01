@@ -1405,7 +1405,7 @@ PCA9539 ioext;
 
 void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
   ioext.init();
-  #define LATCH_TIME  15   // set/reset time latch relay
+  #define LATCH_TIME  30   // set/reset time latch relay
   for(int i = 0; i != 16; i++){ ioext.write( (~(1U << i))| 0x0002); delay(LATCH_TIME); } ioext.write(0x0000); // reset all latches
   ioext.write((1U << io)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch wired to io port
 }
@@ -1833,6 +1833,39 @@ param_c = avg;
 volatile int8_t filt = 0;
 int8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
+/* basicdsp filter simulation:
+  samplerate=7812
+  za0=in
+  p1=slider1*10
+  p2=slider2*10
+  p3=slider3*10
+  p4=slider4*10
+  zb0=(za0+2*za1+za2)/2-(p1*zb1+p2*zb2)/16
+  zc0=(zb0+2*zb1+zb2)/4-(p3*zc1+p4*zc2)/16
+  zc2=zc1
+  zc1=zc0
+  zb2=zb1
+  zb1=zb0
+  za2=za1
+  za1=za0
+  out=zc0
+
+  samplerate=7812
+  za0=in
+  p1=slider1*100
+  p2=slider2*100
+  p3=slider3*100
+  p4=slider4*100
+  zb0=(za0+2*za1+za2)/32-(-p1*zb1+p2*zb2)/32
+  zc0=(zb0-2*zb1+zb2)/(64*4)-(-p3*zc1+p4*zc2)/64
+  zc2=zc1
+  zc1=zc0
+  zb2=zb1
+  zb1=zb0
+  za2=za1
+  za1=za0
+  out=zc0
+*/
 inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
 { 
   static int16_t za1,za2;
@@ -1852,14 +1885,16 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     switch(filt){
       case 1: zb0=(za0+2*za1+za2)/2-(13*zb1+11*zb2)/16; break;   // 0-2900Hz filter, first biquad section
       case 2: zb0=(za0+2*za1+za2)/2-(2*zb1+8*zb2)/16; break;     // 0-2400Hz filter, first biquad section
-      case 3: zb0=(za0+2*za1+za2)/2-(1*zb1+4*zb2)/16; break;     //0-1800Hz  elliptic
-      //case 3: zb0=(za0+7*za1+za2)/16-(-24*zb1+9*zb2)/16; break;     //0-1700Hz  elliptic with slope
+      //case 3: zb0=(za0+2*za1+za2)/2-(4*zb1+2*zb2)/16; break;     // 0-2400Hz filter, first biquad section
+      case 3: zb0=(za0+2*za1+za2)/2-(0*zb1+4*zb2)/16; break;     //0-1800Hz  elliptic
+      //case 3: zb0=(za0+7*za1+za2)/16-(-24*zb1+9*zb2)/16; break;  //0-1700Hz  elliptic with slope
     }
   
     switch(filt){
-      case 1: zc0=(zb0+2*zb1+zb2)/2-(18*zc1+11*zc2)/16; break;   // 0-2900Hz filter, second biquad section
-      case 2: zc0=(zb0+2*zb1+zb2)/4-(4*zc1+8*zc2)/16; break;     // 0-2400Hz filter, second biquad section
-      case 3: zc0=(zb0+2*zb1+zb2)/8-(2*zc1+6*zc2)/16; break;   //0-1800Hz  elliptic
+      case 1: zc0=(zb0+2*zb1+zb2)/2-(18*zc1+11*zc2)/16; break;     // 0-2900Hz filter, second biquad section
+      case 2: zc0=(zb0+2*zb1+zb2)/4-(4*zc1+8*zc2)/16; break;       // 0-2400Hz filter, second biquad section
+      //case 3: zc0=(zb0+2*zb1+zb2)/4-(1*zc1+9*zc2)/16; break;       // 0-2400Hz filter, second biquad section
+      case 3: zc0=(zb0+2*zb1+zb2)/4-(0*zc1+4*zc2)/16; break;       //0-1800Hz  elliptic
       //case 3: zc0=(zb0+zb1+zb2)/16-(-22*zc1+47*zc2)/64; break;   //0-1700Hz  elliptic with slope
     }
    /*switch(filt){
@@ -2121,6 +2156,24 @@ volatile uint8_t rx_state = 0;
 // with down-sampling before stage translates into poly-phase components: FA(z) = 1 + 6*z^-1 + z^-2, FB(z) = 4 + 4*z^-1
 // M=3 FA(z) = 1 + 3*z^-1, FB(z) = 3 + z^-1
 // source: Lyons Understanding Digital Signal Processing 3rd edition 13.24.1
+
+/* Basicdsp simulation:
+# M=2 FA(z) = 1 + z^-1, FB(z) = 2
+# M=3 FA(z) = 1 + 3*z^-1, FB(z) = 3 + z^-1
+# M=4 FA(z) = 1 + 6*z^-1 + z^-2, FB(z) = 4 + 4*z^-1
+samplerate=28000
+x=x+1
+clk1=mod1(x/2)*2
+y=y+clk1
+clk2=mod1(y/2)*2
+#s1=clk1*fir(in, 1, 2, 1, 0)/16
+#s2=clk2*fir(s1, 1, 0, 2, 0, 1, 0, 0)/16
+#s1=clk1*fir(in, 1, 3, 3, 1, 0)/16
+#s2=clk2*fir(s1, 1, 0, 3, 0, 3, 0, 1, 0, 0)/16
+s1=clk1*fir(in, 1, 4, 6, 4, 1, 0)/16
+s2=clk2*fir(s1, 1, 0, 4, 0, 6, 0, 4, 0, 1, 0, 0)/16
+out=s2
+ */
 
 #define NEW_RX  1
 #ifdef NEW_RX
