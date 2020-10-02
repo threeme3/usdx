@@ -1576,7 +1576,8 @@ void dsp_tx()
 volatile uint16_t acc;
 volatile uint32_t cw_offset;
 volatile uint8_t cw_tone = 1;
-const uint32_t tones[] = {325, 700};
+//const uint32_t tones[] = {325, 700};
+const uint32_t tones[] = {325, 600};
 
 volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
 volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
@@ -1938,17 +1939,29 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     }
     if(cw_tone == 1){
       switch(filt){
-        case 4: zb0=(5*za0+9*za1+5*za2)+(30L*zb1-38L*zb2)/64; break; //720Hz+-250Hz
-        case 5: zb0=(2*za0+4*za1+2*za2)+(51L*zb1-52L*zb2)/64; break; //720Hz+-100Hz
-        case 6: zb0=(1*za0+2*za1+1*za2)+(59L*zb1-58L*zb2)/64; break; //720Hz+-50Hz
-        case 7: zb0=(0*za0+1*za1+0*za2)+(66L*zb1-61L*zb2)/64; break; //720Hz+-25Hz
+        //case 4: zb0=(5*za0+9*za1+5*za2)+(30L*zb1-38L*zb2)/64; break; //720Hz+-250Hz
+        //case 5: zb0=(2*za0+4*za1+2*za2)+(51L*zb1-52L*zb2)/64; break; //720Hz+-100Hz
+        //case 6: zb0=(1*za0+2*za1+1*za2)+(59L*zb1-58L*zb2)/64; break; //720Hz+-50Hz
+        //case 7: zb0=(0*za0+1*za1+0*za2)+(66L*zb1-61L*zb2)/64; break; //720Hz+-25Hz
+        //case 7: zb0=(0*za0+1*za1+0*za2)+(107L*zb1-61L*zb2)/64; break; //644Hz+-25Hz
+        //case 7: zb0=(0*za0+1*za1+0*za2)+(112L*zb1-63L*zb2)/64; break; //610Hz+-5Hz
+        case 4: zb0=(1*za0+2*za1+1*za2)+(90L*zb1-38L*zb2)/64; break; //600Hz+-250Hz
+        case 5: zb0=(1*za0+2*za1+1*za2)/2+(102L*zb1-52L*zb2)/64; break; //600Hz+-100Hz
+        case 6: zb0=(1*za0+2*za1+1*za2)/2+(107L*zb1-57L*zb2)/64; break; //600Hz+-50Hz
+        case 7: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-61L*zb2)/64; break; //600Hz+-25Hz
       }
     
       switch(filt){
-        case 4: zc0=(zb0-2*zb1+zb2)/4+(76L*zc1-44L*zc2)/64; break; //720Hz+-250Hz
-        case 5: zc0=(zb0-2*zb1+zb2)/8+(72L*zc1-53L*zc2)/64; break; //720Hz+-100Hz
-        case 6: zc0=(zb0-2*zb1+zb2)/16+(70L*zc1-58L*zc2)/64; break; //720Hz+-50Hz
-        case 7: zc0=(zb0-2*zb1+zb2)/32+(70L*zc1-62L*zc2)/64; break; //720Hz+-25Hz
+        //case 4: zc0=(zb0-2*zb1+zb2)/4+(76L*zc1-44L*zc2)/64; break; //720Hz+-250Hz
+        //case 5: zc0=(zb0-2*zb1+zb2)/8+(72L*zc1-53L*zc2)/64; break; //720Hz+-100Hz
+        //case 6: zc0=(zb0-2*zb1+zb2)/16+(70L*zc1-58L*zc2)/64; break; //720Hz+-50Hz
+        //case 7: zc0=(zb0-2*zb1+zb2)/32+(70L*zc1-62L*zc2)/64; break; //720Hz+-25Hz
+        //case 7: zc0=(zb0-2*zb1+zb2)/32+(110L*zc1-62L*zc2)/64; break; //644Hz+-25Hz
+        //case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-63L*zc2)/64; break; //610Hz+-5Hz
+        case 4: zc0=(zb0-2*zb1+zb2)/4+(95L*zc1-44L*zc2)/64; break; //600Hz+-250Hz
+        case 5: zc0=(zb0-2*zb1+zb2)/8+(104L*zc1-53L*zc2)/64; break; //600Hz+-100Hz
+        case 6: zc0=(zb0-2*zb1+zb2)/16+(106L*zc1-56L*zc2)/64; break; //600Hz+-50Hz
+        case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-62L*zc2)/64; break; //600Hz+-25Hz
       } 
     }
     zc2=zc1;
@@ -3246,7 +3259,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
   const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
   const char* smode_label[] = { "OFF", "dBm", "S", "S-bar" };
-  const char* cw_tone_label[] = { "325", "700" };
+  const char* cw_tone_label[] = { "325", "600" };
 #ifdef KEYER
   const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
 #endif
@@ -4322,6 +4335,9 @@ additional PWM output for potential BOOST conversion
 SWR measurement?
 CW decoder amp thrshld restriction and noise reduction (use of certain pause amounts)
 squelch gating
+More buttons, context specific items on LCD
+Wider SSB passband (useful for FT8)
+Amp keying, band-data output
 
 Analyse assembly:
 /home/guido/Downloads/arduino-1.8.10/hardware/tools/avr/bin/avr-g++ -S -g -Os -w -std=gnu++11 -fpermissive -fno-exceptions -ffunction-sections -fdata-sections -fno-threadsafe-statics -Wno-error=narrowing -MMD -mmcu=atmega328p -DF_CPU=16000000L -DARDUINO=10810 -DARDUINO_AVR_UNO -DARDUINO_ARCH_AVR -I/home/guido/Downloads/arduino-1.8.10/hardware/arduino/avr/cores/arduino -I/home/guido/Downloads/arduino-1.8.10/hardware/arduino/avr/variants/standard /tmp/arduino_build_483134/sketch/QCX-SSB.ino.cpp -o /tmp/arduino_build_483134/sketch/QCX-SSB.ino.cpp.txt
