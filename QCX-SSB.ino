@@ -6,8 +6,7 @@
 
 #define VERSION   "1.02m"
 
-//#define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
-
+//#define QCX           1   // Disable for uSDX; enable to support QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 #define DEBUG           1   // Hardware diagnostics (disable this to save memory)
 #define KEYER           1   // CW keyer
 //#define CAT           1   // CAT-interface
@@ -40,7 +39,6 @@
 #define SDA     18        //PC4    (pin 27)
 #define SCL     19        //PC5    (pin 28)
 //#define NTX  11          //PB3    (pin 17)  - experimental: LOW on TX
-
 
 #ifdef SWAP_ROTARY
 #undef ROT_A
@@ -1175,7 +1173,7 @@ public:
   #define SI_CLK_SRC_MS 0b00001100
   #define SI_CLK_IDRV_8MA 0b00000011
   #define SI_CLK_INV 0b00010000
-  volatile uint32_t fxtal = 27004300;  //myqcx1:27003847 myqcx2:27004900  Actual crystal frequency of 27MHz XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
+  volatile uint32_t fxtal = 27004300;  //myqcx1:27003980 myqcx2:27004900  Actual crystal frequency of 27MHz XTAL2 for CL = 10pF (default), calibrate your QCX 27MHz crystal frequency here
   #define SI_PLL_FREQ (16*fxtal)  //900000000, with 432MHz(=16*27M) PLL freq, usable range is 3.46..100MHz
 
   volatile uint8_t prev_divider;
@@ -1433,6 +1431,10 @@ volatile int16_t param_b = 90; //0;
 volatile int16_t param_c = 0;
 #endif
 
+enum dsp_cap_t { ANALOG, DSP, SDR };
+uint8_t dsp_cap = 0;
+uint8_t ssb_cap = 0;
+
 enum mode_t { LSB, USB, CW, AM, FM };
 volatile int8_t mode = USB;
 volatile uint16_t numSamples = 0;
@@ -1576,8 +1578,7 @@ void dsp_tx()
 volatile uint16_t acc;
 volatile uint32_t cw_offset;
 volatile uint8_t cw_tone = 1;
-//const uint32_t tones[] = {325, 700};
-const uint32_t tones[] = {325, 600};
+const uint32_t tones[] = {700, 600, 700};
 
 volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
 volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
@@ -2102,10 +2103,10 @@ inline int16_t slow_dsp(int16_t ac)
   ac = min(max(ac, -512), 511);
   //ac = min(max(ac, -128), 127);
 #ifdef QCX
-  return (volume) ? ac : 0;  // in QCX-SSB, at volume 0 slow_dsp() should return 0 (in order to prevent upsampling filter to generate audio)
-#else
-  return ac;
+  if(!dsp_cap) return 0;  // in QCX-SSB mode (no DSP), slow_dsp() should return 0 (in order to prevent upsampling filter to generate audio)
 #endif
+  return ac;
+
 }
 
 #ifdef TESTBENCH
@@ -2394,10 +2395,10 @@ inline void sdr_rx_common()
 #endif
   ozi1 = ocomb + ozi1;
 #ifdef SECOND_ORDER_DUC
-  if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+  OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  // OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #else
-  if(volume) OCR1AL = (ozi1>>5) + 128;
-  //if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+  OCR1AL = (ozi1>>5) + 128;
+  // OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  // OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #endif
 }
 */
@@ -2554,10 +2555,10 @@ inline void sdr_rx_common()
 #endif
   ozi1 = ocomb + ozi1;
 #ifdef SECOND_ORDER_DUC
-  if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+  OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  // OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #else
-  if(volume) OCR1AL = (ozi1>>5) + 128;
-  //if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+  OCR1AL = (ozi1>>5) + 128;
+  OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  // OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
 #endif
 }
 #endif //OLD_RX
@@ -2604,10 +2605,10 @@ void sdr_rx()
     #endif
     ozi1 = ocomb + ozi1;
     #ifdef SECOND_ORDER_DUC
-    if(volume) OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+    OCR1AL = min(max((ozi2>>5) + 128, 0), 255);  // OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
     #else
-    if(volume) OCR1AL = (ozi1>>5) + 128;
-    //if(volume) OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  //if(volume) OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
+    OCR1AL = (ozi1>>5) + 128;
+    //OCR1AL = min(max((ozi1>>5) + 128, 0), 255);  // OCR1AL = min(max((ozi2>>5) + ICR1L/2, 0), ICR1L);  // center and clip wrt PWM working range
     #endif
     // Only for I: correct I/Q sample delay by means of linear interpolation
     static int16_t prev_adc;
@@ -2862,10 +2863,6 @@ int analogSafeRead(uint8_t pin)
   return val;
 }
 
-enum dsp_cap_t { ANALOG, DSP, SDR };
-uint8_t dsp_cap = 0;
-uint8_t ssb_cap = 0;
-
 uint16_t analogSampleMic()
 {
   uint16_t adc;
@@ -2889,7 +2886,7 @@ volatile int32_t freq = 7074000;
 // So we multiply by 0.707/0.639 in an attempt to roughly compensate, although that only really works if the input
 // is a sine wave
 int8_t smode = 1;
-float dbm_max = -140.0;
+float dbm_val = -140.0;
 
 float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't think that is correct?
 {
@@ -2903,27 +2900,27 @@ float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't thin
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
 
-  //dbm_max = max(dbm_max, dbm); // peak
-  dbm_max = dbm;
+  dbm_val = max(dbm_val, dbm); // peak
+  dbm_val = dbm;
 
   static uint8_t cnt;
   cnt++;
   if((cnt % 32) == 0){   // slowed down display slightly
     if(smode == 1){ // dBm meter
-      lcd.noCursor(); lcd.setCursor(9, 0); lcd.print((int16_t)dbm_max); lcd.print(F("dBm   "));
+      lcd.noCursor(); lcd.setCursor(9, 0); lcd.print((int16_t)dbm_val); lcd.print(F("dBm   "));
     }
     if(smode == 2){ // S-meter
-      uint8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((uint8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
+      uint8_t s = (dbm_val < -63) ? ((dbm_val - -127) / 6) : (((uint8_t)(dbm_val - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
       lcd.noCursor(); lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s);
     }
-    if(smode == 3){ // S-bar. converted to use dbm_max as well - previously just used dbm
-      int8_t s = (dbm_max < -63) ? ((dbm_max - -127) / 6) : (((int8_t)(dbm_max - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
+    if(smode == 3){ // S-bar. converted to use dbm_val as well - previously just used dbm
+      int8_t s = (dbm_val < -63) ? ((dbm_val - -127) / 6) : (((int8_t)(dbm_val - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
       lcd.noCursor(); lcd.setCursor(12, 0);
       char tmp[5];
       for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
       lcd.print(tmp);
     }
-    dbm_max = dbm_max - 2.0;  // Implement peak hold/decay for all meter types
+    dbm_val = dbm_val - 2.0;  // Implement peak hold/decay for all meter types
   }
   return dbm;
 }
@@ -3035,7 +3032,6 @@ void calibrate_iq()
   si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   change = true;  //restore original frequency setting
 }
-
 #endif
 #endif //QCX
 
@@ -3257,7 +3253,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
   const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
   const char* smode_label[] = { "OFF", "dBm", "S", "S-bar" };
-  const char* cw_tone_label[] = { "325", "600" };
+  const char* cw_tone_label[] = { "700", "600" };
 #ifdef KEYER
   const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
 #endif
@@ -3273,7 +3269,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case ATT2:    paramAction(action, att2, 0x19, F("ATT2"), NULL, 0, 16, false); break;
     case SMETER:  paramAction(action, smode, 0x1A, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
-    case CWTONE:  paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
+    case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("VOX Level"), NULL, 0, 255, false); break;
@@ -3594,6 +3590,9 @@ void setup()
     lcd.createChar(0x01 + i, /*fonts[i]*/_item);
   }
 
+  show_banner();
+  lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
+
   //Init si5351
   si5351.powerDown();  // Disable all (used) outputs
 
@@ -3641,9 +3640,6 @@ void setup()
   ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
 #endif
 
-  show_banner();
-  lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
-
 #ifdef DEBUG
   /*if((mcusr & WDRF) && (!(mcusr & EXTRF)) && (!(mcusr & BORF))){
     lcd.setCursor(0, 1); lcd.print(F("!!Watchdog RESET")); lcd_blanks();
@@ -3668,7 +3664,7 @@ void setup()
     delay(1500); wdt_reset();
   }
 
-  //if(!(load_rx_avg <= 100.0))
+  if(!(load_rx_avg <= 100.0))
   {
     lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(F("=")); lcd.print(load_rx_avg); lcd.print(F("%")); lcd_blanks();
     delay(1500); wdt_reset();
@@ -3774,14 +3770,17 @@ void setup()
 #endif //DEBUG
 
   drive = 4;  // Init settings
+#ifdef QCX
   if(!ssb_cap){ mode = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
-  cw_offset = tones[1];
   if(dsp_cap == DSP) volume = 10;
-
+  if(!dsp_cap) cw_tone = 2;   // use internal 700Hz QCX filter, so use same offset and keyer tone
+#endif //QCX
+  cw_offset = tones[cw_tone];
+  
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
-  if((eeprom_version != get_version_id()) || !digitalRead(DIT) ){  // EEPROM clean: if PTT/onboard-key pressed or version signature in EEPROM does NOT corresponds with this firmware
+  if((eeprom_version != get_version_id()) || digitalRead(BUTTONS) ){  // EEPROM clean: if rotary-key pressed or version signature in EEPROM does NOT corresponds with this firmware
     eeprom_version = get_version_id();
     //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
     //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
@@ -3794,8 +3793,6 @@ void setup()
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
-
-  if(!dsp_cap) volume = 0;  // mute volume for unmodified QCX receiver
 
   for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
     lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
@@ -4151,7 +4148,7 @@ void loop()
       case BE|PT:
           for(; digitalRead(BUTTONS);){ // process encoder changes until released
           wdt_reset();
-          if(dsp_cap && encoder_val){
+          if(encoder_val){
             paramAction(UPDATE, VOLUME);
             paramAction(SAVE, VOLUME);
             if(volume < 0) powerDown();  // powerDown when volume < 0
