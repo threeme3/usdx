@@ -2002,7 +2002,7 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         case 4: zc0=(zb0-2*zb1+zb2)/1+zc1-zc2+(31L*zc1+12L*zc2)/64; break; //600Hz+-250Hz
         case 5: zc0=(zb0-2*zb1+zb2)/4+2*zc1-zc2+(-22L*zc1+5L*zc2)/64; break; //600Hz+-100Hz
         case 6: zc0=(zb0-2*zb1+zb2)/16+2*zc1-zc2+(-15L*zc1+2L*zc2)/64; break; //600Hz+-50Hz
-        case 7: zc0=(zb0-2*zb1+zb2)/32+2*zc1-zc2+(-16L*zc1+2L*zc2)/64; break; //600Hz+-18Hz
+        case 7: zc0=(zb0-2*zb1+zb2)/16+2*zc1-zc2+(-16L*zc1+2L*zc2)/64; break; //600Hz+-18Hz
       } 
     }
     zc2=zc1;
@@ -2029,11 +2029,13 @@ inline int16_t slow_dsp(int16_t ac)
   if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0;
   } else absavg256 += abs(ac);
 
-  if(mode == AM) { // (12%CPU for the mode selection etc)
-    ac = magn(i, q);  //(25%CPU)
-    { static int16_t dc;
+  if(mode == AM) {
+    ac = magn(i, q);
+    //static int16_t last_sample = 1;
+    //MLEA(last_sample,ac, 1, 2); // 1/2: alpha = 0.25, Lyons 13.33.2 p.763
+    /*{ static int16_t dc;
       dc += (ac - dc) / 2;
-      ac = ac - dc; }  // DC decoupling
+      ac = ac - dc; }  // DC decoupling*/
   } else if(mode == FM){
     static int16_t z1;
     int16_t z0 = arctan3(q, i);
@@ -2164,7 +2166,7 @@ out=s2
 #define NEW_RX  1
 #ifdef NEW_RX
 
-void process(int16_t ac2, int16_t q_ac2)
+void process(int16_t i_ac2, int16_t q_ac2)
 {
   static int16_t ac3;
   static int16_t ozd1, ozd2;  // Output stage
@@ -2182,9 +2184,10 @@ void process(int16_t ac2, int16_t q_ac2)
     //qh = ((v[0] - q_ac2) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
     v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = v[7]; v[7] = v[8]; v[8] = v[9]; v[9] = v[10]; v[10] = v[11]; v[11] = v[12]; v[12] = v[13]; v[13] = q_ac2;
   }
-  ac2 >>= att2;  // digital gain control
+  i_ac2 >>= att2;  // digital gain control
   static int16_t v[7];  // Post processing I and Q (down-sampled) results
-  int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
+  int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = i_ac2;  // Delay to match Hilbert transform on Q branch
+  i = i_ac2; q = q_ac2;   // tbd: this can be more efficient
   ac3 = slow_dsp(i + qh);
 }
 
@@ -3185,6 +3188,7 @@ template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, 
       for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
       break;
     case SAVE:
+      wdt_reset(); 
       for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++);
       break;
     case SKIP:
@@ -4004,17 +4008,17 @@ void loop()
           int8_t prev_mode = mode;
           encoder_val = 1;
           paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, _N(mode_label), true);
-          #define MODE_CHANGE_RESETS  1
-          #ifdef MODE_CHANGE_RESETS
+//#define MODE_CHANGE_RESETS  1
+#ifdef MODE_CHANGE_RESETS
           if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500; // sets suitable stepsize
-          #endif
+#endif
           if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
-          #ifdef MODE_CHANGE_RESETS
+#ifdef MODE_CHANGE_RESETS
           if(mode == CW) filt = 4; else filt = 0;  // resets filter (to most BW) on mode change
-          #else
+#else
           prev_stepsize[prev_mode == CW] = stepsize; stepsize = prev_stepsize[mode == CW]; // backup stepsize setting for previous mode, restore previous stepsize setting for current selected mode; filter settings captured for either CQ or other modes.
           prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
-          #endif
+#endif
           paramAction(SAVE, MODE); 
           paramAction(SAVE, FILTER);
           si5351.iqmsa = 0;  // enforce PLL reset
