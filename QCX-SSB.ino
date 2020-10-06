@@ -1439,7 +1439,7 @@ void set_lpf(uint8_t f){
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV2
 
-#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2)
+#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2)
 void set_lpf(uint8_t f){} // dummy
 #endif
 
@@ -1686,6 +1686,7 @@ char cw(int16_t in)
   #define OSR 64 // (8*FS/1000)
   if((nsamp % OSR) == 0){   // process every 8 ms
     nsamp=0;
+#ifdef x
     if(!signal) return ch;
     signal = signal / OSR;  //normalize
     maxpk = signal > maxpk ? signal : maxpk;
@@ -1713,6 +1714,7 @@ char cw(int16_t in)
     avg = avg*99/100 + signal*1/100;
     maxpk = maxpk*99/100 + signal*1/100;
     signal = 0;
+#endif
   }
   nsamp++;
   return ch;
@@ -1976,16 +1978,17 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         //case 5: zb0=(1*za0+2*za1+1*za2)/2+(102L*zb1-52L*zb2)/64; break; //600Hz+-100Hz
         //case 6: zb0=(1*za0+2*za1+1*za2)/2+(107L*zb1-57L*zb2)/64; break; //600Hz+-50Hz
         //case 7: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-61L*zb2)/64; break; //600Hz+-25Hz
-        /*case 4: zb0=(0*za0+1*za1+0*za2)+(114L*zb1-57L*zb2)/64; break; //600Hz+-250Hz
+        
+        case 4: zb0=(0*za0+1*za1+0*za2)+(114L*zb1-57L*zb2)/64; break; //600Hz+-250Hz
         case 5: zb0=(0*za0+1*za1+0*za2)+(113L*zb1-60L*zb2)/64; break; //600Hz+-100Hz
         case 6: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-62L*zb2)/64; break; //600Hz+-50Hz
         case 7: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-61L*zb2)/64; break; //600Hz+-18Hz
-        //case 8: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-60L*zb2)/64; break; //591Hz+-12Hz */
+        //case 8: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-60L*zb2)/64; break; //591Hz+-12Hz
 
-        case 4: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+7L*zb2)/64; break; //600Hz+-250Hz
+        /*case 4: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+7L*zb2)/64; break; //600Hz+-250Hz
         case 5: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-15L*zb1+4L*zb2)/64; break; //600Hz+-100Hz
         case 6: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+2L*zb2)/64; break; //600Hz+-50Hz
-        case 7: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+3L*zb2)/64; break; //600Hz+-18Hz
+        case 7: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+3L*zb2)/64; break; //600Hz+-18Hz*/
       }
     
       switch(filt){
@@ -1993,16 +1996,17 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         //case 5: zc0=(zb0-2*zb1+zb2)/8+(104L*zc1-53L*zc2)/64; break; //600Hz+-100Hz
         //case 6: zc0=(zb0-2*zb1+zb2)/16+(106L*zc1-56L*zc2)/64; break; //600Hz+-50Hz
         //case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-62L*zc2)/64; break; //600Hz+-25Hz
-        /*case 4: zc0=(zb0-2*zb1+zb2)/1+(95L*zc1-52L*zc2)/64; break; //600Hz+-250Hz
+        
+        case 4: zc0=(zb0-2*zb1+zb2)/1+(95L*zc1-52L*zc2)/64; break; //600Hz+-250Hz
         case 5: zc0=(zb0-2*zb1+zb2)/4+(106L*zc1-59L*zc2)/64; break; //600Hz+-100Hz
         case 6: zc0=(zb0-2*zb1+zb2)/16+(113L*zc1-62L*zc2)/64; break; //600Hz+-50Hz
         case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-62L*zc2)/64; break; //600Hz+-18Hz
-        //case 8: zc0=(zb0-2*zb1+zb2)/64+(113L*zc1-63L*zc2)/64; break; //591Hz+-12Hz */
+        //case 8: zc0=(zb0-2*zb1+zb2)/64+(113L*zc1-63L*zc2)/64; break; //591Hz+-12Hz
         
-        case 4: zc0=(zb0-2*zb1+zb2)/1+zc1-zc2+(31L*zc1+12L*zc2)/64; break; //600Hz+-250Hz
+        /*case 4: zc0=(zb0-2*zb1+zb2)/1+zc1-zc2+(31L*zc1+12L*zc2)/64; break; //600Hz+-250Hz
         case 5: zc0=(zb0-2*zb1+zb2)/4+2*zc1-zc2+(-22L*zc1+5L*zc2)/64; break; //600Hz+-100Hz
         case 6: zc0=(zb0-2*zb1+zb2)/16+2*zc1-zc2+(-15L*zc1+2L*zc2)/64; break; //600Hz+-50Hz
-        case 7: zc0=(zb0-2*zb1+zb2)/16+2*zc1-zc2+(-16L*zc1+2L*zc2)/64; break; //600Hz+-18Hz
+        case 7: zc0=(zb0-2*zb1+zb2)/16+2*zc1-zc2+(-16L*zc1+2L*zc2)/64; break; //600Hz+-18Hz*/
       } 
     }
     zc2=zc1;
@@ -2163,7 +2167,7 @@ s2=clk2*fir(s1, 1, 0, 4, 0, 6, 0, 4, 0, 1, 0, 0)/16
 out=s2
  */
 
-#define NEW_RX  1
+#define NEW_RX  1   // Faster (3rd-order) CIC stage, with simultanuous processing capability
 #ifdef NEW_RX
 
 void process(int16_t i_ac2, int16_t q_ac2)
@@ -2173,7 +2177,7 @@ void process(int16_t i_ac2, int16_t q_ac2)
   if(_init){ ac3 = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
   int16_t od1 = ac3 - ozd1; // Comb section
   ocomb = od1 - ozd2;
-  interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling
+  interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing
   ozd2 = od1;
   ozd1 = ac3;
   {
@@ -2186,8 +2190,8 @@ void process(int16_t i_ac2, int16_t q_ac2)
   }
   i_ac2 >>= att2;  // digital gain control
   static int16_t v[7];  // Post processing I and Q (down-sampled) results
-  int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = i_ac2;  // Delay to match Hilbert transform on Q branch
   i = i_ac2; q = q_ac2;   // tbd: this can be more efficient
+  int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = i_ac2;  // Delay to match Hilbert transform on Q branch
   ac3 = slow_dsp(i + qh);
 }
 
@@ -2223,7 +2227,7 @@ static int16_t ozi1, ozi2;
 inline int16_t sdr_rx_common_q(){
   ADMUX = admux[0]; ADCSRA |= (1 << ADSC); return ADC - 511;
 ///*
-  ozi2 = ozi1 + ozi2;          // Integrator section
+  ozi2 = ozi1 + ozi2;          // Integrator section - needed? - yes
   ozi1 = ocomb + ozi1;
   OCR1AL = min(max((ozi2>>5) + 128, 0), 255);
 //*/
@@ -2242,7 +2246,6 @@ inline int16_t sdr_rx_common_i()
   int16_t ac = (prev_adc + adc) / 2; prev_adc = adc;
   return ac;
 }
-#endif //NEW_RX
 
  /*
 #define M_SR  2  // CIC N=3
@@ -2380,8 +2383,7 @@ inline void sdr_rx_common()
 }
 */
 
-//#define OLD_RX  1
-#ifdef OLD_RX    //Orginal 2nd-order CIC:
+#else // OLD_RX    //Orginal 2nd-order CIC:
 //#define M4  1  // Enable to enable M=4 on second-stage (better alias rejection)
 
 void sdr_rx()
@@ -3187,8 +3189,7 @@ template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, 
     case LOAD:
       for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
       break;
-    case SAVE:
-      wdt_reset(); 
+    case SAVE: 
       for(uint8_t* ptr = (uint8_t *) &value, n = sizeof(value); n; --n) eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++);
       break;
     case SKIP:
@@ -3212,7 +3213,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 30  // number of (visible) parameters
+#define N_PARAMS 31  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
