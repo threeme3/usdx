@@ -73,7 +73,6 @@ ssb_cap=1; dsp_cap=2;
 #define _DELAY() for(uint8_t i = 0; i != 5; i++) asm("nop");
 #define F_XTAL 20004000
 #define F_CPU F_XTAL
-experimentally: #define AUTO_ADC_BIAS 1
 */
 
 #ifdef KEYER
@@ -1387,12 +1386,11 @@ void set_lpf(uint8_t f){
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV1
 
-#define LPF_SWITCHING_DL2MAN_USDX_REV2  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
-#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
+//#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
 class PCA9539 {  //https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
 public:
   #define PCA9539_ADDR  0x74  // with A1..A0 set to 0
-  #define TCA9555_ADDR  0x24  // with A2=1 A1..A0=0  // https://www.ti.com/lit/ds/symlink/tca9555.pdf
   inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
   //inline void init(){ SendRegister(0x02, 0x00); SendRegister(0x03, 0x00); SendRegister(0x06, 0x00); SendRegister(0x07, 0x00); } // output port cmd: write 0 to IO1.7-0.0, configuration cmd: IO0.0-1.7 as output
   //inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0xff); SendRegister(0x06, 0x00); SendRegister(0x03, 0xff); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 1, IO0 as output, IO1 to 1, IO1 as output
@@ -1400,6 +1398,32 @@ public:
   inline void write(uint16_t data){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, data); SendRegister(0x06, 0x00); SendRegister(0x03, data >> 8); SendRegister(0x07, 0x00); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
 };
 PCA9539 ioext;
+
+void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+  ioext.init();
+  #define LATCH_TIME  30   // set/reset time latch relay
+  for(int i = 0; i != 16; i++){ ioext.write( (~(1U << i))| 0x0002); delay(LATCH_TIME); } ioext.write(0x0000); // reset all latches
+  ioext.write((1U << io)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch wired to io port
+}
+
+static uint8_t prev_lpf_io = 0xff;
+void set_lpf(uint8_t f){
+  uint8_t lpf_io = (f > 12) ? 3 : (f > 8) ? 5 : (f > 6) ? 7 : (f > 4) ? 9 : /*(f > 2)*/ 11; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ prev_lpf_io = lpf_io; set_latch(lpf_io); };  // set relay
+}
+#endif  //LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
+
+
+#define LPF_SWITCHING_DL2MAN_USDX_REV2  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
+class TCA9555 {  // https://www.ti.com/lit/ds/symlink/tca9555.pdf
+public:
+  #define TCA9555_ADDR  0x24  // with A2=1 A1..A0=0 
+  inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(TCA9555_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
+  inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0x00); SendRegister(0x06, 0x00); SendRegister(0x03, 0x00); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 0, IO0 as output, IO1 to 0, IO1 as output
+  inline void write(uint16_t data){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, data); SendRegister(0x06, 0x00); SendRegister(0x03, data >> 8); SendRegister(0x07, 0x00); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
+};
+TCA9555 ioext;
 
 void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
   ioext.init();
@@ -1427,7 +1451,7 @@ void set_lpf(uint8_t f){} // dummy
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
 volatile uint16_t param_a = 0;  // registers for debugging, testing and experimental purposes
-volatile int16_t param_b = 90; //0;
+volatile int16_t param_b = 0;
 volatile int16_t param_c = 0;
 #endif
 
@@ -1854,19 +1878,19 @@ int8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
   samplerate=7812
   za0=in
-  p1=slider1*100
+  p1=slider1*100+100
   p2=slider2*100
-  p3=slider3*100
+  p3=slider3*100+100
   p4=slider4*100
-  zb0=(za0+2*za1+za2)/32-(-p1*zb1+p2*zb2)/32
-  zc0=(zb0-2*zb1+zb2)/(64*4)-(-p3*zc1+p4*zc2)/64
+  zb0=(za0+2*za1+za2)-(-p1*zb1+p2*zb2)/64
+  zc0=(zb0-2*zb1+zb2)/8-(-p3*zc1+p4*zc2)/64
   zc2=zc1
   zc1=zc0
   zb2=zb1
   zb1=zb0
   za2=za1
   za1=za0
-  out=zc0
+  out=zc0/8
 */
 inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
 { 
@@ -1928,7 +1952,11 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         case 4: zb0=(za0+2*za1+za2)/2+(41L*zb1-23L*zb2)/32; break;   //500-1000Hz
         case 5: zb0=5*(za0-2*za1+za2)+(105L*zb1-58L*zb2)/64; break;   //650-840Hz
         case 6: zb0=3*(za0-2*za1+za2)+(108L*zb1-61L*zb2)/64; break;   //650-750Hz
-        case 7: zb0=(2*za0-3*za1+2*za2)+(111L*zb1-62L*zb2)/64; break; //630-680Hz
+        case 7: zb0=(2*za0-3*za1+2*za2)+(111L*zb1-62L*zb2)/64; break; //630-680Hz       
+        /*case 4: zb0=(0*za0+1*za1+0*za2)+(28*zb1-14*zb2)/16; break; //600Hz+-250Hz
+        case 5: zb0=(0*za0+1*za1+0*za2)+(28*zb1-15*zb2)/16; break; //600Hz+-100Hz
+        case 6: zb0=(0*za0+1*za1+0*za2)+(27*zb1-15*zb2)/16; break; //600Hz+-50Hz
+        case 7: zb0=(0*za0+1*za1+0*za2)+(27*zb1-15*zb2)/16; break; //630Hz+-18Hz*/
       }
     
       switch(filt){
@@ -1936,6 +1964,10 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         case 5: zc0=((zb0+2*zb1+zb2)+97L*zc1-57L*zc2)/64; break;      //650-840Hz
         case 6: zc0=((zb0+zb1+zb2)+104L*zc1-60L*zc2)/64; break;       //650-750Hz
         case 7: zc0=((zb1)+109L*zc1-62L*zc2)/64; break;               //630-680Hz
+        /*case 4: zc0=(zb0-2*zb1+zb2)/1+(24*zc1-13*zc2)/16; break; //600Hz+-250Hz
+        case 5: zc0=(zb0-2*zb1+zb2)/4+(26*zc1-14*zc2)/16; break; //600Hz+-100Hz
+        case 6: zc0=(zb0-2*zb1+zb2)/16+(28*zc1-15*zc2)/16; break; //600Hz+-50Hz
+        case 7: zc0=(zb0-2*zb1+zb2)/32+(27*zc1-15*zc2)/16; break; //630Hz+-18Hz*/
       }
     }
     if(cw_tone == 1){
@@ -1944,11 +1976,16 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         //case 5: zb0=(1*za0+2*za1+1*za2)/2+(102L*zb1-52L*zb2)/64; break; //600Hz+-100Hz
         //case 6: zb0=(1*za0+2*za1+1*za2)/2+(107L*zb1-57L*zb2)/64; break; //600Hz+-50Hz
         //case 7: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-61L*zb2)/64; break; //600Hz+-25Hz
-        case 4: zb0=(0*za0+1*za1+0*za2)+(114L*zb1-57L*zb2)/64; break; //600Hz+-250Hz
+        /*case 4: zb0=(0*za0+1*za1+0*za2)+(114L*zb1-57L*zb2)/64; break; //600Hz+-250Hz
         case 5: zb0=(0*za0+1*za1+0*za2)+(113L*zb1-60L*zb2)/64; break; //600Hz+-100Hz
         case 6: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-62L*zb2)/64; break; //600Hz+-50Hz
         case 7: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-61L*zb2)/64; break; //600Hz+-18Hz
-        //case 8: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-60L*zb2)/64; break; //591Hz+-12Hz
+        //case 8: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-60L*zb2)/64; break; //591Hz+-12Hz */
+
+        case 4: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+7L*zb2)/64; break; //600Hz+-250Hz
+        case 5: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-15L*zb1+4L*zb2)/64; break; //600Hz+-100Hz
+        case 6: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+2L*zb2)/64; break; //600Hz+-50Hz
+        case 7: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+3L*zb2)/64; break; //600Hz+-18Hz
       }
     
       switch(filt){
@@ -1956,11 +1993,16 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         //case 5: zc0=(zb0-2*zb1+zb2)/8+(104L*zc1-53L*zc2)/64; break; //600Hz+-100Hz
         //case 6: zc0=(zb0-2*zb1+zb2)/16+(106L*zc1-56L*zc2)/64; break; //600Hz+-50Hz
         //case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-62L*zc2)/64; break; //600Hz+-25Hz
-        case 4: zc0=(zb0-2*zb1+zb2)/1+(95L*zc1-52L*zc2)/64; break; //600Hz+-250Hz
+        /*case 4: zc0=(zb0-2*zb1+zb2)/1+(95L*zc1-52L*zc2)/64; break; //600Hz+-250Hz
         case 5: zc0=(zb0-2*zb1+zb2)/4+(106L*zc1-59L*zc2)/64; break; //600Hz+-100Hz
         case 6: zc0=(zb0-2*zb1+zb2)/16+(113L*zc1-62L*zc2)/64; break; //600Hz+-50Hz
         case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-62L*zc2)/64; break; //600Hz+-18Hz
-        //case 8: zc0=(zb0-2*zb1+zb2)/64+(113L*zc1-63L*zc2)/64; break; //591Hz+-12Hz
+        //case 8: zc0=(zb0-2*zb1+zb2)/64+(113L*zc1-63L*zc2)/64; break; //591Hz+-12Hz */
+        
+        case 4: zc0=(zb0-2*zb1+zb2)/1+zc1-zc2+(31L*zc1+12L*zc2)/64; break; //600Hz+-250Hz
+        case 5: zc0=(zb0-2*zb1+zb2)/4+2*zc1-zc2+(-22L*zc1+5L*zc2)/64; break; //600Hz+-100Hz
+        case 6: zc0=(zb0-2*zb1+zb2)/16+2*zc1-zc2+(-15L*zc1+2L*zc2)/64; break; //600Hz+-50Hz
+        case 7: zc0=(zb0-2*zb1+zb2)/32+2*zc1-zc2+(-16L*zc1+2L*zc2)/64; break; //600Hz+-18Hz
       } 
     }
     zc2=zc1;
@@ -1977,53 +2019,6 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
   }
 }
 
-/*
-inline int16_t filt_var(int16_t v)  //filters build with www.micromodeler.com
-{ 
-  int16_t zx0 = v;
-
-  static int16_t za1,za2;
-  if(filt < 4){  // for SSB filters
-    // 1st Order (SR=8kHz) IIR in Direct Form I, 8x8:16
-    static int16_t zz1,zz2;
-    zx0=(29*(zx0-zz1)+50*za1)/64;                               //300-Hz
-    zz2=zz1;
-    zz1=v;
-  }
-  za2=za1;
-  za1=zx0;
-
-  // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
-  //static int16_t za1,za2;
-  static int16_t zb1,zb2;
-  switch(filt){
-    case 1: break; //0-4000Hz (pass-through)
-    case 2: zx0=(10*(zx0+2*za1+za2)+16*zb1-17*zb2)/32; break;    //0-2500Hz  elliptic -60dB@3kHz
-    case 3: zx0=(7*(zx0+2*za1+za2)+48*zb1-18*zb2)/32; break;     //0-1700Hz  elliptic
-    case 4: zx0=(zx0+2*za1+za2+41*zb1-23*zb2)/32; break;   //500-1000Hz
-    case 5: zx0=(5*(zx0-2*za1+za2)+105*zb1-58*zb2)/64; break;   //650-840Hz
-    case 6: zx0=(3*(zx0-2*za1+za2)+108*zb1-61*zb2)/64; break;   //650-750Hz
-    case 7: zx0=((2*zx0-3*za1+2*za2)+111*zb1-62*zb2)/64; break; //630-680Hz
-  }
-  zb2=zb1;
-  zb1=zx0;
-
-  static int16_t zc1,zc2;
-  switch(filt){
-    case 1: break; //0-4000Hz (pass-through)
-    case 2: zx0=(8*(zx0+zb2)+13*zb1-43*zc1-52*zc2)/64; break;   //0-2500Hz  elliptic -60dB@3kHz
-    case 3: zx0=(4*(zx0+zb1+zb2)+22*zc1-47*zc2)/64; break;   //0-1700Hz  elliptic
-    case 4: zx0=(16*(zx0-2*zb1+zb2)+105*zc1-52*zc2)/64; break;      //500-1000Hz
-    case 5: zx0=((zx0+2*zb1+zb2)+97*zc1-57*zc2)/64; break;      //650-840Hz
-    case 6: zx0=((zx0+zb1+zb2)+104*zc1-60*zc2)/64; break;       //650-750Hz
-    case 7: zx0=((zb1)+109*zc1-62*zc2)/64; break;               //630-680Hz
-  }
-  zc2=zc1;
-  zc1=zx0;
-  return zx0;
-}
-*/
-
 static uint32_t absavg256 = 0;
 volatile uint32_t _absavg256 = 0;
 volatile int16_t i, q;
@@ -2032,27 +2027,6 @@ inline int16_t slow_dsp(int16_t ac)
 {
   static uint8_t absavg256cnt;
   if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0;
-//#define AUTO_ADC_BIAS  1
-#ifdef AUTO_ADC_BIAS
-    if(param_b < 0){
-      pinMode(AUDIO1, INPUT_PULLUP);
-      pinMode(AUDIO1, INPUT);
-    }
-    if(param_c < 0){
-      pinMode(AUDIO2, INPUT_PULLUP);
-      pinMode(AUDIO2, INPUT);
-    }
-    if(param_b > 500){
-      pinMode(AUDIO1, OUTPUT);
-      digitalWrite(AUDIO1, LOW);
-      pinMode(AUDIO1, INPUT);
-    }
-    if(param_c > 500){
-      pinMode(AUDIO2, OUTPUT);
-      digitalWrite(AUDIO2, LOW);
-      pinMode(AUDIO2, INPUT);
-    }
-#endif
   } else absavg256 += abs(ac);
 
   if(mode == AM) { // (12%CPU for the mode selection etc)
@@ -2431,9 +2405,6 @@ void sdr_rx()
   //int16_t ac = adc - dc;     // DC decoupling
   int16_t ac = adc;
 
-#ifdef AUTO_ADC_BIAS
-  param_b = (7*param_b + adc)/8;
-#endif
   int16_t ac2;
   static int16_t z1;
   if(rx_state == 0 || rx_state == 4){  // 1st stage: down-sample by 2
@@ -2504,9 +2475,6 @@ void sdr_rx_q()
   //int16_t ac = adc - dc;     // DC decoupling
   int16_t ac = adc;
 
-#ifdef AUTO_ADC_BIAS
-  param_c = (7*param_c + adc)/8;
-#endif
   int16_t ac2;
   static int16_t z1;
   if(rx_state == 3 || rx_state == 7){  // 1st stage: down-sample by 2
@@ -2700,9 +2668,7 @@ asm("push r24         \n\t"
 
 void adc_start(uint8_t adcpin, bool ref1v1, uint32_t fs)
 {
-#ifndef AUTO_ADC_BIAS
-  DIDR0 |= (1 << adcpin); // disable digital input
-#endif  
+  DIDR0 |= (1 << adcpin); // disable digital input 
   ADCSRA = 0;             // clear ADCSRA register
   ADCSRB = 0;             // clear ADCSRB register
   ADMUX = 0;              // clear ADMUX register
@@ -2932,8 +2898,14 @@ void start_rx()
   func_ptr = sdr_rx;  //enable RX DSP/SDR
   adc_start(2, true, F_ADC_CONV); admux[2] = ADMUX;
   if(dsp_cap == SDR){
+//#define SWAP_RX_IQ 1    // Swap I/Q ADC inputs, flips RX sideband
+#ifdef SWAP_RX_IQ
+    adc_start(1, !(att == 1)/*true*/, F_ADC_CONV); admux[0] = ADMUX;
+    adc_start(0, !(att == 1)/*true*/, F_ADC_CONV); admux[1] = ADMUX;
+#else
     adc_start(0, !(att == 1)/*true*/, F_ADC_CONV); admux[0] = ADMUX;
     adc_start(1, !(att == 1)/*true*/, F_ADC_CONV); admux[1] = ADMUX;
+#endif //SWAP_RX_IQ
   } else { // ANALOG, DSP
     adc_start(0, false, F_ADC_CONV); admux[0] = ADMUX; admux[1] = ADMUX;
   }
@@ -2996,7 +2968,7 @@ void switch_rxtx(uint8_t tx_enable){
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
 }
 
-
+uint8_t rx_ph_q = 90;
 
 #ifdef QCX
 #define CAL_IQ 1
@@ -3240,7 +3212,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3278,6 +3250,9 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, 255, false); break;
     case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, 0, 255, false); break;
+#ifdef DEBUG
+    case IQ_ADJ:  paramAction(action, rx_ph_q, 0x83, F("RX IQ Phase"), NULL, 45, 135, false); break;
+#endif
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
@@ -4207,6 +4182,9 @@ void loop()
         if(menu == CWTONE){
           if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] : tones[1]; paramAction(SAVE, CWOFF); }
         }
+        if(menu == IQ_ADJ){
+          change = true;
+        }
 #ifdef CAL_IQ
         if(menu == CALIB){
           if(dsp_cap != SDR) calibrate_iq(); menu = 0;
@@ -4278,13 +4256,13 @@ void loop()
 
     noInterrupts();
     if(mode == CW){
-      si5351.freq(freq + cw_offset, param_b, param_c/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
+      si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
       si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
     } else
     if(mode == LSB)
-      si5351.freq(freq, param_b, param_c/*90, 0*/);  // RX in LSB
+      si5351.freq(freq, rx_ph_q, 0/*90, 0*/);  // RX in LSB
     else
-      si5351.freq(freq, param_c, param_b/*0, 90*/);  // RX in USB, ...
+      si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
     interrupts();
   }
   
