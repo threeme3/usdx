@@ -1091,7 +1091,8 @@ public:
       //if(fout > 7000000) d = (33 * fxtal) / fout;
       if(fout < 3500000) d = (7 * fxtal) / fout;  // PLL at 189MHz to cover 160m (freq>1.48MHz) when using 27MHz crystal
 
-      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d--; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d++; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+      if(d % 2) d++;  // even numbers preferred for divider (AN619 p.4 and p.6)
       uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
       msa = fvcoa / fxtal;     // Integer part of vco/fxtal. msa must be in range 15..90
       msb = ((uint64_t)(fvcoa % fxtal)*_MSC) / fxtal; // fractional part
@@ -1311,7 +1312,7 @@ public:
     SetupMultisynth(SI_SYNTH_MS_0, divider, 0, 1, r_div);
     SetupMultisynth(SI_SYNTH_MS_1, divider, 0, 1, r_div);
     SetupMultisynth(SI_SYNTH_MS_2, divider, 0, 1, r_div);
-    //if(prev_divider != divider){ lcd.setCursor(0, 0); lcd.print(divider); lcd_blanks();
+    //if(prev_divider != divider){ lcd.setCursor(0, 0); lcd.print(divider); lcd.print(F("     "));
     // Set I/Q phase
     SendRegister(SI_CLK0_PHOFF, i * divider / 90); // one LSB equivalent to a time delay of Tvco/4 range 0..127
     SendRegister(SI_CLK1_PHOFF, q * divider / 90); // one LSB equivalent to a time delay of Tvco/4 range 0..127
