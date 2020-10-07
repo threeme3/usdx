@@ -2502,7 +2502,7 @@ void switch_rxtx(uint8_t tx_enable){
 #ifdef KEYER
     if(practice){
       digitalWrite(RX, LOW); // TX (disable RX)
-      lcd.setCursor(15, 1); lcd.print("P");
+      lcd.setCursor(15, 1); lcd.print('P');
       si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN,CLK1_EN,CLK0_EN=0
       // Do not enable PWM (KEY_OUT), do not enble CLK2
     } else
@@ -2512,7 +2512,7 @@ void switch_rxtx(uint8_t tx_enable){
 #ifdef NTX
       digitalWrite(NTX, LOW);  // TX (enable TX)
 #endif
-      lcd.setCursor(15, 1); lcd.print("T");
+      lcd.setCursor(15, 1); lcd.print('T');
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
       //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
       OCR1AL = 0; // make sure SIDETONE is set to 0%
@@ -2527,7 +2527,7 @@ void switch_rxtx(uint8_t tx_enable){
       digitalWrite(NTX, HIGH);  // RX (disable TX)
 #endif
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-      lcd.setCursor(15, 1); lcd.print((vox) ? "V" : "R");
+      lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
   }
   OCR2A = (((float)F_CPU / (float)64) / (float)((tx_enable) ? F_SAMP_TX : F_SAMP_RX) + 0.5) - 1;
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
@@ -2659,8 +2659,11 @@ void show_banner(){
   lcd.setCursor(0, 0);
   lcd.print(F("QCX"));
   const char* cap_label[] = { "SSB", "DSP", "SDR" };
-  if(ssb_cap || dsp_cap){ lcd.print(F("-")); lcd.print(cap_label[dsp_cap]); }
-  lcd.print(F("\x01 ")); lcd_blanks();
+  if(ssb_cap || dsp_cap){ lcd.print('-'); lcd.print(cap_label[dsp_cap]); }
+#else
+  lcd.print(F("uSDX"));
+#endif
+  lcd.print('\x01'); lcd_blanks();
 }
 
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
@@ -2676,8 +2679,8 @@ void display_vfo(uint32_t f){
     if(scale == (uint32_t)1e3 || scale == (uint32_t)1e6) lcd.print(',');  // Thousands separator
   }
   
-  lcd.print(" "); lcd.print(mode_label[mode]); lcd.print("  ");
-  lcd.setCursor(15, 1); lcd.print("R");
+  lcd.print(' '); lcd.print(mode_label[mode]); lcd_blanks();
+  lcd.setCursor(15, 1); lcd.print('R');
 }
 
 volatile uint8_t event;
@@ -3198,18 +3201,18 @@ void setup()
   
   // Measure CPU loads
   if(!(load_tx <= 100.0)){
-    lcd.setCursor(0, 1); lcd.print(F("!!CPU_tx=")); lcd.print(load_tx); lcd.print(F("%")); lcd_blanks();
+    lcd.setCursor(0, 1); lcd.print(F("!!CPU_tx=")); lcd.print(load_tx); lcd.print('%'); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
   if(!(load_rx_avg <= 100.0)){
-    lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(F("=")); lcd.print(load_rx_avg); lcd.print(F("%")); lcd_blanks();
+    lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print('='); lcd.print(load_rx_avg); lcd.print('%'); lcd_blanks();
     delay(1500); wdt_reset();
     // and specify individual timings for each of the eight alternating processing functions:
     for(i = 1; i != 8; i++){
       if(!(load_rx[i] <= 100.0))
       {
-        lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(i); lcd.print(F("=")); lcd.print(load_rx[i]); lcd.print(F("%")); lcd_blanks();
+        lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(i); lcd.print('='); lcd.print(load_rx[i]); lcd.print('%'); lcd_blanks();
         delay(1500); wdt_reset();
       }
     }
@@ -3223,14 +3226,14 @@ void setup()
   float vdd = 2.0 * (float)analogRead(AUDIO2) * 5.0 / 1024.0;
   digitalWrite(RX, HIGH);
   if(!(vdd > 4.8 && vdd < 5.2)){
-    lcd.setCursor(0, 1); lcd.print(F("!!V5.0=")); lcd.print(vdd); lcd.print(F("V")); lcd_blanks();
+    lcd.setCursor(0, 1); lcd.print(F("!!V5.0=")); lcd.print(vdd); lcd.print('V'); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
   // Measure VEE (+3.3V); should be ~3.3V
   float vee = (float)analogRead(SCL) * 5.0 / 1024.0;
   if(!(vee > 3.2 && vee < 3.8)){
-    lcd.setCursor(0, 1); lcd.print(F("!!V3.3=")); lcd.print(vee); lcd.print(F("V")); lcd_blanks();
+    lcd.setCursor(0, 1); lcd.print(F("!!V3.3=")); lcd.print(vee); lcd.print('V'); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
@@ -3242,7 +3245,7 @@ void setup()
   for(; bit_is_set(ADCSRA, ADSC););
   float avcc = 1.1 * 1023.0 / ADC;
   if(!(avcc > 4.6 && avcc < 5.2)){
-    lcd.setCursor(0, 1); lcd.print(F("!!Vavcc=")); lcd.print(avcc); lcd.print(F("V")); lcd_blanks();
+    lcd.setCursor(0, 1); lcd.print(F("!!Vavcc=")); lcd.print(avcc); lcd.print('V'); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
@@ -3255,7 +3258,7 @@ void setup()
   // Measure DVM bias; should be ~VAREF/2
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
   if((ssb_cap) && !(dvm > 1.8 && dvm < 3.2)){
-    lcd.setCursor(0, 1); lcd.print(F("!!Vadc2=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
+    lcd.setCursor(0, 1); lcd.print(F("!!Vadc2=")); lcd.print(dvm); lcd.print('V'); lcd_blanks();
     delay(1500); wdt_reset();
   }
 
@@ -3263,12 +3266,12 @@ void setup()
   if(dsp_cap == SDR){
     float audio1 = (float)analogRead(AUDIO1) * 5.0 / 1024.0;
     if(!(audio1 > 1.8 && audio1 < 3.2)){
-      lcd.setCursor(0, 1); lcd.print(F("!!Vadc0=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
+      lcd.setCursor(0, 1); lcd.print(F("!!Vadc0=")); lcd.print(audio1); lcd.print('V'); lcd_blanks();
       delay(1500); wdt_reset();
     }
     float audio2 = (float)analogRead(AUDIO2) * 5.0 / 1024.0;
     if(!(audio2 > 1.8 && audio2 < 3.2)){
-      lcd.setCursor(0, 1); lcd.print(F("!!Vadc1=")); lcd.print(dvm); lcd.print(F("V")); lcd_blanks();
+      lcd.setCursor(0, 1); lcd.print(F("!!Vadc1=")); lcd.print(audio2); lcd.print('V'); lcd_blanks();
       delay(1500); wdt_reset();
     }
   }
@@ -3452,7 +3455,7 @@ void loop()
         //digitalWrite(ledPin, HIGH);         // turn the LED on
         Key_state = HIGH;
         switch_rxtx(Key_state);
-        //lcd.setCursor(15, 1); lcd.print("h");
+        //lcd.setCursor(15, 1); lcd.print('h');
         //lcd.noCursor(); lcd.setCursor(0, 0); lcd.print((int16_t)ditTime);
         ktimer += millis();                 // set ktimer to interval end time
         keyerControl &= ~(DIT_L + DAH_L);   // clear both paddle latch bits
@@ -3463,7 +3466,7 @@ void loop()
             //digitalWrite(ledPin, LOW);      // turn the LED off
             Key_state = LOW;
             switch_rxtx(Key_state);
-            //lcd.setCursor(15, 1); lcd.print("l");
+            //lcd.setCursor(15, 1); lcd.print('l');
             ktimer = millis() + ditTime;    // inter-element time
             keyerState = INTER_ELEMENT;     // next state
         } else if (keyerControl & IAMBICB) {
@@ -3619,7 +3622,7 @@ void loop()
         smode = 0;
         TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
         delay(100);
-        lcd.setCursor(15, 1); lcd.print("X");
+        lcd.setCursor(15, 1); lcd.print('X');
         static uint8_t x = 0;
         uint32_t next = 0;
         for(;;){
@@ -3640,7 +3643,7 @@ void loop()
         #endif //SIMPLE_RX
                
         //int16_t x = 0;
-        lcd.setCursor(15, 1); lcd.print("V");
+        lcd.setCursor(15, 1); lcd.print('V');
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
           
           int16_t in = analogSampleMic() - 512;
@@ -3673,7 +3676,7 @@ void loop()
           wdt_reset();
         }
       }
-        lcd.setCursor(15, 1); lcd.print("R");
+        lcd.setCursor(15, 1); lcd.print('R');
         break;
       case BR|PT: break;
       case BE|SC:
@@ -3839,7 +3842,7 @@ void loop()
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
     paramAction(SAVE, FREQ);  // save freq changes
     save_event_time = 0;
-    //lcd.setCursor(15, 1); lcd.print("S"); delay(100); lcd.setCursor(15, 1); lcd.print("R");
+    //lcd.setCursor(15, 1); lcd.print('S'); delay(100); lcd.setCursor(15, 1); lcd.print('R');
   }
   
   wdt_reset();
