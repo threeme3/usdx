@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02k"
+#define VERSION   "1.02i"
 
 #define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 
@@ -1137,7 +1137,7 @@ public:
     return data;
   }
   void powerDown(){
-    for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b11000000);  // Conserve power when output is disabled
+    for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b10000000);  // Conserve power when output is disabled
     SendRegister(3, 0b11111111); // Disable all CLK outputs    
   }
   #define SI_CLK_OE 3
@@ -1346,14 +1346,14 @@ public:
   }
   void powerDown()
   {
-    SendRegister(SI_CLK0_CONTROL, 0b11000000);  // Conserve power when output is disabled
-    SendRegister(SI_CLK1_CONTROL, 0b11000000);
-    SendRegister(SI_CLK2_CONTROL, 0b11000000);
-    SendRegister(19, 0b11000000);
-    SendRegister(20, 0b11000000);
-    SendRegister(21, 0b11000000);
-    SendRegister(22, 0b11000000);
-    SendRegister(23, 0b11000000);
+    SendRegister(SI_CLK0_CONTROL, 0b10000000);  // Conserve power when output is disabled
+    SendRegister(SI_CLK1_CONTROL, 0b10000000);
+    SendRegister(SI_CLK2_CONTROL, 0b10000000);
+    SendRegister(19, 0b10000000);
+    SendRegister(20, 0b10000000);
+    SendRegister(21, 0b10000000);
+    SendRegister(22, 0b10000000);
+    SendRegister(23, 0b10000000);
     SendRegister(SI_CLK_OE, 0b11111111); // Disable all CLK outputs
   }
 };
