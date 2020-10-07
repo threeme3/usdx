@@ -3211,6 +3211,7 @@ void setup()
   //Init si5351
   si5351.powerDown();  // Disable all (used) outputs
 
+#ifdef QCX
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0  
   digitalWrite(RX, HIGH);  // generate pulse on SIDETONE and test if it can be seen on AUDIO2
@@ -3248,7 +3249,10 @@ void setup()
   //ssb_cap = 0; dsp_cap = 0;  // force standard QCX capability
   //ssb_cap = 1; dsp_cap = 0;  // force SSB and standard QCX-RX capability
   //ssb_cap = 1; dsp_cap = 1;  // force SSB and DSP capability
-  ssb_cap = 1; dsp_cap = 2;  // !!! TEMP !!! force SSB and SDR capability
+  //ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
+#else
+  ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
+#endif  //QCX
 
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
