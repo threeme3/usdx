@@ -3081,6 +3081,19 @@ void Command_PS1()
 // END CAT support
 #endif //CAT
 
+void fatal(const __FlashStringHelper* msg, int value = 0, char unit = '\0') {
+  lcd.setCursor(0, 1);
+  lcd.print(msg);
+  if (unit != '\0') {
+    lcd.print('=');
+    lcd.print(value);
+    lcd.print(unit);
+  }
+  lcd_blanks();
+  delay(1500);
+  wdt_reset();
+}
+
 void setup()
 {
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
@@ -3201,19 +3214,17 @@ void setup()
   
   // Measure CPU loads
   if(!(load_tx <= 100.0)){
-    lcd.setCursor(0, 1); lcd.print(F("!!CPU_tx=")); lcd.print(load_tx); lcd.print('%'); lcd_blanks();
-    delay(1500); wdt_reset();
+    fatal(F("!!CPU_tx"), load_tx, '%');
   }
 
   if(!(load_rx_avg <= 100.0)){
-    lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print('='); lcd.print(load_rx_avg); lcd.print('%'); lcd_blanks();
-    delay(1500); wdt_reset();
+    fatal(F("!!CPU_rx"), load_rx_avg, '%');
+
     // and specify individual timings for each of the eight alternating processing functions:
     for(i = 1; i != 8; i++){
       if(!(load_rx[i] <= 100.0))
       {
-        lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(i); lcd.print('='); lcd.print(load_rx[i]); lcd.print('%'); lcd_blanks();
-        delay(1500); wdt_reset();
+        fatal(F("!!CPU_rx"), load_rx[i], '%');
       }
     }
   }
@@ -3226,15 +3237,13 @@ void setup()
   float vdd = 2.0 * (float)analogRead(AUDIO2) * 5.0 / 1024.0;
   digitalWrite(RX, HIGH);
   if(!(vdd > 4.8 && vdd < 5.2)){
-    lcd.setCursor(0, 1); lcd.print(F("!!V5.0=")); lcd.print(vdd); lcd.print('V'); lcd_blanks();
-    delay(1500); wdt_reset();
+    fatal(F("!!V5.0"), vdd, 'V');
   }
 
   // Measure VEE (+3.3V); should be ~3.3V
   float vee = (float)analogRead(SCL) * 5.0 / 1024.0;
   if(!(vee > 3.2 && vee < 3.8)){
-    lcd.setCursor(0, 1); lcd.print(F("!!V3.3=")); lcd.print(vee); lcd.print('V'); lcd_blanks();
-    delay(1500); wdt_reset();
+    fatal(F("!!V3.3"), vee, 'V');
   }
 
   // Measure AVCC via AREF and using internal 1.1V reference fed to ADC; should be ~5V
@@ -3245,34 +3254,34 @@ void setup()
   for(; bit_is_set(ADCSRA, ADSC););
   float avcc = 1.1 * 1023.0 / ADC;
   if(!(avcc > 4.6 && avcc < 5.2)){
-    lcd.setCursor(0, 1); lcd.print(F("!!Vavcc=")); lcd.print(avcc); lcd.print('V'); lcd_blanks();
-    delay(1500); wdt_reset();
+    fatal(F("!!Vavcc"), avcc, 'V');
   }
 
   // Report no SSB capability
   if(!ssb_cap){
-    lcd.setCursor(0, 1); lcd.print(F("No MIC input...")); lcd_blanks();
-    delay(300); wdt_reset();
+    fatal(F("No MIC input..."));
   }
+
+  // Test microphone polarity
+  /*if((ssb_cap) && (!digitalRead(DAH))){
+    fatal(F("!!MIC in rev.pol"));
+  }*/
 
   // Measure DVM bias; should be ~VAREF/2
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
   if((ssb_cap) && !(dvm > 1.8 && dvm < 3.2)){
-    lcd.setCursor(0, 1); lcd.print(F("!!Vadc2=")); lcd.print(dvm); lcd.print('V'); lcd_blanks();
-    delay(1500); wdt_reset();
+    fatal(F("!!Vadc2"), dvm, 'V');
   }
 
   // Measure AUDIO1, AUDIO2 bias; should be ~VAREF/2
   if(dsp_cap == SDR){
     float audio1 = (float)analogRead(AUDIO1) * 5.0 / 1024.0;
     if(!(audio1 > 1.8 && audio1 < 3.2)){
-      lcd.setCursor(0, 1); lcd.print(F("!!Vadc0=")); lcd.print(audio1); lcd.print('V'); lcd_blanks();
-      delay(1500); wdt_reset();
+      fatal(F("!!Vadc0"), audio1, 'V');
     }
     float audio2 = (float)analogRead(AUDIO2) * 5.0 / 1024.0;
     if(!(audio2 > 1.8 && audio2 < 3.2)){
-      lcd.setCursor(0, 1); lcd.print(F("!!Vadc1=")); lcd.print(audio2); lcd.print('V'); lcd_blanks();
-      delay(1500); wdt_reset();
+      fatal(F("!!Vadc1"), audio2, 'V');
     }
   }
   
@@ -3283,8 +3292,8 @@ void setup()
   for(i = 0; i != 1000; i++) si5351.SendPLLBRegisterBulk();
   t1 = micros();
   uint32_t speed = (1000000 * 8 * 7) / (t1 - t0); // speed in kbit/s
-  if(false) { lcd.setCursor(0, 1); lcd.print(F("i2cspeed=")); lcd.print(speed); lcd.print(F("kbps")); lcd_blanks();
-    delay(1500); wdt_reset();
+  if(false) {
+    fatal(F("i2cspeed"), speed, 'k');
   }
 
   // Measure I2C Bit-Error Rate (BER); should be error free for a thousand random bulk PLLB writes
@@ -3298,8 +3307,8 @@ void setup()
     #define SI_SYNTH_PLL_B 34
     for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_B + j) != si5351.pll_regs[j]) i2c_error++;
   }
-  if(i2c_error){ lcd.setCursor(0, 1); lcd.print(F("!!BER_i2c=")); lcd.print(i2c_error); lcd_blanks();
-    delay(1500); wdt_reset();
+  if(i2c_error){
+    fatal(F("!!BER_i2c"), i2c_error, ' ');
   }
 #endif
 
