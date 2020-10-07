@@ -3195,7 +3195,7 @@ void setup()
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
 
 #ifdef DEBUG
-  if((mcusr & WDRF) && (!(mcusr & EXTRF)) && (!(mcusr & BORF))){
+/*if((mcusr & WDRF) && (!(mcusr & EXTRF)) && (!(mcusr & BORF))){
     lcd.setCursor(0, 1); lcd.print(F("!!Watchdog RESET")); lcd_blanks();
     delay(1500); wdt_reset();
   }
@@ -3206,7 +3206,7 @@ void setup()
   if(mcusr & PORF){
     lcd.setCursor(0, 1); lcd.print(F("!!Power-On RESET")); lcd_blanks();
     delay(1500); wdt_reset();
-  }
+  }*/
   /*if(mcusr & EXTRF){
   lcd.setCursor(0, 1); lcd.print(F("Power-On")); lcd_blanks();
     delay(1); wdt_reset();
@@ -3522,8 +3522,15 @@ void loop()
 //  #define DAH_AS_KEY  1
 #ifdef DAH_AS_KEY
   if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
+#else
+  if(!digitalRead(DIT) ){  // PTT/DIT keys transmitter
+#endif
     switch_rxtx(1);
+#ifdef DAH_AS_KEY
     for(; !digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH)));){ // until released
+#else
+    for(; !digitalRead(DIT) ;){ // until released
+#endif
       wdt_reset();
       if(inv ^ digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
     }
