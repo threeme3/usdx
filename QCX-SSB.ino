@@ -952,6 +952,11 @@ public:
   inline void suspend(){
     I2C_SDA_LO();         // pin sharing SDA/LCD_RS: pull-down LCD_RS; QCXLiquidCrystal require this for any operation
   }
+
+  void begin(){};
+  void beginTransmission(uint8_t addr){ start(); SendByte(addr << 1);  };
+  bool write(uint8_t byte){ SendByte(byte); return 1; };
+  uint8_t endTransmission(){ stop(); return 0; };
 };
 
 #define log2(n) (log(n) / log(2))
@@ -1354,6 +1359,60 @@ public:
 };
 static SI5351 si5351;
  */
+
+//#define LPF_SWITCHING_DL2MAN_USDX_REV1  1   // Enable filter bank switching: latching relays wired to a PCA9536D   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV1
+class PCA9536 {  //https://www.ti.com/lit/ds/symlink/pca9536.pdf
+public:
+  #define PCA9536_ADDR  0x41
+  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x03); i2c.write(0x00); i2c.endTransmission(); } // configuration cmd: IO0-IO7 as output
+  inline void write(uint8_t data){ init(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x01); i2c.write(data); i2c.endTransmission(); }  // output port cmd: write bits D7-D0 to IO7-IO0
+};
+PCA9536 ioext;
+
+void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+  #define LATCH_TIME  15   // set/reset time latch relay
+  for(int i = 0; i != 8; i++){ ioext.write( (~(1 << i))| 0x01); delay(LATCH_TIME); } ioext.write(0x00); // reset all latches
+  ioext.write((1 << io)| 0x00); delay(LATCH_TIME); ioext.write(0x00); // set latch wired to io port
+}
+
+static uint8_t prev_lpf_io = 0xff;
+void set_lpf(uint8_t f){
+  uint8_t lpf_io = (f >  8) ? 1 : (f > 4) ? 2 : /*(f > 2)*/ 3; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ prev_lpf_io = lpf_io; set_latch(lpf_io); };  // set relay
+}
+#endif  //LPF_SWITCHING_DL2MAN_USDX_REV1
+
+#define LPF_SWITCHING_DL2MAN_USDX_REV2  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
+class PCA9539 {  //https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
+public:
+  #define PCA9539_ADDR  0x74  // with A1..A0 set to 0
+  inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(PCA9539_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
+  //inline void init(){ SendRegister(0x02, 0x00); SendRegister(0x03, 0x00); SendRegister(0x06, 0x00); SendRegister(0x07, 0x00); } // output port cmd: write 0 to IO1.7-0.0, configuration cmd: IO0.0-1.7 as output
+  //inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0xff); SendRegister(0x06, 0x00); SendRegister(0x03, 0xff); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 1, IO0 as output, IO1 to 1, IO1 as output
+  inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0x00); SendRegister(0x06, 0x00); SendRegister(0x03, 0x00); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 0, IO0 as output, IO1 to 0, IO1 as output
+  inline void write(uint16_t data){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, data); SendRegister(0x06, 0x00); SendRegister(0x03, data >> 8); SendRegister(0x07, 0x00); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
+};
+PCA9539 ioext;
+
+void set_latch(uint8_t io){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+  ioext.init();
+  #define LATCH_TIME  15   // set/reset time latch relay
+  for(int i = 0; i != 16; i++){ ioext.write( (~(1U << i))| 0x0002); delay(LATCH_TIME); } ioext.write(0x0000); // reset all latches
+  ioext.write((1U << io)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch wired to io port
+}
+
+static uint8_t prev_lpf_io = 0xff;
+void set_lpf(uint8_t f){
+  uint8_t lpf_io = (f > 12) ? 3 : (f > 8) ? 5 : (f > 6) ? 7 : (f > 4) ? 9 : /*(f > 2)*/ 11; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ prev_lpf_io = lpf_io; set_latch(lpf_io); };  // set relay
+}
+#endif  //LPF_SWITCHING_DL2MAN_USDX_REV2
+
+#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2)
+void set_lpf(uint8_t f){} // dummy
+#endif
 
 #undef F_CPU
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
@@ -3842,7 +3901,9 @@ void loop()
       //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
-    
+
+    set_lpf(freq / 1000000UL);
+
     noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, 90, 0);  // RX in CW-R (=LSB), correct for CW-tone offset
