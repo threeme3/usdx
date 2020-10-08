@@ -1428,11 +1428,11 @@ volatile int16_t param_c = 0;
 #endif
 
 enum mode_t { LSB, USB, CW, AM, FM };
-volatile int8_t mode = USB;
+volatile uint8_t mode = USB;
 volatile uint16_t numSamples = 0;
 
 volatile uint8_t tx = 0;
-volatile bool vox = false;
+volatile uint8_t vox = 0;
 
 inline void _vox(uint8_t trigger)
 {
@@ -1634,7 +1634,7 @@ void dsp_tx_fm()
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
 }
 
-volatile int8_t cwdec = 0;
+volatile uint8_t cwdec = 0;
 
 static int32_t signal;
 static int16_t avg = 0;
@@ -1824,7 +1824,7 @@ param_c = avg;
 }
 
 #define N_FILT 7
-volatile int8_t filt = 0;
+volatile uint8_t filt = 0;
 int8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
 inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
@@ -2482,7 +2482,7 @@ volatile int32_t freq = 7074000;
 // We measure the average amplitude of the signal (see slow_dsp()) but the S-meter should be based on RMS value.
 // So we multiply by 0.707/0.639 in an attempt to roughly compensate, although that only really works if the input
 // is a sine wave
-int8_t smode = 1;
+uint8_t smode = 1;
 float dbm_max = -140.0;
 
 float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't think that is correct?
@@ -2627,8 +2627,8 @@ void calibrate_iq()
 }
 #endif
 
-int8_t prev_bandval = 2;
-int8_t bandval = 2;
+uint8_t prev_bandval = 2;
+uint8_t bandval = 2;
 #define N_BANDS 10
 
 #ifdef KEYER
@@ -2639,8 +2639,8 @@ uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136
 #endif
 
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
-int32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
-volatile int8_t stepsize = STEP_1k;
+uint32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
+volatile uint8_t stepsize = STEP_1k;
 int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
 
 void process_encoder_tuning_step(int8_t steps)
