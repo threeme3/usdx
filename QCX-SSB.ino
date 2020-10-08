@@ -1825,7 +1825,7 @@ param_c = avg;
 
 #define N_FILT 7
 volatile uint8_t filt = 0;
-int8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
+uint8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
 inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
 { 
@@ -2641,7 +2641,7 @@ uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 uint32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
 volatile uint8_t stepsize = STEP_1k;
-int8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
+uint8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
 
 void process_encoder_tuning_step(int8_t steps)
 {
