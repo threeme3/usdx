@@ -6,13 +6,13 @@
 
 #define VERSION   "1.02m"
 
-//#define QCX           1   // Disable for uSDX; enable to support QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 #define DEBUG           1   // Hardware diagnostics (disable this to save memory)
 #define KEYER           1   // CW keyer
 //#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
-//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for uSDX-Barb or using a si5351 break-out board)
-//#define SWAP_ROTARY   1   // Swap rotary direction (enable for uSDX-Barb)
+//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or using a si5351 break-out board)
+//#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
+//#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with alignment-feature)
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
 //#define TESTBENCH     1
 
@@ -124,6 +124,8 @@ void loadWPM (int wpm) // Calculate new time constants based on wpm value
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
+bool backlight = true;
+
 //FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be these at programming.
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
@@ -175,7 +177,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void post(){ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2); }  // Enable serial port - disable PD0, PD1; disable PC2
 #else
   void pre(){}
-  void post(){}
+  void post(){ if(backlight) PORTD |= 0x08; else PORTD &= ~0x08; /* backlight */}
 #endif
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); } // Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
@@ -915,7 +917,7 @@ public:
     I2C_SCL_HI();
     uint16_t i = 60000;
     for(;(!I2C_SCL_GET()) && i; i--);  // wait util slave release SCL to HIGH (meaning data valid), or timeout at 3ms
-    if(!i){ lcd.setCursor(0, 1); lcd.print(F("E07 I2C timeout")); }
+    //if(!i){ lcd.setCursor(0, 1); lcd.print(F("E07 I2C timeout")); }
     uint8_t data = I2C_SDA_GET();
     I2C_SCL_LO();
     return (data) ? mask : 0;
@@ -1492,6 +1494,7 @@ inline void _vox(uint8_t trigger)
 
 inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 { // source: [1] http://www-labs.iro.umontreal.ca/~mignotte/IFT2425/Documents/EfficientApproximationArctgFunction.pdf
+//#define _atan2(z)  (_UA/8  + _UA/22) * z  // very much of a simplification...not accurate at all, but fast
 #define _atan2(z)  (_UA/8 - _UA/22 * z + _UA/22) * z  //derived from (5) [1]
   //#define _atan2(z)  (_UA/8 - _UA/24 * z + _UA/24) * z  //derived from (7) [1]
   int16_t r;
@@ -2031,6 +2034,18 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
   }
 }
 
+inline int16_t _arctan3(int16_t q, int16_t i)
+{
+  #define __atan2(z)  (_UA/8  + _UA/22) * z  // very much of a simplification...not accurate at all, but fast
+  int16_t r;
+  if(abs(q) > abs(i))
+    r = _UA / 4 - __atan2(abs(i) / abs(q));        // arctan(z) = 90-arctan(1/z)
+  else
+    r = (i == 0) ? 0 : _atan2(abs(q) / abs(i));   // arctan(z)
+  r = (i < 0) ? _UA / 2 - r : r;                  // arctan(-z) = -arctan(z)
+  return (q < 0) ? -r : r;                        // arctan(-z) = -arctan(z)
+}
+
 static uint32_t absavg256 = 0;
 volatile uint32_t _absavg256 = 0;
 volatile int16_t i, q;
@@ -2050,7 +2065,7 @@ inline int16_t slow_dsp(int16_t ac)
       ac = ac - dc; }  // DC decoupling*/
   } else if(mode == FM){
     static int16_t z1;
-    int16_t z0 = arctan3(q, i);
+    int16_t z0 = _arctan3(q, i);
     ac = z0 - z1; // Differentiator
     z1 = z0;
     //ac = ac * (F_SAMP_RX/R) / _UA;  // =ac*3.5 -> skip
@@ -2207,7 +2222,7 @@ static int16_t i_s0za1, i_s0za2, i_s0zb0, i_s0zb1, i_s1za1, i_s1za2, i_s1zb0, i_
 static int16_t q_s0za1, q_s0za2, q_s0zb0, q_s0zb1, q_s1za1, q_s1za2, q_s1zb0, q_s1zb1;
 
 ///*
-#define M_SR  2  // CIC N=3
+#define M_SR  1  // CIC N=3
 void sdr_rx  (){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_1;  int16_t i_s1za0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + (i_s1za1 + i_s1zb0) * 3 + i_s1zb1); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
 void sdr_rx_2(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_3;  i_s0zb1 = i_s0zb0; i_s0zb0 = ac; }
 void sdr_rx_4(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_5;  i_s1zb1 = i_s1zb0; i_s1zb0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; }
@@ -2847,21 +2862,23 @@ float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't thin
   static uint8_t cnt;
   cnt++;
   if((cnt % 32) == 0){   // slowed down display slightly
+    lcd.noCursor(); 
     if(smode == 1){ // dBm meter
-      lcd.noCursor(); lcd.setCursor(9, 0); lcd.print((int16_t)dbm_val); lcd.print(F("dBm   "));
+      lcd.setCursor(9, 0); lcd.print((int16_t)dbm_val); lcd.print(F("dBm   "));
     }
     if(smode == 2){ // S-meter
       uint8_t s = (dbm_val < -63) ? ((dbm_val - -127) / 6) : (((uint8_t)(dbm_val - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
-      lcd.noCursor(); lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s);
+      lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s);
     }
     if(smode == 3){ // S-bar. converted to use dbm_val as well - previously just used dbm
       int8_t s = (dbm_val < -63) ? ((dbm_val - -127) / 6) : (((int8_t)(dbm_val - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
-      lcd.noCursor(); lcd.setCursor(12, 0);
+      lcd.setCursor(12, 0);
       char tmp[5];
       for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
       lcd.print(tmp);
     }
-    dbm_val = dbm_val - 2.0;  // Implement peak hold/decay for all meter types
+    if(!((mode == CW) && cw_event) && smode) stepsize_showcursor();
+    dbm_val = dbm_val - 2.0;  // Implement peak hold/decay for all meter types    
   }
   return dbm;
 }
@@ -3056,6 +3073,7 @@ void powerDown()
   PRR = 0xff;
 
   lcd.noDisplay();
+  PORTD &= ~0x08; // disable backlight
 
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   sleep_enable();
@@ -3117,20 +3135,18 @@ void printmenuid(uint8_t menuid)
 {
   static const char seperator[] = {'.', ' '};
   uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
-  for(int i = 0; i < 2; i++)
-  {
+  for(int i = 0; i < 2; i++){
     uint8_t id = ids[i];
-    if (id >= 10) {
+    if(id >= 10){
       id -= 10;
       lcd.print('1');
     }
     lcd.print(char('0' + id));
-
     lcd.print(seperator[i]);
   }
 }
 
-void printlabel(uint8_t action, uint8_t menuid, const __FlashStringHelper* label) {
+void printlabel(uint8_t action, uint8_t menuid, const __FlashStringHelper* label){
   if(action == UPDATE_MENU){
     lcd.setCursor(0, 0);
     printmenuid(menuid);
@@ -3142,9 +3158,9 @@ void printlabel(uint8_t action, uint8_t menuid, const __FlashStringHelper* label
   }
 }
 
-void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size) {
+void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
   uint8_t n;
-  switch(action) {
+  switch(action){
     case LOAD:
       for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
       break;
@@ -3198,11 +3214,11 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 31  // number of (visible) parameters
+#define N_PARAMS 32  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, BACKL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3240,8 +3256,9 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, 255, false); break;
     case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, 0, 255, false); break;
+    case BACKL:   paramAction(action, backlight, 0x84, F("Backlight"), offon_label, 0, 1, false); break;
 #ifdef DEBUG
-    case IQ_ADJ:  paramAction(action, rx_ph_q, 0x83, F("RX IQ Phase"), NULL, 45, 135, false); break;
+    case IQ_ADJ:  paramAction(action, rx_ph_q, 0x83, F("RX Phase adj."), NULL, 45, 135, false); break;
 #endif
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
@@ -3799,31 +3816,6 @@ void setup()
 #endif //KEYER
 }
 
-void print_char(uint8_t in){  // Print char in second line of display and scroll right.
-  for(int i = 0; i!= 15; i++) out[i] = out[i+1];
-  out[15] = in;
-  out[16] = '\0';
-  cw_event = true;
-}
-
-static char cat[20];  // temporary here
-static uint8_t nc = 0;
-static uint16_t cat_cmd = 0;
-
-void parse_cat(uint8_t in){   // TS480 CAT protocol:  https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
-  if(nc == 0) cat_cmd = in << 8;
-  if(nc == 1) cat_cmd += in;
-  if(in == ';'){  // end of cat command -> parse and process
-
-    switch(cat_cmd){
-      case 'I'<<8|'F': Serial.write("IF00010138000     +00000000002000000 ;"); lcd.setCursor(0, 0); lcd.print("IF"); break;
-    }
-    nc = 0;       // reset
-  } else {
-    if(nc < (sizeof(cat) - 1)) cat[nc++] = in; // buffer and count-up
-  }
-}
-
 void loop()
 {
 #ifdef CAT
@@ -3840,7 +3832,6 @@ void loop()
 
   if(menumode == 0){
     smeter();
-    if(!((mode == CW) && cw_event)) stepsize_showcursor();
   }
 
   if(cw_event){
@@ -4026,8 +4017,9 @@ void loop()
 #endif
           if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
 #ifdef MODE_CHANGE_RESETS
-          if(mode == CW) filt = 4; else filt = 0;  // resets filter (to most BW) on mode change
+          if(mode == CW) { filt = 4; nr  = 0; } else filt = 0;  // resets filter (to most BW) and NR on mode change
 #else
+          if(mode == CW) { nr  = 0; }
           prev_stepsize[prev_mode == CW] = stepsize; stepsize = prev_stepsize[mode == CW]; // backup stepsize setting for previous mode, restore previous stepsize setting for current selected mode; filter settings captured for either CQ or other modes.
           prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
 #endif
@@ -4174,7 +4166,7 @@ void loop()
           si5351.iqmsa = 0;  // enforce PLL reset
           // make more generic: 
           if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
-          if(mode == CW) filt = 4; else filt = 0;
+          if(mode == CW) { filt = 4; nr = 0; } else filt = 0;
         }
         if(menu == BAND){
           change = true;
