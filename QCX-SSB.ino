@@ -2457,8 +2457,14 @@ int analogSafeRead(uint8_t pin)
 }
 
 enum dsp_cap_t { ANALOG, DSP, SDR };
+#ifdef QCX
 uint8_t dsp_cap = 0;
 uint8_t ssb_cap = 0;
+#else
+ // force SSB and SDR capability
+const uint8_t ssb_cap = 1;
+const uint8_t dsp_cap = 2;
+#endif
 
 uint16_t analogSampleMic()
 {
@@ -3250,8 +3256,6 @@ void setup()
   //ssb_cap = 1; dsp_cap = 0;  // force SSB and standard QCX-RX capability
   //ssb_cap = 1; dsp_cap = 1;  // force SSB and DSP capability
   //ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
-#else
-  ssb_cap = 1; dsp_cap = 2;  // force SSB and SDR capability
 #endif  //QCX
 
   show_banner();
