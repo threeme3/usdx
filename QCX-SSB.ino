@@ -2082,10 +2082,11 @@ inline int16_t slow_dsp(int16_t ac)
     ac = process_agc(ac);
     ac = ac >> (16-volume);
   } else {
-    if (volume <= 9)    // if no AGC allow volume control to boost weak signals
+    ac = ac >> (16-volume);
+/*  if (volume <= 9)    // if no AGC allow volume control to boost weak signals
       ac = ac >> (9-volume);
     else
-      ac = ac << (volume-9); 
+      ac = ac << (volume-9); */
   }
   if(nr) ac = process_nr(ac);
 
@@ -3122,7 +3123,7 @@ void display_vfo(uint32_t f){
   }
   
   lcd.print(' '); lcd.print(mode_label[mode]); lcd_blanks();
-  lcd.setCursor(15, 1); lcd.print('R');
+  lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 }
 
 volatile uint8_t event;
@@ -3256,7 +3257,9 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SMETER:  paramAction(action, smode, 0x1A, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
+#ifdef QCX
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
+#endif
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("VOX Level"), NULL, 0, 255, false); break;
     case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
@@ -3266,7 +3269,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, 0, 255, false); break;
     case BACKL:   paramAction(action, backlight, 0x84, F("Backlight"), offon_label, 0, 1, false); break;
 #ifdef DEBUG
-    case IQ_ADJ:  paramAction(action, rx_ph_q, 0x83, F("RX Phase adj."), NULL, 45, 135, false); break;
+    case IQ_ADJ:  paramAction(action, rx_ph_q, 0x85, F("RX IQ Phase"), NULL, 45, 135, false); break;
 #endif
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
@@ -3790,6 +3793,7 @@ void setup()
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
+  vox = false;  // disable VOX on start-up for safety
 
   build_lut();
 
@@ -3829,11 +3833,27 @@ void setup()
 #endif //KEYER
 }
 
+uint8_t vox_tx = 0;
+uint16_t vox_cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
+
 void loop()
 {
 #ifdef CAT
   rxCATcmd();
 #endif
+
+  if((vox) && ((mode == LSB) || (mode == USB))){  // If VOX enabled, then take mic samples and feed ssb processing function, to derive amplitude, and potentially detect cross vox_threshold to detect a TX or RX event: this is expressed in tx variable
+    if(!vox_tx) ssb((analogSampleMic() - 512) >> MIC_ATTEN); vox_cnt++;
+    if((tx) && !(vox_tx) && (vox_cnt > 32)){
+      vox_tx = 1;
+      vox_cnt = 0;
+      switch_rxtx(1);  // there is modulation: put transceiver in TX
+    }
+    if((!tx) && (vox_tx)){
+      vox_tx = 0;
+      switch_rxtx(0);  // there is no modulation: put transceiver in RX
+    }
+  }
 
 #ifndef SIMPLE_RX
   delay(1);
@@ -4087,62 +4107,20 @@ void loop()
         } //
         #endif //SIMPLE_RX
 
-        vox = 1;
+        vox = 1;  // simple VOX
         //int16_t x = 0;
         lcd.setCursor(15, 1); lcd.print('V');
-
-#define SIMPLE_VOX  1
-#ifdef SIMPLE_VOX
-        uint8_t _tx = 0;
         uint16_t cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
         for(; !digitalRead(BUTTONS);){
-          if(!_tx) ssb((analogSampleMic() - 512) >> MIC_ATTEN); cnt++;
-          if((tx) && !(_tx) && (cnt > 32)){
-            _tx = 1;
+          ssb((analogSampleMic() - 512) >> MIC_ATTEN); cnt++;
+          if((tx) && (cnt > 32)){
             cnt = 0;
             switch_rxtx(1);
-          }
-          if((!tx) && (_tx)){
-            _tx = 0;
-            switch_rxtx(0);
-          }
-          wdt_reset();
-        }
-#else  // SIMPLE_VOX
-        uint16_t cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
-        //uint32_t next = 0;
-        for(; !digitalRead(BUTTONS);){ // while in VOX mode
-          //if(micros() < next) continue;   // synchronise with sample samplerate as F_SAMP_TX
-          //next = micros() + 1000000/(F_SAMP_TX);
-          int16_t in = (analogSampleMic() - 512) >> MIC_ATTEN;
-
-          static int16_t dc;
-          int16_t i, q;
-          uint8_t j;
-          static int16_t v[16];
-          for(j = 0; j != 15; j++) v[j] = v[j + 1];
-          dc += (in - dc) / 2;
-          v[15] = in - dc;     // DC decoupling
-          //dc = in;  // this is actually creating a low-pass filter
-          i = v[7];
-          q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
-          cnt++;
-          
-          uint16_t _amp = magn(i, q);  // attenuate because this loop samples faster than actual TX routine, so compensate
-          //x = max(x, abs(v[15]) );
-          //lcd.setCursor(0, 1); lcd.print(x); lcd_blanks();
-          //lcd.setCursor(0, 1); lcd.print(_amp); lcd_blanks();
-          if((_amp > vox_thresh) && (cnt > 32)){            // workaround for RX noise leakage to AREF
-            cnt = 0;
-            switch_rxtx(1);
-            tx = 255; //kick
             for(; tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
             switch_rxtx(0);
-            continue;  // skip the rest for the moment
-          }    
+          }
           wdt_reset();
         }
-#endif
         vox = 0;
       }
         lcd.setCursor(15, 1); lcd.print('R');

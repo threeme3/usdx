@@ -62,7 +62,7 @@ This modification consists of a few component changes and wires:
 - **Power-efficiency**: change R48 (1k); wire D3 anode to GND, wire D3 pads; optionally apply PA bias mod <sup>[note 3](#note3)</sup>. Power-efficient LPFs are: C28(remove); L1(0R); Add Cx parallel to L2; for C27,C26,C25,L3,L2,Cx use respectively: 80M:680p,1500p,680p,2.8uH,3.4uH,100p; 40M:330p,680p,330p,1.4uH,1.7uH,68p; 30M:220p,560p,220p,.73uH,1.1uH,47p; 20M:150p,330p,150p,.62uH,.97uH,22p; 15M:100p,220p,100p,.35uH,.73uH; 10M:68p,150p,68p,.31uH,.47uH,16p, 6M:TBD.
 --->
 
-**Firmware**: download [latest released hex file] and install with [standard QCX firmware upload procedure] (see also <sup>[note 1](#note1)</sup>).
+**Firmware**: download [latest released hex file] and install with [standard QCX firmware upload procedure] (see also <sup>[note 1](#note1)</sup>). Default Arduino Uno fuse (burn bootloader) and clock settings (16MHz) are used.
 
 Below the (Rev4) layout with components marked in red that needs to be changed; gray components must be installed and blank components may be omitted and some must be remove (see above):
 ![layout](layout.png)
@@ -85,8 +85,8 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | ------------------- | -------------------------------------------- | ------ |
 | 1.1 Volume          | Audio level (0..16) & power-off/on | **E +turn** |
 | 1.2 Mode            | Modulation (LSB, USB, CW, AM, FM) | **R** |
-| 1.3 Filter BW       | Audio passband (Full, 300..4000, 300..2500, 300..1700, 200, 100 Hz) | **R double** |
-| 1.4 Band            | Band-switch to pre-defined FT8 freqs (80,60,40,30,20,17,15,12,10,6,4m) | **E double** |
+| 1.3 Filter BW       | Audio passband (Full, 300..3000, 300..2400, 300..1800, 500, 200, 100, 50 Hz) | **R double** |
+| 1.4 Band            | Band-switch to pre-defined CW/FT8 freqs (80,60,40,30,20,17,15,12,10,6m) | **E double** |
 | 1.5 Tuning Rate     | Tuning step size 10M, 1M, 0.5M, 100k, 10k, 1k, 0.5k, 100, 10, 1 | **E or E long** |
 | 1.6 AGC             | Automatic Gain Control (ON, OFF) | |
 | 1.7 NR              | Noise-reduction level (0-8), load-pass & smooth | |
@@ -94,21 +94,28 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 1.9 ATT2            | Digital Attenuator in CIC-stage (0-16) in steps of 6dB | |
 | 1.10 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
 | 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
-| 2.2 CW Tone         | CW Filter+Side-tone (300, 700) | |
+| 2.2 CW Tone         | CW Filter+Side-tone (600, 700) | |
 | 2.3 CW Offset       | CW RX Offset (use to align with CW Filter Tone) | |
-| 3.1 VOX             | Voice Operated Xmit (ON, OFF) | **R long** | |
+| 3.1 VOX             | Voice Operated Xmit (ON, OFF) | | |
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
 | 3.4 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
 | 8.1 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
 | 8.2 PA Bias min     | KEY_OUT PWM level (0-255) for representing   0% RF output | |
 | 8.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
+| 8.4 Backlight       | Display backlight (ON, OFF) | |
+| 8.5 RX Phase Adj    | RX I/Q phase offset in degrees (45..135) | |
 | 9.1 Sample rate     | for debugging, testing and experimental purpose | |
 | 9.2 CPU load        | for debugging, testing and experimental purpose | |
 | 9.3 Param A         | for debugging, testing and experimental purpose | |
 | 9.4 Param B         | for debugging, testing and experimental purpose | |
 | 9.5 Param C         | for debugging, testing and experimental purpose | |
-| main                | Frequency (20kHz..99MHz) | **turn** |
+| 10.1 Keyer speed    | CW Keyer speed in Paris-WPM (0..35) | |
+| 10.2 Keyer mode     | Type of keyer (Iambic-A, -B, Straight) | |
+| 10.3 Keyer swap     | to swap keyer DIH, DAH inputs (ON, OFF) | |
+| 10.4 Practice       | to disable TX for practice purposes (ON, OFF) | |
+| power-up            | Reset to factory settings | **E long** |
+| main                | Tune frequency (20kHz..99MHz) | **turn** |
 | main                | Quick menu | **L +turn** |
 | main                | Menu enter | **L** |
 | menu                | Menu back | **R** |
@@ -122,7 +129,7 @@ There is a menu available that can be accessed by a short left press. With the e
 
 For receive, by default an AGC is enabled. This increases the volume when there are weak signals and decreases for strong signals. This is good for SSB signals but can be annoying for CW operation. The AGC can be turned off in the menu, this makes the receiver less noisy but require more manual volume change. To further reduce the noise, a noise-reduction function can be enabled in the menu with the NR parameter. To use the available dynamic range optimally, you can attenuate incoming signal by enabling a front-end attenuator with "ATT" parameter. Especially on frequencies 3.5-7 MHz the atmospheric noise levels are much higher, so you can increase the receiver performance by adding attenuation (e.g 13dB) such that the noise-floor is still audible. To calibrate the transceiver frequency, you can tune to a calibrated signal source (e.g. WWV on 10 MHz) and zero-beat the signal by changing "Ref freq" parameter; alternatively you can measure the XTal frequency with a counter and set the parameter. A S-meter of choice (dBm, S, S-bar) can be selected with the S-meter parameter. Selecting an S-bar, shows a signal-strength bar where each tick represents a S-point (6dB).
 
-For SSB voice operation, connect a microphone to the paddle jack, a PTT or onboard "key" press will bring the trasnceiver into transmit. With the "TX Drive" parameter, it is possible to set the mdulation depth or PA drive, it is default set to 4 increasing it gives a bit more punch (compression for SSB). Setting it to a value 8 in SSB means that the SSB modulation is transmitted with a constant amplitude (possibly reducing RFI but at the cost of audio quality). To monitor your own modulation, you can temporarily increase MOX parameter. A long press on the right button enters the transceiver in VOX operation, the VOX sensitivity can be configured in the menu with "VOX threshold" parameter. The PA Bias min and max parameters sets the working range of the PWM envelope signal, a range of 0-255 is the full range which is fine if you use a key-shaping circuit for envelope control, but when you directly bias the PA MOSFETs (<sup>[note 3](#note3)</sup>) with the PWM signal then you specifiy the optimal working range from just above the MOSFET threshold level to the maximum peak power you would like to use (0-180 are good values on my QCX).
+For SSB voice operation, connect a microphone to the paddle jack, a PTT or onboard "key" press will bring the trasnceiver into transmit. With the "TX Drive" parameter, it is possible to set the mdulation depth or PA drive, it is default set to 4 increasing it gives a bit more punch (compression for SSB). Setting it to a value 8 in SSB means that the SSB modulation is transmitted with a constant amplitude (possibly reducing RFI but at the cost of audio quality). To monitor your own modulation, you can temporarily increase MOX parameter. Setting menu item "VOX" to ON, enters the transceiver in Voice-On-Xmit operation (in TX mode as soon audio is detected), the VOX sensitivity can be configured in the menu with "VOX threshold" parameter. The PA Bias min and max parameters sets the working range of the PWM envelope signal, a range of 0-255 is the full range which is fine if you use a key-shaping circuit for envelope control, but when you directly bias the PA MOSFETs (<sup>[note 3](#note3)</sup>) with the PWM signal then you specifiy the optimal working range from just above the MOSFET threshold level to the maximum peak power you would like to use (0-180 are good values on my QCX).
 
 For FT8 (and any other digital) operation, select one of the pre-programmed FT8 bands by double press the rotary encoder, connect the headphone jack to sound card microphone jack, sound card speaker jack to microphone jack, and give a long press on right button to enter VOX mode. Adjust the volume to a minimum and start your favorite FT8 application (JTDX for instance). The sensitivity of the VOX can be set in the "VOX threshold" parameter. 
 
