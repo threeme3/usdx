@@ -4086,9 +4086,25 @@ void loop()
           //for(;micros() < next;);  next = micros() + 16;   // sync every 1000000/62500=16ms (or later if missed)
         } //
         #endif //SIMPLE_RX
-               
+
+        vox = 1;
         //int16_t x = 0;
         lcd.setCursor(15, 1); lcd.print('V');
+
+#define SIMPLE_VOX  1
+#ifdef SIMPLE_VOX
+        uint16_t cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
+        for(; !digitalRead(BUTTONS);){
+          ssb((analogSampleMic() - 512) >> MIC_ATTEN); cnt++;
+          if((tx) && (cnt > 32)){
+            cnt = 0;
+            switch_rxtx(1);
+            for(; tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
+            switch_rxtx(0);
+          }
+          wdt_reset();
+        }
+#else  // SIMPLE_VOX
         uint16_t cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
         //uint32_t next = 0;
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
@@ -4115,14 +4131,15 @@ void loop()
           if((_amp > vox_thresh) && (cnt > 32)){            // workaround for RX noise leakage to AREF
             cnt = 0;
             switch_rxtx(1);
-            vox = 1; tx = 255; //kick
+            tx = 255; //kick
             for(; tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
             switch_rxtx(0);
-            vox = 0;
             continue;  // skip the rest for the moment
           }    
           wdt_reset();
         }
+#endif
+        vox = 0;
       }
         lcd.setCursor(15, 1); lcd.print('R');
         break;
