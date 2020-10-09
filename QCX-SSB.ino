@@ -3159,6 +3159,14 @@ void fatal(const __FlashStringHelper* msg, int value = 0, char unit = '\0') {
   wdt_reset();
 }
 
+//refresh LUT based on pwm_min, pwm_max
+void build_lut()
+{
+  for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
+    lut[i] = (i * (pwm_max - pwm_min)) / 255 + pwm_min;
+    //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
+}
+
 void setup()
 {
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
@@ -3403,8 +3411,7 @@ void setup()
 
   if(!dsp_cap) volume = 0;  // mute volume for unmodified QCX receiver
 
-  for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
-    lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
+  build_lut();
 
   show_banner();  // remove release number
 
@@ -3835,9 +3842,7 @@ void loop()
           change = true;
         }
         if((menu == PWM_MIN) || (menu == PWM_MAX)){
-          for(uint16_t i = 0; i != 256; i++)    // refresh LUT based on pwm_min, pwm_max
-            lut[i] = (float)i / ((float)255 / ((float)pwm_max - (float)pwm_min)) + pwm_min;
-            //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
+          build_lut();
         }
         if(menu == CWTONE){
           if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] : tones[1]; paramAction(SAVE, CWOFF); }
