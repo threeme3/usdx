@@ -1744,7 +1744,7 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 34722
 //#define F_SAMP_RX 31250
 //#define F_SAMP_RX 28409
-#define F_ADC_CONV (192307/2)  // M0PUB: was 192307/1, but as Guido noted this produces clicks in audio stream. Slower ADC clock cures this.
+#define F_ADC_CONV (192307/1)  // M0PUB: was 192307/1, but as Guido noted this produces clicks in audio stream. Slower ADC clock cures this.
 
 volatile bool agc = true;
 volatile uint8_t nr = 0;
@@ -2831,9 +2831,11 @@ uint16_t analogSampleMic()
   noInterrupts();
   if(dsp_cap == SDR) digitalWrite(RX, LOW);  // disable RF input, only for SDR mod
   //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
+  uint8_t oldmux = ADMUX;
   ADMUX = admux[2];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
+  ADMUX = oldmux;
   if(dsp_cap == SDR) digitalWrite(RX, HIGH);  // enable RF input, only for SDR mod
   //si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   adc = ADC;
@@ -4087,9 +4089,13 @@ void loop()
                
         //int16_t x = 0;
         lcd.setCursor(15, 1); lcd.print('V');
+        uint16_t cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
+        //uint32_t next = 0;
         for(; !digitalRead(BUTTONS);){ // while in VOX mode
-          
-          int16_t in = analogSampleMic() - 512;
+          //if(micros() < next) continue;   // synchronise with sample samplerate as F_SAMP_TX
+          //next = micros() + 1000000/(F_SAMP_TX);
+          int16_t in = (analogSampleMic() - 512) >> MIC_ATTEN;
+
           static int16_t dc;
           int16_t i, q;
           uint8_t j;
@@ -4100,19 +4106,18 @@ void loop()
           //dc = in;  // this is actually creating a low-pass filter
           i = v[7];
           q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
-        
-          uint16_t _amp = magn(i, q);
+          cnt++;
+          
+          uint16_t _amp = magn(i, q);  // attenuate because this loop samples faster than actual TX routine, so compensate
           //x = max(x, abs(v[15]) );
           //lcd.setCursor(0, 1); lcd.print(x); lcd_blanks();
           //lcd.setCursor(0, 1); lcd.print(_amp); lcd_blanks();
-          if(_amp > vox_thresh){            // workaround for RX noise leakage to AREF  
-            for(j = 0; j != 16; j++) v[j] = 0;  // clean-up
+          if((_amp > vox_thresh) && (cnt > 32)){            // workaround for RX noise leakage to AREF
+            cnt = 0;
             switch_rxtx(1);
             vox = 1; tx = 255; //kick
-            delay(1);
             for(; tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
             switch_rxtx(0);
-            delay(1);
             vox = 0;
             continue;  // skip the rest for the moment
           }    
