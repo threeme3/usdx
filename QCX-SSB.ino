@@ -2887,8 +2887,8 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
     case DRIVE:   paramAction(action, drive, 0x34, F("TX Drive"), NULL, 0, 8, false); break;
     case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
-    case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, 255, false); break;
-    case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, 0, 255, false); break;
+    case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
+    case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, pwm_min + 1, 255, false); break;
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
