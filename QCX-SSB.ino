@@ -8,7 +8,7 @@
 
 #define QCX             1   // When not using a uSDX: QCX specific features (QCX, QCX-SSB, QCX-DSP with alignment-feature)  (disable this to safe memory)
 
-#define DEBUG           1   // Hardware diagnostics (disable this to safe memory)
+#define DEBUG           1   // Hardware diagnostics (disable this to save memory)
 #define KEYER           1   // CW keyer
 //#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
@@ -1418,7 +1418,6 @@ void set_lpf(uint8_t f){} // dummy
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 //#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
 
-#define DEBUG  1   // enable testing and diagnostics features
 #ifdef DEBUG
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
