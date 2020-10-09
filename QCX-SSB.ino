@@ -4093,13 +4093,17 @@ void loop()
 
 #define SIMPLE_VOX  1
 #ifdef SIMPLE_VOX
+        uint8_t _tx = 0;
         uint16_t cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
         for(; !digitalRead(BUTTONS);){
-          ssb((analogSampleMic() - 512) >> MIC_ATTEN); cnt++;
-          if((tx) && (cnt > 32)){
+          if(!_tx) ssb((analogSampleMic() - 512) >> MIC_ATTEN); cnt++;
+          if((tx) && !(_tx) && (cnt > 32)){
+            _tx = 1;
             cnt = 0;
             switch_rxtx(1);
-            for(; tx && !digitalRead(BUTTONS); ) wdt_reset(); // while in tx triggered by vox
+          }
+          if((!tx) && (_tx)){
+            _tx = 0;
             switch_rxtx(0);
           }
           wdt_reset();
