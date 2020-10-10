@@ -794,6 +794,7 @@ volatile int8_t encoder_step = 0;
 static uint8_t last_state;
 ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
   //noInterrupts();
+  PCMSK2 &= ~((1 << PCINT22) | (1 << PCINT23));  // mask ROT_A, ROT_B interrupts
   switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
 //#define ENCODER_ENHANCED_RESOLUTION  1
 #ifdef ENCODER_ENHANCED_RESOLUTION // Option: enhance encoder from 24 to 96 steps/revolution, see: appendix 1, https://www.sdr-kits.net/documents/PA0KLT_Manual.pdf
@@ -804,6 +805,7 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
     case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;  
 #endif
   }
+  PCMSK2 |= (1 << PCINT22) | (1 << PCINT23);  // allow ROT_A, ROT_B interrupts
   //interrupts();
 }
 void encoder_setup()
@@ -1744,7 +1746,7 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 34722
 //#define F_SAMP_RX 31250
 //#define F_SAMP_RX 28409
-#define F_ADC_CONV (192307/1)  // M0PUB: was 192307/1, but as Guido noted this produces clicks in audio stream. Slower ADC clock cures this.
+#define F_ADC_CONV (192307/1)  //was 192307/1, but as noted this produces clicks in audio stream. Slower ADC clock cures this (but is a problem for VOX when sampling mic-input simulatanously).
 
 volatile bool agc = true;
 volatile uint8_t nr = 0;
@@ -1793,20 +1795,20 @@ inline int16_t process_agc(int16_t in)
   static bool small = true;
   int16_t out;
 
-  if (centiGain >= 128)
+  if(centiGain >= 128)
     out = (centiGain >> 5) * in;         // net gain >= 1
   else
     out = (centiGain >> 2) * (in >> 3);  // net gain < 1
   out >>= 2;
-  
-  if (HI(abs(out)) > HI(1536)) {
+
+  if(HI(abs(out)) > HI(1536)){
     centiGain -= (centiGain >> 4);       // Fast attack time when big signal encountered (relies on CentiGain >= 16)
   } else {
-    if (HI(abs(out)) > HI(1024))
+    if(HI(abs(out)) > HI(1024))
       small = false;
-    if (--decayCount == 0) {             // But slow ramp up of gain when signal disappears
-      if (small) {                       // 400 samples below lower threshold - increase gain
-        if (centiGain < (INT16_MAX-(INT16_MAX >> 4)))
+    if(--decayCount == 0){               // But slow ramp up of gain when signal disappears
+      if(small){                         // 400 samples below lower threshold - increase gain
+        if(centiGain < (INT16_MAX-(INT16_MAX >> 4)))
           centiGain += (centiGain >> 4);
         else
           centiGain = INT16_MAX;
@@ -1815,7 +1817,6 @@ inline int16_t process_agc(int16_t in)
       small = true;
     }
   }
-                       
   return out;
 }
 
@@ -2210,6 +2211,7 @@ void process(int16_t i_ac2, int16_t q_ac2)
   interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing
   ozd2 = od1;
   ozd1 = ac3;
+  int16_t qh;
   {
     q_ac2 >>= att2;  // digital gain control
     static int16_t v[14];  // Process Q (down-sampled) samples
@@ -2255,12 +2257,11 @@ void sdr_rx_7(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx  ;  int16_t q
 static int16_t ozi1, ozi2;
 
 inline int16_t sdr_rx_common_q(){
-  ADMUX = admux[0]; ADCSRA |= (1 << ADSC); return ADC - 511;
-///*
-  ozi2 = ozi1 + ozi2;          // Integrator section - needed? - yes
+  ADMUX = admux[0]; ADCSRA |= (1 << ADSC); int16_t ac = ADC - 511;
+/*ozi2 = ozi1 + ozi2;          // Integrator section - needed?
   ozi1 = ocomb + ozi1;
-  OCR1AL = min(max((ozi2>>5) + 128, 0), 255);
-//*/
+  OCR1AL = min(max((ozi2>>5) + 128, 0), 255); */
+  return ac;
 }
 
 inline int16_t sdr_rx_common_i()
@@ -2861,7 +2862,7 @@ float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't thin
   float rms = _absavg256 / 256.0; //sqrt(256.0);
   
   //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);   // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 8.0 * 500.0 * 0.639 / 0.707);   // updated version: 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
+  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 8.0 * 500.0 * 1.414 / 0.707);   // updated version: 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
   else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
   float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
 
@@ -2915,12 +2916,19 @@ void start_rx()
   TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM
 }
 
+int16_t _centiGain = 0;
+
 void switch_rxtx(uint8_t tx_enable){
   tx = tx_enable;
 
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
+  if(tx_enable){
+    _centiGain = centiGain;  // backup AGC setting
+  } else {
+    centiGain = _centiGain;  // restore AGC setting
+  }
   if(tx_enable){
     switch(mode){
       case USB:
@@ -3182,7 +3190,7 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
   }
 }
 
-template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
+template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
@@ -3207,6 +3215,7 @@ template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, 
         break;
   }
 }
+
 uint32_t save_event_time = 0;
 uint32_t sec_event_time = 0;
 
@@ -3265,8 +3274,8 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
     case DRIVE:   paramAction(action, drive, 0x34, F("TX Drive"), NULL, 0, 8, false); break;
     case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
-    case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, 255, false); break;
-    case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, 0, 255, false); break;
+    case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
+    case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, pwm_min, 255, false); break;
     case BACKL:   paramAction(action, backlight, 0x84, F("Backlight"), offon_label, 0, 1, false); break;
 #ifdef DEBUG
     case IQ_ADJ:  paramAction(action, rx_ph_q, 0x85, F("RX IQ Phase"), NULL, 45, 135, false); break;
@@ -4277,7 +4286,7 @@ void loop()
 
     set_lpf(freq / 1000000UL);
 
-    noInterrupts();
+    //noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
       si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
@@ -4286,7 +4295,7 @@ void loop()
       si5351.freq(freq, rx_ph_q, 0/*90, 0*/);  // RX in LSB
     else
       si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
-    interrupts();
+    //interrupts();
   }
   
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
