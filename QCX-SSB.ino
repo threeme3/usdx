@@ -2806,7 +2806,7 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size) {
   }
 }
 
-template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
+template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
@@ -2831,6 +2831,7 @@ template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, 
         break;
   }
 }
+
 uint32_t save_event_time = 0;
 uint32_t sec_event_time = 0;
 
