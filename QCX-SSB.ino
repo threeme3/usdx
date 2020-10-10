@@ -842,7 +842,7 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
   enc.event();
 }*/
 
-class I2C {
+class I2C_Soft {
 public:
   #define I2C_DELAY   4    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
   #define I2C_DDR DDRC     // Pins for the I2C bit banging
@@ -858,13 +858,13 @@ public:
   #define I2C_SCL_HI() I2C_DDR &= ~I2C_SCL; DELAY(I2C_DELAY);
   #define I2C_SCL_LO() I2C_DDR |=  I2C_SCL; DELAY(I2C_DELAY);
 
-  I2C(){
+  I2C_Soft(){
     I2C_PORT &= ~( I2C_SDA | I2C_SCL );
     I2C_SCL_HI();
     I2C_SDA_HI();
     suspend();
   }
-  ~I2C(){
+  ~I2C_Soft(){
     I2C_PORT &= ~( I2C_SDA | I2C_SCL );
     I2C_DDR &= ~( I2C_SDA | I2C_SCL );
   }  
@@ -960,6 +960,51 @@ public:
 };
 
 #define log2(n) (log(n) / log(2))
+
+// Hardware based I2C implementation
+class I2C {
+public:
+  I2C(){
+    TWSR=0x00; //set presca1er bits to zero
+    TWBR=0x03; //SCL frequency is 727K for 16Mhz
+    TWCR=0x04; //enab1e TWI module
+  }
+
+  ~I2C()
+  {
+  }
+
+  inline void start()
+  {
+    TWCR = ((1<<TWINT) | (1<<TWSTA) | (1<<TWEN));
+    while (!(TWCR & (1<<TWINT)));
+  }
+
+  inline void stop()
+  {
+    TWCR = ((1<< TWINT) | (1<<TWEN) | (1<<TWSTO));
+    DELAY(100);
+  }
+
+  inline void SendByte(uint8_t data)
+  {
+    TWDR = data ;
+    TWCR = ((1<< TWINT) | (1<<TWEN));
+    while (!(TWCR & (1 <<TWINT)));
+  }
+
+  inline uint8_t RecvByte(bool last)
+  {
+    TWCR = ((1<< TWINT) | (1<<TWEN) | ((last?0:1)<<TWEA));
+    while ( !(TWCR & (1 <<TWINT)));
+    return TWDR;
+  }
+
+  void begin(){};
+  void beginTransmission(uint8_t addr){ start(); SendByte(addr << 1);  };
+  bool write(uint8_t byte){ SendByte(byte); return 1; };
+  uint8_t endTransmission(){ stop(); return 0; };
+};
 
 // /*
 I2C i2c;
