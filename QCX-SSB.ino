@@ -117,7 +117,7 @@ void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 
 void loadWPM (int wpm) // Calculate new time constants based on wpm value
 {
-    ditTime = 1200/wpm;
+    ditTime = 1.25*1200/wpm;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
 }
 #endif //KEYER
 
@@ -1746,7 +1746,7 @@ volatile bool cw_event = false;
 //#define F_SAMP_RX 34722
 //#define F_SAMP_RX 31250
 //#define F_SAMP_RX 28409
-#define F_ADC_CONV (192307/1)  //was 192307/1, but as noted this produces clicks in audio stream. Slower ADC clock cures this (but is a problem for VOX when sampling mic-input simulatanously).
+#define F_ADC_CONV (192307/2)  //was 192307/1, but as noted this produces clicks in audio stream. Slower ADC clock cures this (but is a problem for VOX when sampling mic-input simulatanously).
 
 volatile bool agc = true;
 volatile uint8_t nr = 0;
@@ -2831,6 +2831,8 @@ uint16_t analogSampleMic()
 {
   uint16_t adc;
   noInterrupts();
+  ADCSRA = (1 << ADEN) | ((uint8_t)log2((uint8_t)(F_CPU / 13 / (192307/1)))) & 0x07;  // hack: faster conversion rate necessary for VOX
+
   if(dsp_cap == SDR) digitalWrite(RX, LOW);  // disable RF input, only for SDR mod
   //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
   uint8_t oldmux = ADMUX;
@@ -2852,43 +2854,37 @@ volatile int32_t freq = 7074000;
 // So we multiply by 0.707/0.639 in an attempt to roughly compensate, although that only really works if the input
 // is a sine wave
 uint8_t smode = 1;
-float dbm_val = -140.0;
+uint32_t max_absavg256 = 0;
+float dbm;
 
-float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't think that is correct?
+float smeter(float ref = 0)
 {
-  if(smode == 0){ // none, no s-meter
-    return 0;
-  }
-  float rms = _absavg256 / 256.0; //sqrt(256.0);
-  
-  //if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 4.0 * 100.0 * 40.0);   // 2 rx gain stages: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * audio gain]
-  if(dsp_cap == SDR) rms = (float)rms * 1.1 * (float)(1 << att2) / (1024.0 * (float)R * 8.0 * 500.0 * 1.414 / 0.707);   // updated version: 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
-  else               rms = (float)rms * 5.0 * (float)(1 << att2) / (1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
-  float dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
-
-  dbm_val = max(dbm_val, dbm); // peak
-  dbm_val = dbm;
+  max_absavg256 = max(_absavg256, max_absavg256); // peak
 
   static uint8_t cnt;
-  cnt++;
-  if((cnt % 32) == 0){   // slowed down display slightly
+  if((smode) &&((++cnt % 32) == 0)){   // slowed down display slightly
+    float rms;
+    if(dsp_cap == SDR) rms = (float)max_absavg256 * 1.1 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 8.0 * 500.0 * 1.414 / 0.707);   // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
+    else               rms = (float)max_absavg256 * 5.0 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
+    dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
+
     lcd.noCursor(); 
     if(smode == 1){ // dBm meter
-      lcd.setCursor(9, 0); lcd.print((int16_t)dbm_val); lcd.print(F("dBm   "));
+      lcd.setCursor(9, 0); lcd.print((int16_t)dbm); lcd.print(F("dBm   "));
     }
     if(smode == 2){ // S-meter
-      uint8_t s = (dbm_val < -63) ? ((dbm_val - -127) / 6) : (((uint8_t)(dbm_val - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
+      uint8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (((uint8_t)(dbm - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
       lcd.setCursor(14, 0); if(s < 10){ lcd.print('S'); } lcd.print(s);
     }
-    if(smode == 3){ // S-bar. converted to use dbm_val as well - previously just used dbm
-      int8_t s = (dbm_val < -63) ? ((dbm_val - -127) / 6) : (((int8_t)(dbm_val - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
+    if(smode == 3){ // S-bar
+      int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (((uint8_t)(dbm - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
       lcd.setCursor(12, 0);
       char tmp[5];
       for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
       lcd.print(tmp);
     }
     if(!((mode == CW) && cw_event) && smode) stepsize_showcursor();
-    dbm_val = dbm_val - 2.0;  // Implement peak hold/decay for all meter types    
+    max_absavg256 /= 2;  // Implement peak hold/decay for all meter types    
   }
   return dbm;
 }
@@ -3217,7 +3213,6 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
 }
 
 uint32_t save_event_time = 0;
-uint32_t sec_event_time = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
 #ifdef QCX
@@ -3284,11 +3279,11 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
 #ifdef DEBUG
-    case SR:      paramAction(action, sr, 0x91, F("Sample rate"), NULL, -2147483648, 2147483647, false); break;
-    case CPULOAD: paramAction(action, cpu_load, 0x92, F("CPU load %"), NULL, -2147483648, 2147483647, false); break;
-    case PARAM_A: paramAction(action, param_a, 0x93, F("Param A"), NULL, 0, 65535, false); break;
-    case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, -32768, 32767, false); break;
-    case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, -32768, 32767, false); break;
+    case SR:      paramAction(action, sr, 0x91, F("Sample rate"), NULL, INT32_MIN, INT32_MAX, false); break;
+    case CPULOAD: paramAction(action, cpu_load, 0x92, F("CPU load %"), NULL, INT32_MIN, INT32_MAX, false); break;
+    case PARAM_A: paramAction(action, param_a, 0x93, F("Param A"), NULL, UINT16_MAX, UINT16_MAX, false); break;
+    case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, INT16_MIN, INT16_MAX, false); break;
+    case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, INT16_MIN, INT16_MAX, false); break;
 #endif
 #ifdef KEYER
     case KEY_WPM:  paramAction(action, keyer_speed,   0xA1, F("Keyer speed"), NULL, 0, 35, false); break;
@@ -3752,7 +3747,7 @@ void setup()
   }
   
   // Measure I2C Bus speed for Bulk Transfers
-  si5351.freq(freq, 0, 90);
+  //si5351.freq(freq, 0, 90);
   wdt_reset();
   t0 = micros();
   for(i = 0; i != 1000; i++) si5351.SendPLLBRegisterBulk();
@@ -3763,7 +3758,7 @@ void setup()
   }
 
   // Measure I2C Bit-Error Rate (BER); should be error free for a thousand random bulk PLLB writes
-  si5351.freq(freq, 0, 90);
+  //si5351.freq(freq, 0, 90);
   wdt_reset();
   uint16_t i2c_error = 0;  // number of I2C byte transfer errors
   for(i = 0; i != 1000; i++){
@@ -3864,13 +3859,9 @@ void loop()
     }
   }
 
-#ifndef SIMPLE_RX
-  delay(1);
-#endif
-
-  if (millis() > sec_event_time) {
-    sec_event_time = millis() + 1000;  // schedule time next second
-  }
+//#ifndef SIMPLE_RX
+//  delay(1);
+//#endif
 
   if(menumode == 0){
     smeter();
@@ -4286,7 +4277,6 @@ void loop()
 
     set_lpf(freq / 1000000UL);
 
-    //noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
       si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
@@ -4295,7 +4285,6 @@ void loop()
       si5351.freq(freq, rx_ph_q, 0/*90, 0*/);  // RX in LSB
     else
       si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
-    //interrupts();
   }
   
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
