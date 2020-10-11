@@ -2060,8 +2060,7 @@ volatile int16_t i, q;
 inline int16_t slow_dsp(int16_t ac)
 {
   static uint8_t absavg256cnt;
-  if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0;
-  } else absavg256 += abs(ac);
+  if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);
 
   if(mode == AM) {
     ac = magn(i, q);
@@ -2740,7 +2739,7 @@ void timer2_stop()
 //
 // Feel free to replace it with your own custom radio implementation :-)
 
-char blanks[] = "        ";
+char blanks[] = "         ";
 #define lcd_blanks() lcd.print(blanks);
 
 #define N_FONTS  8
@@ -2861,8 +2860,8 @@ float smeter(float ref = 0)
 {
   max_absavg256 = max(_absavg256, max_absavg256); // peak
 
-  static uint8_t cnt;
-  if((smode) &&((++cnt % 32) == 0)){   // slowed down display slightly
+  static uint16_t cnt;
+  if((smode) &&((++cnt % 2048) == 0)){   // slowed down display slightly
     float rms;
     if(dsp_cap == SDR) rms = (float)max_absavg256 * 1.1 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 8.0 * 500.0 * 1.414 / 0.707);   // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
     else               rms = (float)max_absavg256 * 5.0 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
@@ -2870,7 +2869,7 @@ float smeter(float ref = 0)
 
     lcd.noCursor(); 
     if(smode == 1){ // dBm meter
-      lcd.setCursor(9, 0); lcd.print((int16_t)dbm); lcd.print(F("dBm   "));
+      lcd.setCursor(9, 0); lcd.print((int16_t)dbm); lcd.print(F("dBm  "));
     }
     if(smode == 2){ // S-meter
       uint8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (((uint8_t)(dbm - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
@@ -2878,10 +2877,9 @@ float smeter(float ref = 0)
     }
     if(smode == 3){ // S-bar
       int8_t s = (dbm < -63) ? ((dbm - -127) / 6) : (((uint8_t)(dbm - -73)) / 10) * 10;  // dBm to S (modified to work correctly above S9)
-      lcd.setCursor(12, 0);
       char tmp[5];
       for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
-      lcd.print(tmp);
+      lcd.setCursor(12, 0); lcd.print(tmp);
     }
     if(!((mode == CW) && cw_event) && smode) stepsize_showcursor();
     max_absavg256 /= 2;  // Implement peak hold/decay for all meter types    
@@ -3281,7 +3279,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef DEBUG
     case SR:      paramAction(action, sr, 0x91, F("Sample rate"), NULL, INT32_MIN, INT32_MAX, false); break;
     case CPULOAD: paramAction(action, cpu_load, 0x92, F("CPU load %"), NULL, INT32_MIN, INT32_MAX, false); break;
-    case PARAM_A: paramAction(action, param_a, 0x93, F("Param A"), NULL, UINT16_MAX, UINT16_MAX, false); break;
+    case PARAM_A: paramAction(action, param_a, 0x93, F("Param A"), NULL, 0, UINT16_MAX, false); break;
     case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, INT16_MIN, INT16_MAX, false); break;
     case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, INT16_MIN, INT16_MAX, false); break;
 #endif
@@ -4275,7 +4273,9 @@ void loop()
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
 
-    set_lpf(freq / 1000000UL);
+    uint8_t f = freq / 1000000UL;
+    set_lpf(f);
+    bandval = (f > 32) ? 9 : (f > 26) ? 8 : (f > 22) ? 7 : (f > 20) ? 6 : (f > 16) ? 5 : (f > 12) ? 4 : (f > 8) ? 3 : (f > 6) ? 2 : (f > 4) ? 1 : /*(f > 2)*/ 0;  prev_bandval = bandval; // align bandval with freq
 
     if(mode == CW){
       si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
@@ -4353,5 +4353,8 @@ keyer dash-dot
 tiny-click removal, DC offset correction
 
 atmega328p signature: https://forum.arduino.cc/index.php?topic=341799.15   https://www.eevblog.com/forum/microcontrollers/bootloader-on-smd-atmega328p-au/msg268938/#msg268938 https://www.avrfreaks.net/forum/undocumented-signature-row-contents
+
+VOX running with F_ADC_CONV/2 or F_SAMP_PWM/2 (to remove geiger)
+keyer with interrupt-driven timers (to reduce jitter)
 
 */
