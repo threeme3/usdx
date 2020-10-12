@@ -1702,8 +1702,10 @@ volatile bool cw_event = false;
 
 volatile bool agc = true;
 volatile uint8_t nr = 0;
-volatile uint8_t att = 0;
-volatile uint8_t att2 = 2;  // M0PUB: Minimum att2 increased from 0 to 2, to prevent numeric overflow on strong signals
+uint8_t att = 0;
+volatile uint8_t att2 = 0;
+volatile uint8_t att3 = 0;
+int8_t atten = 0;
 volatile uint8_t _init;
 
 /* M0PUB: Old AGC algorithm which only increases gain, but does not decrease it for very strong signals.
@@ -2088,7 +2090,7 @@ void sdr_rx()
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
-        ac2 >>= att2;  // digital gain control
+        ac2 = (ac2 >> att2) + (att3 ? (ac2 >> att3) : 0);  // digital gain control
         // post processing I and Q (down-sampled) results
         static int16_t v[7];
         i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
@@ -2150,7 +2152,7 @@ void sdr_rx_q()
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
-        ac2 >>= att2;  // digital gain control
+        ac2 = (ac2 >> att2) + (att3 ? (ac2 >> att3) : 0);  // digital gain control
         // Process Q (down-sampled) samples
         static int16_t v[14];
         q = v[7];
@@ -2526,10 +2528,48 @@ float smeter(float ref = 0)  // ref was 5 (= 10*log(8000/2400)) but I don't thin
   return dbm;
 }
 
+void parse_atten()
+{
+    /* parse atten to att and att2 */
+    int atten0 = atten; // keep atten unchanged for UI
+    att = 0;
+    if (atten0 <= -40) { atten0 += 40; att |= 0x04; }
+    if (atten0 <= -20) { atten0 += 20; att |= 0x02; }
+    if (atten0 <= -13) { atten0 += 13; att |= 0x01; }
+
+/*
+    switch(atten0)
+    {
+        case 0: att2 = 0; att3 = 0; break;
+        case -1: att2 = 1; att3 = 2; break;
+        case -2: att2 = 1; att3 = 3; break;
+        case -3: att2 = 1; att3 = 0; break;
+        case -4: att2 = 2; att3 = 3; break;
+        case -5: att2 = 2; att3 = 4; break;
+        case -6: att2 = 2; att3 = 0; break;
+        case -7: att2 = 3; att3 = 4; break;
+        case -8: att2 = 3; att3 = 5; break;
+        case -9: att2 = 3; att3 = 0; break;
+        case -10: att2 = 4; att3 = 5; break;
+        case -11: att2 = 4; att3 = 6; break;
+        case -12: att2 = 4; att3 = 0; break;
+        case -13: att2 = 5; att3 = 6; break;
+        case -14: att2 = 5; att3 = 7; break;
+        case -15: att2 = 5; att3 = 0; break;
+    }
+*/
+    // Optimize from above big switch
+    att2 = (-atten0 + 2) / 3;
+    int k = 3 * att2 - (-atten0); // mod 3
+    att3 = k > 0? att2 + (3 - k):0 ;
+}
+
 void start_rx()
 {
   _init = 1;
   rx_state = 0;
+  parse_atten();
+
   func_ptr = sdr_rx;  //enable RX DSP/SDR
   adc_start(2, true, F_ADC_CONV); admux[2] = ADMUX;
   if(dsp_cap == SDR){
@@ -2848,11 +2888,11 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 30  // number of (visible) parameters
+#define N_PARAMS 29  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
 
 void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -2863,7 +2903,6 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   if(id == ALL) for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
   
   const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
-  const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
   const char* smode_label[] = { "OFF", "dBm", "S", "S-bar" };
   const char* cw_tone_label[] = { "325", "700" };
 #ifdef KEYER
@@ -2877,9 +2916,8 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case STEP:    paramAction(action, stepsize, 0x15, F("Tune Rate"), stepsize_label, 0, _N(stepsize_label) - 1, false); break;
     case AGC:     paramAction(action, agc, 0x16, F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, 0x17, F("NR"), NULL, 0, 8, false); break;
-    case ATT:     paramAction(action, att, 0x18, F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, 0x19, F("ATT2"), NULL, 0, 16, false); break;
-    case SMETER:  paramAction(action, smode, 0x1A, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
+    case ATT:     paramAction(action, atten, 0x18, F("ATT"), NULL, -85, 0, false); break;
+    case SMETER:  paramAction(action, smode, 0x19, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
@@ -3831,6 +3869,8 @@ void loop()
           change = true;
         }
         if(menu == ATT){ // post-handling ATT parameter
+          parse_atten();
+
           if(dsp_cap == SDR){
             adc_start(0, !(att & 0x01), F_ADC_CONV); admux[0] = ADMUX;  // att bit 0 ON: attenuate -13dB by changing ADC AREF (full-scale range) from 1V1 to 5V
             adc_start(1, !(att & 0x01), F_ADC_CONV); admux[1] = ADMUX;
