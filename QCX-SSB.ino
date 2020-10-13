@@ -1703,6 +1703,7 @@ volatile bool cw_event = false;
 volatile bool agc = true;
 volatile uint8_t nr = 0;
 uint8_t att = 0;
+volatile uint8_t att1 = 0;
 volatile uint8_t att2 = 0;
 volatile uint8_t att3 = 0;
 int8_t atten = 0;
@@ -2090,7 +2091,7 @@ void sdr_rx()
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
-        ac2 = (ac2 >> att2) + (att3 ? (ac2 >> att3) : 0);  // digital gain control
+        ac2 = (ac2 >> att1) + (ac2 >> att2) + (ac2 >> att3);  // digital gain control
         // post processing I and Q (down-sampled) results
         static int16_t v[7];
         i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = ac2;  // Delay to match Hilbert transform on Q branch
@@ -2152,7 +2153,7 @@ void sdr_rx_q()
       ac2 = _ac + _za1 + _z1 * 2;              // 2nd stage: FA + FB
       _za1 = _ac;
       {
-        ac2 = (ac2 >> att2) + (att3 ? (ac2 >> att3) : 0);  // digital gain control
+        ac2 = (ac2 >> att1) + (ac2 >> att2) + (ac2 >> att3);  // digital gain control
         // Process Q (down-sampled) samples
         static int16_t v[14];
         q = v[7];
@@ -2537,31 +2538,22 @@ void parse_atten()
     if (atten0 <= -20) { atten0 += 20; att |= 0x02; }
     if (atten0 <= -13) { atten0 += 13; att |= 0x01; }
 
-/*
     switch(atten0)
     {
-        case 0: att2 = 0; att3 = 0; break;
-        case -1: att2 = 1; att3 = 2; break;
-        case -2: att2 = 1; att3 = 3; break;
-        case -3: att2 = 1; att3 = 0; break;
-        case -4: att2 = 2; att3 = 3; break;
-        case -5: att2 = 2; att3 = 4; break;
-        case -6: att2 = 2; att3 = 0; break;
-        case -7: att2 = 3; att3 = 4; break;
-        case -8: att2 = 3; att3 = 5; break;
-        case -9: att2 = 3; att3 = 0; break;
-        case -10: att2 = 4; att3 = 5; break;
-        case -11: att2 = 4; att3 = 6; break;
-        case -12: att2 = 4; att3 = 0; break;
-        case -13: att2 = 5; att3 = 6; break;
-        case -14: att2 = 5; att3 = 7; break;
-        case -15: att2 = 5; att3 = 0; break;
+        case 0:  att1 = 1; att2 = 2; att3 = 2; break;
+        case -1: att1 = 1; att2 = 2; att3 = 3; break;
+        case -2: att1 = 1; att2 = 2; att3 = 5; break;
+        case -3: att1 = 1; att2 = 3; att3 = 4; break;
+        case -4: att1 = 2; att2 = 2; att3 = 3; break;
+        case -5: att1 = 2; att2 = 2; att3 = 4; break;
+        case -6: att1 = 2; att2 = 3; att3 = 3; break;
+        case -7: att1 = 2; att2 = 3; att3 = 4; break;
+        case -8: att1 = 2; att2 = 3; att3 = 6; break;
+        case -9: att1 = 2; att2 = 4; att3 = 5; break;
+        case -10: att1 = 3; att2 = 4; att3 = 3; break;
+        case -11: att1 = 3; att2 = 3; att3 = 5; break;
+        case -12: att1 = 3; att2 = 4; att3 = 4; break;
     }
-*/
-    // Optimize from above big switch
-    att2 = (-atten0 + 2) / 3;
-    int k = 3 * att2 - (-atten0); // mod 3
-    att3 = k > 0? att2 + (3 - k):0 ;
 }
 
 void start_rx()
