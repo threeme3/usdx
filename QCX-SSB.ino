@@ -1028,6 +1028,75 @@ public:
   void SendRegister(uint8_t reg, uint8_t val){ SendRegister(reg, &val, 1); }
   int16_t iqmsa; // to detect a need for a PLL reset
 ///*
+  enum ms_t { PLLA=0, PLLB=1, MSNA=-2, MSNB=-1, MS0=0, MS1=1, MS2=2, MS3=3, MS4=4, MS5=5 };
+  
+  void ms(int8_t n, uint32_t div_nom, uint32_t div_denom, uint8_t pll = PLLA, uint8_t _int = 0, uint16_t phase = 0, uint8_t rdiv = 0){
+    uint16_t msa; uint32_t msb, msc, msp1, msp2, msp3;
+    if(msa == 4) _int = 1;
+    msa = div_nom / div_denom;     // integer part: msa must be in range 15..90 for PLL, 8+1/1048575..900 for MS
+    msb = (_int) ? 0 : (((uint64_t)(div_nom % div_denom)*_MSC) / div_denom); // fractional part
+    msc = (_int) ? 1 : _MSC;
+    //lcd.setCursor(0, 0); lcd.print(n); lcd.print(":"); lcd.print(msa); lcd.print(" "); lcd.print(msb); lcd.print(" "); lcd.print(msc); lcd.print(F("    ")); delay(500);
+    msp1 = 128*msa + 128*msb/msc - 512;
+    msp2 = 128*msb - 128*msb/msc * msc;
+    msp3 = msc;
+    uint8_t ms_regs[8] = { BB1(msp3), BB0(msp3), BB2(msp1) | (rdiv<<4) | ((msa == 4)*0x0C), BB1(msp1), BB0(msp1), BB2(((msp3 & 0x0F0000)<<4) | msp2), BB1(msp2), BB0(msp2) };
+    SendRegister(n*8+42, ms_regs, 8); // Write to MSx
+    if(n < 0){
+      SendRegister(n+16+8, 0x80|(0x40*_int)); // MSNx PLLn: 0x40=FBA_INT; 0x80=CLKn_PDN
+    } else {
+      SendRegister(n+16, ((pll)*0x20)|0x0C|3|(0x40*_int));  // MSx CLKn: 0x0C=PLLA,0x2C=PLLB local msynth; 3=8mA; 0x40=MSx_INT; 0x80=CLKx_PDN
+      SendRegister(n+165, (!_int) * phase * msa / 90);      // when using: make sure to configure MS in fractional-mode, perform reset afterwards
+    }
+  }
+
+  void phase(int8_t n, uint32_t div_nom, uint32_t div_denom, uint16_t phase){ SendRegister(n+165, phase * (div_nom / div_denom) / 90); }  // when using: make sure to configure MS in fractional-mode!, perform reset afterwards
+
+  void reset(){ SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
+
+  void oe(uint8_t mask){ SendRegister(3, ~mask); } // output-enable mask: CLK2=4; CLK1=2; CLK0=1
+
+  void freq(uint32_t fout, uint16_t i, uint16_t q){  // Set a CLK0,1 to fout Hz with phase i, q
+      uint8_t rdiv = 0; // CLK pin sees fout/(2^rdiv)
+      if(fout > 300000000){ i/=3; q/=3; fout/=3; }  // for higher freqs, use 3rd harmonic
+      if(fout < 500000){ rdiv = 7; fout *= 128; } // Divide by 128 for fout 4..500kHz
+      uint16_t d; if(fout < 30000000) d = (16 * fxtal) / fout; else d = (32 * fxtal) / fout;  // Integer part  .. maybe 44?
+      if(fout < 3500000) d = (7 * fxtal) / fout;  // PLL at 189MHz to cover 160m (freq>1.48MHz) when using 27MHz crystal
+      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d++; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+      if(fout > 140000000) d = 4; // for f=140..300MHz; AN619; 4.1.3, this implies integer mode
+      if(d % 2) d++;  // even numbers preferred for divider (AN619 p.4 and p.6)
+      uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
+
+      ms(MSNA, fvcoa, fxtal);
+      ms(MSNB, fvcoa, fxtal);
+      ms(MS0,  fvcoa, fout, PLLA, 0, i, rdiv);
+      ms(MS1,  fvcoa, fout, PLLA, 0, q, rdiv);
+      ms(MS2,  fvcoa, fout, PLLB, 0, 0, rdiv);
+      if(iqmsa != ((i-q)*((uint16_t)(fvcoa/fout))/90)){ iqmsa = (i-q)*((uint16_t)(fvcoa/fout))/90; reset(); }
+      oe(0b00000011);  // output enable CLK0, CLK1
+
+#ifdef test
+      // Gangnam style phase-shift
+      ms(MSNA, fvcoa, fxtal);
+      ms(MSNB, fvcoa, fxtal);
+      #define F_DEV 4
+      ms(MS0,  fvcoa, (fout + F_DEV), PLLA, 0, 0, rdiv);
+      ms(MS1,  fvcoa, (fout + F_DEV), PLLA, 0, 0, rdiv);
+      ms(MS2,  fvcoa, fout, PLLB, 0, 0, rdiv);
+      reset();
+      ms(MS0,  fvcoa, fout, PLLA, 0, 0, rdiv);
+      delayMicroseconds(1.25*1000000UL/F_DEV);  // Td = 1/(4 * Fdev)
+      ms(MS1,  fvcoa, fout, PLLA, 0, 0, rdiv);
+      oe(0b00000011);  // output enable CLK0, CLK1
+#endif
+
+      _fout = fout;  // cache
+      _div = d;
+      _msa128min512 = fvcoa / fxtal * 128 - 512;
+      _msb128=((uint64_t)(fvcoa % fxtal)*_MSC*128) / fxtal;
+  }
+//*/
+/*
   void freq(uint32_t fout, uint16_t i, uint16_t q){  // Set a CLK0,1 to fout Hz with phase i, q
       uint16_t msa; uint32_t msb, msc, msp1, msp2, msp3;
       uint8_t rdiv = 0;             // CLK pin sees fout/(2^rdiv)
@@ -1071,57 +1140,6 @@ public:
       SendRegister(166, q * msa / 90);  // CLK1: Q-phase (on change -> Reset PLL)
       if(iqmsa != ((i-q)*msa/90)){ iqmsa = (i-q)*msa/90; SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
       SendRegister(3, 0b11111100);      // Enable/disable clock
-
-      _fout = fout;  // cache
-      _div = d;
-      _msa128min512 = fvcoa / fxtal * 128 - 512;
-      _msb128=((uint64_t)(fvcoa % fxtal)*_MSC*128) / fxtal;
-  }
-//*/
-/*
-  enum ms_t { plla=-2, pllb=-1, ms0=0, ms1=1, ms2=2 };
-  
-  void ms(int8_t n, uint32_t div_nom, uint32_t div_denom, int8_t pll = plla, uint16_t phase = 0, uint8_t rdiv = 0, uint8_t force_frac = 0){
-    uint16_t msa; uint32_t msb, msc, msp1, msp2, msp3;
-    msa = div_nom / div_denom;     // integer part: msa must be in range 15..90 for PLL, 8+1/1048575..900 for MS
-    uint8_t _int = !(div_nom % div_denom) && !(phase) && !(force_frac);
-    msb = (_int) ? 0 : (((uint64_t)(div_nom % div_denom)*_MSC) / div_denom); // fractional part
-    msc = (_int) ? 1 : _MSC;
-    //lcd.setCursor(0, 0); lcd.print(n); lcd.print(":"); lcd.print(msa); lcd.print(" "); lcd.print(msb); lcd.print(" "); lcd.print(msc); lcd.print(F("    ")); delay(500);
-    msp1 = 128*msa + 128*msb/msc - 512;
-    msp2 = 128*msb - 128*msb/msc * msc;
-    msp3 = msc;
-    uint8_t ms_regs[8] = { BB1(msp3), BB0(msp3), BB2(msp1) | (rdiv<<4) | ((msa == 4)*0x0C), BB1(msp1), BB0(msp1), BB2(((msp3 & 0x0F0000)<<4) | msp2), BB1(msp2), BB0(msp2) };
-    SendRegister(n*8+42, ms_regs, 8); // Write to MSx
-    if(n < 0){
-      SendRegister(n+16+8, 0x80|(0x40*_int)); // MSNx PLLn: 0x40=FBA_INT; 0x80=CLKn_PDN
-    } else {
-      SendRegister(n+16, ((pll+2)*0x20)|0x0C|3|(0x40*_int));  // MSx CLKn: 0x0C=PLLA,0x2C=PLLB local msynth; 3=8mA; 0x40=MSx_INT; 0x80=CLKx_PDN
-      SendRegister(n+165, phase * msa * (!_int) / 90);  // CLKn: phase (on change -> Reset PLL)
-    }
-  }
-
-  void reset(){ SendRegister(177, 0xA0); } // 0x20 reset PLLA; 0x80 reset PLLB
-
-  void oe(uint8_t mask){ SendRegister(3, ~mask); } // output-enable mask: CLK2=4; CLK1=2; CLK0=1
-
-  void freq(uint32_t fout, uint16_t i, uint16_t q){  // Set a CLK0,1 to fout Hz with phase i, q
-      uint8_t rdiv = 0; // CLK pin sees fout/(2^rdiv)
-      if(fout > 300000000){ i/=3; q/=3; fout/=3; }  // for higher freqs, use 3rd harmonic
-      if(fout < 500000){ rdiv = 7; fout *= 128; } // Divide by 128 for fout 4..500kHz
-      uint16_t d; if(fout < 30000000) d = (16 * fxtal) / fout; else d = (32 * fxtal) / fout;  // Integer part  .. maybe 44?
-      if(fout < 3500000) d = (7 * fxtal) / fout;  // PLL at 189MHz to cover 160m (freq>1.48MHz) when using 27MHz crystal
-      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d++; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
-      if(fout > 140000000) d = 4; // for f=140..300MHz; AN619; 4.1.3, this implies integer mode
-      if(d % 2) d++;  // even numbers preferred for divider (AN619 p.4 and p.6)
-      uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
-      ms(plla, fvcoa, fxtal);
-      ms(pllb, fvcoa, fxtal);
-      ms(ms0,  fvcoa, fout, plla, i, rdiv, 1);
-      ms(ms1,  fvcoa, fout, plla, q, rdiv, 1);
-      ms(ms2,  fvcoa, fout, pllb, 0, rdiv, 1);
-      if(iqmsa != ((i-q)*(fvcoa/fout)/90)){ iqmsa = (i-q)*(fvcoa/fout)/90; reset(); }
-      oe(0b00000011);  // output enable CLK0, CLK1
 
       _fout = fout;  // cache
       _div = d;
@@ -3809,20 +3827,28 @@ void setup()
 //  Serial.begin(7680); // 9600 baud corrected for F_CPU=20M
 //  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M
 //  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M
-   Command_IF();
+  Command_IF();
 #ifndef OLED
-   smode = 0;  // In case of LCD, turn of smeter
+  smode = 0;  // In case of LCD, turn of smeter
 #endif
 #endif //CAT
 
 #ifdef KEYER
- keyerState = IDLE;
- keyerControl = IAMBICB;      // Or 0 for IAMBICA
- //keyer_mode = SINGLE ;      // default Keyer wir durch Menue 10.2 später verändert
- paramAction(LOAD, KEY_MODE);
- paramAction(LOAD, KEY_PIN);
- loadWPM(keyer_speed);                 // Fix speed at 15 WPM
+  keyerState = IDLE;
+  keyerControl = IAMBICB;      // Or 0 for IAMBICA
+  //keyer_mode = SINGLE ;      // default Keyer wir durch Menue 10.2 später verändert
+  paramAction(LOAD, KEY_MODE);
+  paramAction(LOAD, KEY_PIN);
+  loadWPM(keyer_speed);                 // Fix speed at 15 WPM
 #endif //KEYER
+
+  for(; !digitalRead(DIT) || ((mode == CW) && (!digitalRead(DAH)));){ // wait until DIH/DAH/PTT is released to prevent TX on startup
+    lcd.setCursor(15, 1); lcd.print('T');
+    delay(1000);
+    lcd.setCursor(15, 1); lcd.print(' ');
+    delay(1000);
+    wdt_reset();
+  }
 }
 
 uint8_t vox_tx = 0;
