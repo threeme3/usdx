@@ -176,8 +176,8 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void pre(){ Serial.flush(); PORTC |= 1<<2; DDRC |= 1<<2; UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); }  // Wait until serial TX stops; make PC2 high (to pull-up TXD); enable PD0/PD1 - disable serial port
   void post(){ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2); }  // Enable serial port - disable PD0, PD1; disable PC2
 #else
-  void pre(){}
-  void post(){ if(backlight) PORTD |= 0x08; else PORTD &= ~0x08; /* backlight */}
+  void pre(){ noInterrupts(); }
+  void post(){ if(backlight) PORTD |= 0x08; else PORTD &= ~0x08; /* backlight */ interrupts(); }
 #endif
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); } // Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
@@ -1071,7 +1071,7 @@ public:
       ms(MSNB, fvcoa, fxtal);
       ms(MS0,  fvcoa, fout, PLLA, 0, i, rdiv);
       ms(MS1,  fvcoa, fout, PLLA, 0, q, rdiv);
-      ms(MS2,  fvcoa, fout, PLLB, 0, 0, rdiv);
+      ms(MS2,  fvcoa, fout, PLLB, 0, q, rdiv);
       if(iqmsa != ((i-q)*((uint16_t)(fvcoa/fout))/90)){ iqmsa = (i-q)*((uint16_t)(fvcoa/fout))/90; reset(); }
       oe(0b00000011);  // output enable CLK0, CLK1
 
@@ -1463,7 +1463,11 @@ void set_lpf(uint8_t f){
 void set_lpf(uint8_t f){} // dummy
 #endif
 
+#if(F_CPU!=16000000)
+#error "try to compile for a 16 MHz clock"
+#endif
 #undef F_CPU
+
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 //#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
 
@@ -1508,7 +1512,7 @@ inline void _vox(uint8_t trigger)
 //#define F_SAMP_TX 4402
 #define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #define _UA  (F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
-//#define MAX_DP  (_UA/1)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
+//#define MAX_DP  (_UA/2)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 //#define CONSTANT_AMP  1 // enable this in case there is no circuitry for controlling envelope (key shaping circuit)
 //#define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on no-envelope transitions, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
@@ -2821,6 +2825,7 @@ const byte fonts[N_FONTS][8] PROGMEM = {
 int analogSafeRead(uint8_t pin)
 {  // performs classical analogRead with default Arduino sample-rate and analog reference setting; restores previous settings
   noInterrupts();
+  for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
   uint8_t adcsra = ADCSRA;
   uint8_t admux = ADMUX;
   ADCSRA &= ~(1 << ADIE);  // disable interrupts when measurement complete
@@ -2844,6 +2849,7 @@ uint16_t analogSampleMic()
   //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
   uint8_t oldmux = ADMUX;
   ADMUX = admux[2];  // set MUX for next conversion
+  for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
   ADMUX = oldmux;
@@ -2921,11 +2927,11 @@ void start_rx()
 int16_t _centiGain = 0;
 
 void switch_rxtx(uint8_t tx_enable){
-  tx = tx_enable;
 
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
+  tx = tx_enable;
   if(tx_enable){
     _centiGain = centiGain;  // backup AGC setting
   } else {
@@ -3184,7 +3190,7 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
       for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
       break;
     case SAVE:
-      for(n = size; n; --n) eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++);
+      for(n = size; n; --n){ eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++); wdt_reset(); }
       break;
     case SKIP:
       eeprom_addr += size;
@@ -3852,7 +3858,6 @@ void setup()
 }
 
 uint8_t vox_tx = 0;
-uint16_t vox_cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
 
 void loop()
 {
@@ -3860,16 +3865,20 @@ void loop()
   rxCATcmd();
 #endif
 
-  if((vox) && ((mode == LSB) || (mode == USB))){  // If VOX enabled, then take mic samples and feed ssb processing function, to derive amplitude, and potentially detect cross vox_threshold to detect a TX or RX event: this is expressed in tx variable
-    if(!vox_tx) ssb((analogSampleMic() - 512) >> MIC_ATTEN); vox_cnt++;
-    if((tx) && !(vox_tx) && (vox_cnt > 32)){
-      vox_tx = 1;
-      vox_cnt = 0;
-      switch_rxtx(1);  // there is modulation: put transceiver in TX
-    }
-    if((!tx) && (vox_tx)){
+  if((vox) && ((mode == LSB) || (mode == USB))){  // If VOX enabled (and in LSB/USB mode), then take mic samples and feed ssb processing function, to derive amplitude, and potentially detect cross vox_threshold to detect a TX or RX event: this is expressed in tx variable
+    if(!vox_tx){ // VOX not active
+      ssb(((int16_t)(analogSampleMic()) - 512) >> MIC_ATTEN);   // sampling mic
+      if(tx){  // TX triggered by audio -> TX
+        vox_tx = 1;
+        switch_rxtx(255);
+        //delay(100); tx = 255;
+      }
+    } else if(!tx){  // VOX activated, no audio detected -> RX
+      switch_rxtx(0);
       vox_tx = 0;
-      switch_rxtx(0);  // there is no modulation: put transceiver in RX
+      delay(10);
+      //for(int i = 0; i != 32; i++) ssb((analogSampleMic() - 512) >> MIC_ATTEN); // clear internal buffer
+      //tx = 0; // make sure tx is off (could have been triggered by rubbish in above statement)
     }
   }
 
@@ -4096,7 +4105,6 @@ void loop()
         change = true; // refresh display
         break;
       case BR|PL:
-      {
         #ifdef SIMPLE_RX
         // Experiment: ISR-less sdr_rx():
         smode = 0;
@@ -4121,8 +4129,7 @@ void loop()
           //for(;micros() < next;);  next = micros() + 16;   // sync every 1000000/62500=16ms (or later if missed)
         } //
         #endif //SIMPLE_RX
-
-        vox = 1;  // simple VOX
+/*        vox = 1;  // simple VOX
         //int16_t x = 0;
         lcd.setCursor(15, 1); lcd.print('V');
         uint16_t cnt = 0;  // ensures that hilbert transform buffer is refreshed after a vox trigger before new trigger is given
@@ -4137,8 +4144,8 @@ void loop()
           wdt_reset();
         }
         vox = 0;
-      }
-        lcd.setCursor(15, 1); lcd.print('R');
+        lcd.setCursor(15, 1); lcd.print('R'); */
+
         break;
       case BR|PT: break;
       case BE|SC:
@@ -4294,6 +4301,7 @@ void loop()
     set_lpf(f);
     bandval = (f > 32) ? 9 : (f > 26) ? 8 : (f > 22) ? 7 : (f > 20) ? 6 : (f > 16) ? 5 : (f > 12) ? 4 : (f > 8) ? 3 : (f > 6) ? 2 : (f > 4) ? 1 : /*(f > 2)*/ 0;  prev_bandval = bandval; // align bandval with freq
 
+    noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
       si5351.freq_calc_fast(-cw_offset); si5351.SendPLLBRegisterBulk(); // TX at freq
@@ -4302,6 +4310,7 @@ void loop()
       si5351.freq(freq, rx_ph_q, 0/*90, 0*/);  // RX in LSB
     else
       si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
+    interrupts();
   }
   
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
