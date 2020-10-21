@@ -1559,9 +1559,9 @@ inline int16_t ssb(int16_t in)
 
   for(j = 0; j != 15; j++) v[j] = v[j + 1];
 
-  dc += (in - dc) / 2;
+  //dc += (in - dc) / 2;
   v[15] = in - dc;     // DC decoupling
-  //dc = in;  // this is actually creating a high-pass (emphasis) filter
+  dc = in;  // this is actually creating a high-pass (emphasis) filter
 
   i = v[7];
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
@@ -1628,7 +1628,7 @@ void dsp_tx()
 #endif //QUAD
   OCR1BL = amp;                      // submit amplitude to PWM register (takes about 1/32125 = 31us+/-31us to propagate) -> amplitude-phase-alignment error is about 30-50us
   adc += ADC;
-  //ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct biasing); ENABLE this line when using direct biasing!!
+ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct biasing); ENABLE this line when using direct biasing!!
   int16_t df = ssb(_adc >> MIC_ATTEN); // convert analog input into phase-shifts (carrier out by periodic frequency shifts)
   adc += ADC;
   ADCSRA |= (1 << ADSC);
