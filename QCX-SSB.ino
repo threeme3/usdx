@@ -76,11 +76,7 @@ ssb_cap=1; dsp_cap=2;
 */
 
 #ifdef KEYER
-// Iambic Morse Code Keyer Sketch
-// Copyright (c) 2009 Steven T. Elliott
-//
-// This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version. This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details: Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA.
-// Source: http://openqrp.org/?p=343,  Trimmed by Bill Bishop - wrb[at]wrbishop.com
+// Iambic Morse Code Keyer Sketch, Contribution by Uli, DL2DBG. Copyright (c) 2009 Steven T. Elliott Source: http://openqrp.org/?p=343,  Trimmed by Bill Bishop - wrb[at]wrbishop.com.  This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version. This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details: Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA.
 
 // keyerControl bit definitions
 #define DIT_L    0x01     // Dit latch
@@ -124,7 +120,7 @@ void loadWPM (int wpm) // Calculate new time constants based on wpm value
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-bool backlight = true;
+uint8_t backlight = 8;
 
 //FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be these at programming.
 
@@ -1067,17 +1063,17 @@ public:
       if(fout > 140000000) d = 4; // for f=140..300MHz; AN619; 4.1.3, this implies integer mode
       if(d % 2) d++;  // even numbers preferred for divider (AN619 p.4 and p.6)
       uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
+      // si5351 spectral purity considerations: https://groups.io/g/QRPLabs/message/42662
 
-      ms(MSNA, fvcoa, fxtal);
+      ms(MSNA, fvcoa, fxtal);                   // PLLA in fractional mode
       //ms(MSNB, fvcoa, fxtal);
-      ms(MS0,  fvcoa, fout, PLLA, 0, i, rdiv);
+      ms(MS0,  fvcoa, fout, PLLA, 0, i, rdiv);  // Multisynth stage with integer divider but in frac mode due to phase setting
       ms(MS1,  fvcoa, fout, PLLA, 0, q, rdiv);
       ms(MS2,  fvcoa, fout, PLLA, 0, 0, rdiv);
       if(iqmsa != ((i-q)*((uint16_t)(fvcoa/fout))/90)){ iqmsa = (i-q)*((uint16_t)(fvcoa/fout))/90; reset(); }
       oe(0b00000011);  // output enable CLK0, CLK1
 
 #ifdef x
-      // Gangnam style phase-shift
       ms(MSNA, fvcoa, fxtal);
       ms(MSNB, fvcoa, fxtal);
       #define F_DEV 4
@@ -1086,11 +1082,10 @@ public:
       ms(MS2,  fvcoa, fout, PLLA, 0, 0, rdiv);
       reset();
       ms(MS0,  fvcoa, fout, PLLA, 0, 0, rdiv);
-      delayMicroseconds(1000000UL/F_DEV * 5/4);  // Td = 1/(4 * Fdev)
+      delayMicroseconds(1000000UL/F_DEV * 5/4);  // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
       ms(MS1,  fvcoa, fout, PLLA, 0, 0, rdiv);
       oe(0b00000011);  // output enable CLK0, CLK1
 #endif
-
       _fout = fout;  // cache
       _div = d;
       _msa128min512 = fvcoa / fxtal * 128 - 512;
@@ -1518,7 +1513,7 @@ inline void _vox(uint8_t trigger)
 }
 
 //#define F_SAMP_TX 4402
-#define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR0A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
+#define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #define _UA  (F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
 //#define MAX_DP  (_UA/4)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 //#define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
@@ -1923,7 +1918,7 @@ inline int16_t process_agc(int16_t in)
   return out;
 } */
 
-// M0PUB: Experimental new AGC algorithm.
+// Contribution by Alan, M0PUB: Experimental new AGC algorithm.
 // ASSUMES: Input sample values are constrained to a maximum of +/-4096 to avoid integer overflow in earlier
 // calculations.
 //
@@ -2902,8 +2897,7 @@ void timer2_stop()
 //
 // Feel free to replace it with your own custom radio implementation :-)
 
-char blanks[] = "         ";
-#define lcd_blanks() lcd.print(blanks);
+void inline lcd_blanks(){ lcd.print(F("         ")); }
 
 #define N_FONTS  8
 const byte fonts[N_FONTS][8] PROGMEM = {
@@ -3357,7 +3351,7 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
       for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
       break;
     case SAVE:
-      for(n = size; n; --n){ eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++); wdt_reset(); }
+      for(n = size; n; --n){ noInterrupts(); eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++); interrupts(); }
       break;
     case SKIP:
       eeprom_addr += size;
@@ -3512,7 +3506,7 @@ void initPins(){
 }
 
 #ifdef CAT
-// CAT support inspired by Charlie Morris, ZL2CTM, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
+// CAT support inspired by Charlie Morris, ZL2CTM, contribution by Alex, PE1EVX, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
 // https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
 #define CATCMD_SIZE   32
 char CATcmd[CATCMD_SIZE];
@@ -3715,6 +3709,7 @@ void Command_PS1()
 
 void fatal(const __FlashStringHelper* msg, int value = 0, char unit = '\0') {
   lcd.setCursor(0, 1);
+  lcd.print('!'); lcd.print('!');
   lcd.print(msg);
   if(unit != '\0') {
     lcd.print('=');
@@ -3750,12 +3745,12 @@ void setup()
   TIMER2_COMPA_vect();
   //func_ptr();
   t1 = micros();
-  float load_tx = (float)(t1 - t0) * (float)F_SAMP_TX * 100.0 / 1000000.0 * 16000000.0/(float)F_CPU;
+  uint16_t load_tx = (float)(t1 - t0) * (float)F_SAMP_TX * 100.0 / 1000000.0 * 16000000.0/(float)F_CPU;
   // benchmark sdr_rx() ISR
   func_ptr = sdr_rx;
   rx_state = 0;
-  float load_rx[8];
-  float load_rx_avg = 0;
+  uint16_t load_rx[8];
+  uint16_t load_rx_avg = 0;
   uint16_t i;
   for(i = 0; i != 8; i++){
     rx_state = i;
@@ -3855,21 +3850,19 @@ void setup()
   }*/
   
   // Measure CPU loads
-  if(!(load_tx <= 100.0)){
-    fatal(F("!!CPU_tx"), load_tx, '%');
+  if(!(load_tx <= 100)){
+    fatal(F("CPU_tx"), load_tx, '%');
   }
 
-  if(!(load_rx_avg <= 100.0)){
-    fatal(F("!!CPU_rx"), load_rx_avg, '%');
-
-    // and specify individual timings for each of the eight alternating processing functions:
-    for(i = 0; i != 8; i++){
-      if(!(load_rx[i] <= 100.0))
-      {
-        fatal(F("!!CPU_rx"), load_rx[i], '%');
-      }
+  if(!(load_rx_avg <= 100)){
+      fatal(F("CPU_rx"), load_rx_avg, '%');
+  }
+  /*for(i = 0; i != 8; i++){
+    if(!(load_rx[i] <= 100)){   // and specify individual timings for each of the eight alternating processing functions
+      //fatal(F("CPU_rx"), load_rx[i], '%');
+      lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(i); lcd.print('='); lcd.print(load_rx[i]); lcd.print('%'); lcd_blanks();
     }
-  }
+  }*/
 
   // Measure VDD (+5V); should be ~5V
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0
@@ -3879,13 +3872,13 @@ void setup()
   float vdd = 2.0 * (float)analogRead(AUDIO2) * 5.0 / 1024.0;
   digitalWrite(RX, HIGH);
   if(!(vdd > 4.8 && vdd < 5.2)){
-    fatal(F("!!V5.0"), vdd, 'V');
+    fatal(F("V5.0"), vdd, 'V');
   }
 
   // Measure VEE (+3.3V); should be ~3.3V
   float vee = (float)analogRead(SCL) * 5.0 / 1024.0;
   if(!(vee > 3.2 && vee < 3.8)){
-    fatal(F("!!V3.3"), vee, 'V');
+    fatal(F("V3.3"), vee, 'V');
   }
 
   // Measure AVCC via AREF and using internal 1.1V reference fed to ADC; should be ~5V
@@ -3896,7 +3889,7 @@ void setup()
   for(; bit_is_set(ADCSRA, ADSC););
   float avcc = 1.1 * 1023.0 / ADC;
   if(!(avcc > 4.6 && avcc < 5.2)){
-    fatal(F("!!Vavcc"), avcc, 'V');
+    fatal(F("Vavcc"), avcc, 'V');
   }
 
   // Report no SSB capability
@@ -3906,24 +3899,24 @@ void setup()
 
   // Test microphone polarity
   /*if((ssb_cap) && (!digitalRead(DAH))){
-    fatal(F("!!MIC in rev.pol"));
+    fatal(F("MIC in rev.pol"));
   }*/
 
   // Measure DVM bias; should be ~VAREF/2
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
   if((ssb_cap) && !(dvm > 1.8 && dvm < 3.2)){
-    fatal(F("!!Vadc2"), dvm, 'V');
+    fatal(F("Vadc2"), dvm, 'V');
   }
 
   // Measure AUDIO1, AUDIO2 bias; should be ~VAREF/2
   if(dsp_cap == SDR){
     float audio1 = (float)analogRead(AUDIO1) * 5.0 / 1024.0;
     if(!(audio1 > 1.8 && audio1 < 3.2)){
-      fatal(F("!!Vadc0"), audio1, 'V');
+      fatal(F("Vadc0"), audio1, 'V');
     }
     float audio2 = (float)analogRead(AUDIO2) * 5.0 / 1024.0;
     if(!(audio2 > 1.8 && audio2 < 3.2)){
-      fatal(F("!!Vadc1"), audio2, 'V');
+      fatal(F("Vadc1"), audio2, 'V');
     }
   }
   
@@ -3950,7 +3943,7 @@ void setup()
     for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_A + j) != si5351.pll_regs[j]) i2c_error++;
   }
   if(i2c_error){
-    fatal(F("!!BER_i2c"), i2c_error, ' ');
+    fatal(F("BER_i2c"), i2c_error, ' ');
   }
 #endif
 
@@ -4025,6 +4018,7 @@ void setup()
     delay(1000);
     wdt_reset();
   }
+
 }
 
 uint8_t vox_tx = 0;
@@ -4467,40 +4461,37 @@ void loop()
 
 /* BACKLOG:
 code definitions and re-use for comb, integrator, dc decoupling, arctan
-in func_ptr for different mode types
 refactor main()
 agc based on rms256, agc/smeter after filter
 noisefree integrator (rx audio out) in lower range
 raised cosine tx amp for cw, 4ms tau seems enough: http://fermi.la.asu.edu/w9cf/articles/click/index.html
-auto paddle
 cw tx message/cw encoder
 32 bin fft
 dynamic range cw
 att extended agc
+single ATT
 configurable F_CPU
 CW-L mode
 VFO-A/B+split+RIT
-VOX integration in main loop
+undersampling, IF-offset
 K2/TS480 CAT control
 faster RX-TX switch to support CW
 clock
 qcx API demo code
 scan
-unwanted VOX feedback in DSP mode
 move last bit of arrays into flash? https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_rom_array.html
 remove floats
 u-law in RX path?: http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
 Arduino library?
 1. RX bias offset correction by measurement avg, 2. charge decoupling cap. by resetting to 0V and setting 5V for a certain amount of (charge) time
-AGC amplitude sense behind filter, controlling gain before filter
 add 1K (500R?) to GND at TTL RF output to keep zero-level below BS170 threshold
 additional PWM output for potential BOOST conversion
 SWR measurement?
 CW decoder amp thrshld restriction and noise reduction (use of certain pause amounts)
 squelch gating
-More buttons, context specific items on LCD
-Wider SSB passband (useful for FT8)
-Amp keying, band-data output
+more buttons
+s-meter offset vs DC bal.
+keyer with interrupt-driven timers (to reduce jitter)
 
 Analyse assembly:
 /home/guido/Downloads/arduino-1.8.10/hardware/tools/avr/bin/avr-g++ -S -g -Os -w -std=gnu++11 -fpermissive -fno-exceptions -ffunction-sections -fdata-sections -fno-threadsafe-statics -Wno-error=narrowing -MMD -mmcu=atmega328p -DF_CPU=16000000L -DARDUINO=10810 -DARDUINO_AVR_UNO -DARDUINO_ARCH_AVR -I/home/guido/Downloads/arduino-1.8.10/hardware/arduino/avr/cores/arduino -I/home/guido/Downloads/arduino-1.8.10/hardware/arduino/avr/variants/standard /tmp/arduino_build_483134/sketch/QCX-SSB.ino.cpp -o /tmp/arduino_build_483134/sketch/QCX-SSB.ino.cpp.txt
@@ -4511,19 +4502,8 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 90 deg.shift  div/2@S1(pin2)
 
 50MHz LSB OK, USB NOK
-s-meter offset vs DC bal.
-
-AGC DR
-auto ATT
-class-E
-PCB
-RIT, VFO-B, undersampling, IF-offset
-keyer dash-dot
-tiny-click removal, DC offset correction
 
 atmega328p signature: https://forum.arduino.cc/index.php?topic=341799.15   https://www.eevblog.com/forum/microcontrollers/bootloader-on-smd-atmega328p-au/msg268938/#msg268938 https://www.avrfreaks.net/forum/undocumented-signature-row-contents
 
-VOX running with F_ADC_CONV/2 or F_SAMP_PWM/2 (to remove geiger)
-keyer with interrupt-driven timers (to reduce jitter)
 
 */
