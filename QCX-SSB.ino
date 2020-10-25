@@ -1471,7 +1471,7 @@ void set_lpf(uint8_t f){} // dummy
 #endif
 
 #if(F_CPU!=16000000)
-#error "try to compile for a 16 MHz clock"
+   #error "F_CPU must be set to 16 MHz"
 #endif
 #undef F_CPU
 
@@ -1546,7 +1546,7 @@ volatile uint8_t quad = 0;
 
 inline int16_t ssb(int16_t in)
 {
-  static int16_t dc;
+  static int16_t dc, z1;
 
   int16_t i, q;
   uint8_t j;
@@ -1554,9 +1554,11 @@ inline int16_t ssb(int16_t in)
 
   for(j = 0; j != 15; j++) v[j] = v[j + 1];
 
-  //dc += (in - dc) / 2;
-  v[15] = in - dc;     // DC decoupling
-  dc = in;  // this is actually creating a high-pass (emphasis) filter
+  //dc += (in - dc) / 2;       // fast moving average
+  dc = (in + dc) / 2;        // average
+  uint16_t ac = (in - dc);   // DC decoupling
+  v[15] = ac;// - z1;        // high-pass (emphasis) filter
+  //z1 = ac;
 
   i = v[7];
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
