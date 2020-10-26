@@ -6,7 +6,7 @@
 
 #define VERSION   "1.02m"
 
-#define DEBUG           1   // Hardware diagnostics (disable this to save memory)
+#define DIAG            1   // Hardware diagnostics on startup (saves memory when disabled)
 #define KEYER           1   // CW keyer
 //#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
@@ -14,6 +14,7 @@
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with alignment-feature)
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
+#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH     1
 
 // QCX pin defintions
@@ -2360,6 +2361,7 @@ out=s2
 #define NEW_RX  1   // Faster (3rd-order) CIC stage, with simultanuous processing capability
 #ifdef NEW_RX
 
+static uint8_t tc = 0;
 void process(int16_t i_ac2, int16_t q_ac2)
 {
   static int16_t ac3;
@@ -2367,7 +2369,8 @@ void process(int16_t i_ac2, int16_t q_ac2)
   if(_init){ ac3 = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
   int16_t od1 = ac3 - ozd1; // Comb section
   ocomb = od1 - ozd2;
-  interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing
+//  if(tc++ == 0)
+    interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing, prevent nested interrupts with tc
   ozd2 = od1;
   ozd1 = ac3;
   int16_t qh;
@@ -2384,6 +2387,7 @@ void process(int16_t i_ac2, int16_t q_ac2)
   i = i_ac2; q = q_ac2;   // tbd: this can be more efficient
   int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = i_ac2;  // Delay to match Hilbert transform on Q branch
   ac3 = slow_dsp(i + qh);
+//  tc--;
 }
 
 static int16_t i_s0za1, i_s0za2, i_s0zb0, i_s0zb1, i_s1za1, i_s1za2, i_s1zb0, i_s1zb1;
@@ -3739,9 +3743,9 @@ void setup()
   MCUSR = 0;
   //wdt_disable();
   wdt_enable(WDTO_4S);  // Enable watchdog
+  uint32_t t0, t1;
 #ifdef DEBUG
   // Benchmark dsp_tx() ISR (this needs to be done in beginning of setup() otherwise when VERSION containts 5 chars, mis-alignment impact performance by a few percent)
-  uint32_t t0, t1;
   func_ptr = dsp_tx;
   t0 = micros();
   TIMER2_COMPA_vect();
@@ -3865,7 +3869,9 @@ void setup()
       lcd.setCursor(0, 1); lcd.print(F("!!CPU_rx")); lcd.print(i); lcd.print('='); lcd.print(load_rx[i]); lcd.print('%'); lcd_blanks();
     }
   }*/
+#endif
 
+#ifdef DIAG
   // Measure VDD (+5V); should be ~5V
   si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0
   digitalWrite(KEY_OUT, LOW);
@@ -3947,7 +3953,7 @@ void setup()
   if(i2c_error){
     fatal(F("BER_i2c"), i2c_error, ' ');
   }
-#endif
+#endif  // DIAG
 
   drive = 4;  // Init settings
 #ifdef QCX
