@@ -6,7 +6,7 @@
 
 #define VERSION   "1.02m"
 
-#define DIAG            1   // Hardware diagnostics on startup (saves memory when disabled)
+#define DIAG            1   // Hardware diagnostics on startup (frees memory when disabled)
 #define KEYER           1   // CW keyer
 //#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
@@ -14,7 +14,7 @@
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with alignment-feature)
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
-#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
+#define DEBUG         1   // for development purposes only (frees cpu&memory when disabled, adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH     1
 
 // QCX pin defintions
@@ -967,6 +967,7 @@ public:
   volatile uint8_t _div;  // note: uint8_t asserts fout > 3.5MHz with R_DIV=1
   volatile uint16_t _msa128min512;
   volatile uint32_t _msb128;
+  //volatile uint32_t _mod;
   volatile uint8_t pll_regs[8];
 
   #define BB0(x) ((uint8_t)(x))           // Bash byte x of int32_t
@@ -981,6 +982,10 @@ public:
   { 
     #define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
     uint32_t msb128 = _msb128 + ((int64_t)(_div * (int32_t)df) * _MSC * 128) / fxtal;
+    //uint32_t msb128 = ((int64_t)(_div * (int32_t)df + _mod) * _MSC * 128) / fxtal; // @pre: 14<=_div<=144, |df|<=5000, _mod<=1800e3 (for fout<30M), _MSC=524288
+
+    //#define _MSC  (F_XTAL/128)   // MSC exact multiple of F_XTAL (and maximized to fit in max. span 1048575)
+    //uint32_t msb128 = (_div * (int32_t)df + _mod);
 
     //#define _MSC  0xFFFFF  // Old algorithm 114% CPU load, shortcut for a fixed fxtal=27e6
     //register uint32_t xmsb = (_div * (_fout + (int32_t)df)) % fxtal;  // xmsb = msb * fxtal/(128 * _MSC);
@@ -991,6 +996,8 @@ public:
 
     uint32_t msp1 = _msa128min512 + msb128 / _MSC;  // = 128 * _msa + msb128 / _MSC - 512;
     uint32_t msp2 = msb128 % _MSC;  // = msb128 - msb128/_MSC * _MSC;
+    //uint32_t msp1 = _msa128min512;  // = 128 * _msa + msb128 / _MSC - 512;  assuming msb128 < _MSC, so that msp1 is constant
+    //uint32_t msp2 = msb128;  // = msb128 - msb128/_MSC * _MSC, assuming msb128 < _MSC
 
     //pll_regs[0] = BB1(msc);  // 3 regs are constant
     //pll_regs[1] = BB0(msc);
@@ -1091,6 +1098,7 @@ public:
       _div = d;
       _msa128min512 = fvcoa / fxtal * 128 - 512;
       _msb128=((uint64_t)(fvcoa % fxtal)*_MSC*128) / fxtal;
+      //_mod = fvcoa % fxtal;
   }
 
   void freqb(uint32_t fout){  // Set a CLK2 to fout Hz (on PLLB)
@@ -1442,7 +1450,7 @@ void set_lpf(uint8_t f){
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
 
 
-#define LPF_SWITCHING_DL2MAN_USDX_REV2  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+#define LPF_SWITCHING_DL2MAN_USDX_REV2  1   // Enable filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 #ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
 class TCA9555 {  // https://www.ti.com/lit/ds/symlink/tca9555.pdf
 public:
@@ -3311,6 +3319,7 @@ void display_vfo(uint32_t f){
 
 volatile uint8_t event;
 volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
+volatile uint8_t prev_menumode = 0;
 volatile int8_t menu = 0;  // current parameter id selected in menu
 
 #define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
@@ -3392,6 +3401,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
 }
 
 uint32_t save_event_time = 0;
+uint8_t vox_tx = 0;
 
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
 #ifdef QCX
@@ -4029,8 +4039,6 @@ void setup()
 
 }
 
-uint8_t vox_tx = 0;
-
 void loop()
 {
 #ifdef CAT
@@ -4076,7 +4084,7 @@ void loop()
 #endif
 
 #ifdef KEYER  //Keyer
- if(mode == CW && keyer_mode != SINGLE){  // check DIT/DAH keys for CW
+  if(mode == CW && keyer_mode != SINGLE){  // check DIT/DAH keys for CW
 
     switch(keyerState){ // Basic Iambic Keyer, keyerControl contains processing flags and keyer mode bits, Supports Iambic A and B, State machine based, uses calls to millis() for timing.
     case IDLE: // Wait for direct or latched paddle press
@@ -4161,7 +4169,7 @@ void loop()
             flashLED(1);
         }
     } */
- } else {
+  } else {
 #endif //KEYER
 
 //  #define DAH_AS_KEY  1
@@ -4181,7 +4189,6 @@ void loop()
     }
     switch_rxtx(0);
    }
-
 #ifdef KEYER
 }
 #endif //KEYER
@@ -4326,25 +4333,24 @@ void loop()
     }
   } else event = 0;  // no button pressed: reset event
 
-  if(menumode == 1){
-    menu += encoder_val;   // Navigate through menu of parameters and values
-    encoder_val = 0;
-    menu = max(1 /* 0 */, min(menu, N_PARAMS));
-  }
-
-  bool param_change = (encoder_val != 0);
   if(menumode != 0){  // Show parameter and value
+    int8_t encoder_change = encoder_val;
+    if((menumode == 1) && encoder_change){
+      menu += encoder_val;   // Navigate through menu
+      encoder_val = 0;
+      menu = max(1 /* 0 */, min(menu, N_PARAMS));
+    }
     if(menu != 0){
-      paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
+      if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
     } else {
       menumode = 0; show_banner();  // while scrolling through menu: menu item 0 goes back to main console
       change = true; // refresh freq display (when menu = 0)
     }
+    prev_menumode = menumode;
     if(menumode == 2){
-      if(param_change){
-        lcd.setCursor(0, 1); lcd.cursor(); delay(10); // edits menu item value; make cursor visible
+      if(encoder_change){
+        lcd.setCursor(0, 1); lcd.cursor();  // edits menu item value; make cursor visible
         if(menu == MODE){ // post-handling Mode parameter
-          delay(100);
           change = true;
           si5351.iqmsa = 0;  // enforce PLL reset
           // make more generic: 
@@ -4356,8 +4362,15 @@ void loop()
         }
         if(menu == ATT){ // post-handling ATT parameter
           if(dsp_cap == SDR){
-            adc_start(0, !(att & 0x01), F_ADC_CONV); admux[0] = ADMUX;  // att bit 0 ON: attenuate -13dB by changing ADC AREF (full-scale range) from 1V1 to 5V
-            adc_start(1, !(att & 0x01), F_ADC_CONV); admux[1] = ADMUX;
+            noInterrupts();
+          #ifdef SWAP_RX_IQ
+            adc_start(1, !(att & 0x01)/*true*/, F_ADC_CONV); admux[0] = ADMUX;
+            adc_start(0, !(att & 0x01)/*true*/, F_ADC_CONV); admux[1] = ADMUX;
+          #else
+            adc_start(0, !(att & 0x01)/*true*/, F_ADC_CONV); admux[0] = ADMUX;
+            adc_start(1, !(att & 0x01)/*true*/, F_ADC_CONV); admux[1] = ADMUX;
+          #endif //SWAP_RX_IQ
+            interrupts();
           }
           digitalWrite(RX, !(att & 0x02)); // att bit 1 ON: attenuate -20dB by disabling RX line, switching Q5 (antenna input switch) into 100k resistence
           pinMode(AUDIO1, (att & 0x04) ? OUTPUT : INPUT); // att bit 2 ON: attenuate -40dB by terminating ADC inputs with 10R
@@ -4383,19 +4396,11 @@ void loop()
 #ifdef KEYER
         if(menu == KEY_WPM){
           loadWPM(keyer_speed);
-          //paramAction(SAVE, KEY_WPM);
         }
         if(menu == KEY_MODE){
           if(keyer_mode == 0){ keyerControl = IAMBICA; }
           if(keyer_mode == 1){ keyerControl = IAMBICB; }
           if(keyer_mode == 2){ keyerControl = SINGLE; }
-          //paramAction(SAVE, KEY_MODE);
-        }
-        if(menu == KEY_PIN){
-          //paramAction(SAVE,KEY_PIN);
-        }
-        if(menu == KEY_TX){
-          //paramAction(SAVE, KEY_TX);
         }
 #endif //KEYER
       }
@@ -4404,15 +4409,18 @@ void loop()
         numSamples = 0;
         delay(500 * 5/4);     // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply wqith 1.25)
         sr = numSamples * 2;   // samples per second
+        paramAction(UPDATE_MENU, menu); // refresh
       }
       if(menu == CPULOAD){     // measure CPU-load
         uint32_t i = 0;
         uint32_t prev_time = millis();
         for(i = 0; i != 300000; i++) wdt_reset(); // fixed CPU-load 132052*1.25us delay under 0% load condition; is 132052*1.25 * 20M = 3301300 CPU cycles fixed load
         cpu_load = 100 - 132 * 100 / (millis() - prev_time);
+        paramAction(UPDATE_MENU, menu); // refresh
       }
       if((menu == PARAM_A) || (menu == PARAM_B) || (menu == PARAM_C)){
         delay(300);
+        paramAction(UPDATE_MENU, menu); // refresh
       }
 #endif
     }
