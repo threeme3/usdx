@@ -10,11 +10,11 @@
 #define KEYER           1   // CW keyer
 //#define CAT           1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
-//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or using a si5351 break-out board)
+//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or SI5351 break-out board)
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with alignment-feature)
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
-#define DEBUG         1   // for development purposes only (frees cpu&memory when disabled, adds debugging features such as CPU, sample-rate measurement, additional parameters)
+//#define DEBUG         1   // for development purposes only (frees cpu&memory when disabled, adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH     1
 
 // QCX pin defintions
@@ -3330,10 +3330,10 @@ uint8_t eeprom_version;
 int eeprom_addr;
 
 // Support functions for parameter and menu handling
-enum action_t { UPDATE, UPDATE_MENU, LOAD, SAVE, SKIP };
+enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP };
+
 // output menuid in x.y format
-void printmenuid(uint8_t menuid)
-{
+void printmenuid(uint8_t menuid){
   static const char seperator[] = {'.', ' '};
   uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
   for(int i = 0; i < 2; i++){
@@ -3378,15 +3378,14 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
-      if(((int32_t)value + encoder_val) < _min) value = (continuous) ? _max : _min; 
-      else value += encoder_val;
+      if(((int32_t)value + encoder_val) < _min) value = (continuous) ? _max : _min;
+      else if(((int32_t)value + encoder_val) > _max) value = (continuous) ? _min : _max;
+      else value = (int32_t)value + encoder_val;
       encoder_val = 0;
-      if(continuous) value = (value % (_max+1));
-      value = max(_min, min((int32_t)value, _max));
 
-      printlabel(action, menuid, label);
-      if(enumArray == NULL){
-        if((_min < 0) && (value >= 0)) lcd.print('+');
+      printlabel(action, menuid, label);  // print normal/menu label
+      if(enumArray == NULL){  // print value
+        if((_min < 0) && (value >= 0)) lcd.print('+');  // add + sign for positive values, in case negative values are supported
         lcd.print(value);
       } else {
         lcd.print(enumArray[value]);
@@ -3394,9 +3393,9 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       lcd_blanks(); lcd_blanks();
       //if(action == UPDATE) paramAction(SAVE, value, menuid, label, enumArray, _min, _max, continuous, init_val);
       break;
-      default:
-        actionCommon(action, (uint8_t *)&value, sizeof(value));
-        break;
+    default:
+      actionCommon(action, (uint8_t *)&value, sizeof(value));
+      break;
   }
 }
 
@@ -3422,7 +3421,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, BACKL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
 
-void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
+int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
   if((action == SAVE) || (action == LOAD)){
     eeprom_addr = EEPROM_OFFSET;
@@ -3463,9 +3462,7 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
     case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, pwm_min, 255, false); break;
     case BACKL:   paramAction(action, backlight, 0x84, F("Backlight"), offon_label, 0, 1, false); break;
-#ifdef DEBUG
     case IQ_ADJ:  paramAction(action, rx_ph_q, 0x85, F("IQ Phase"), NULL, 0, 180, false); break;
-#endif
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
@@ -3485,7 +3482,10 @@ void paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     // Invisible parameters
     case FREQ:    paramAction(action, freq, 0, NULL, NULL, 0, 0, false); break;
     case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0, false); break;
+    case NULL:    menumode = 0; show_banner(); change = true; break;
+    default:      id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
+  return id;
 }
 
 void initPins(){  
@@ -4236,8 +4236,9 @@ void loop()
       case BR|SC:
         if(!menumode){
           int8_t prev_mode = mode;
-          encoder_val = 1;
-          paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, _N(mode_label), true);
+          mode += 1;
+          //encoder_val = 1;
+          //paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, _N(mode_label), true);
 //#define MODE_CHANGE_RESETS  1
 #ifdef MODE_CHANGE_RESETS
           if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500; // sets suitable stepsize
@@ -4250,6 +4251,7 @@ void loop()
           prev_stepsize[prev_mode == CW] = stepsize; stepsize = prev_stepsize[mode == CW]; // backup stepsize setting for previous mode, restore previous stepsize setting for current selected mode; filter settings captured for either CQ or other modes.
           prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
 #endif
+          paramAction(UPDATE, MODE);
           paramAction(SAVE, MODE); 
           paramAction(SAVE, FILTER);
           si5351.iqmsa = 0;  // enforce PLL reset
@@ -4337,15 +4339,11 @@ void loop()
     int8_t encoder_change = encoder_val;
     if((menumode == 1) && encoder_change){
       menu += encoder_val;   // Navigate through menu
-      encoder_val = 0;
       menu = max(1 /* 0 */, min(menu, N_PARAMS));
+      menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
+      encoder_val = 0;
     }
-    if(menu != 0){
-      if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
-    } else {
-      menumode = 0; show_banner();  // while scrolling through menu: menu item 0 goes back to main console
-      change = true; // refresh freq display (when menu = 0)
-    }
+    if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
     prev_menumode = menumode;
     if(menumode == 2){
       if(encoder_change){
