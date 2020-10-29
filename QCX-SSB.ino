@@ -89,7 +89,7 @@ ssb_cap=1; dsp_cap=2;
 #define SINGLE   2        // Keyer Mode 0 1 -> Iambic2  2 ->SINGLE
 
 int keyer_speed = 15;
-static unsigned long ditTime ;                    // No. milliseconds per dit
+static unsigned long ditTime;                    // No. milliseconds per dit
 static uint8_t keyerControl;
 static uint8_t keyerState;
 static uint8_t keyer_mode = 2; //->  SINGLE
@@ -1735,7 +1735,7 @@ void dsp_tx_fm()
 #define MLEA(y, x, L, M)  (y)  = (y) + ((((x) - (y)) >> (L)) - (((x) - (y)) >> (M))); // multiplierless exponental averaging [Lyons 13.33.1], with alpha=1/2^L - 1/2^M
 
 volatile uint8_t cwdec = 1;
-static int32_t avg=0;
+static int32_t avg = 256;
 static uint8_t sym;
 const char m2c[] PROGMEM = "**ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
 static uint32_t amp32 = 0;
@@ -1759,7 +1759,7 @@ long lowtimesavg;
 long startttimelow;
 long lowduration;
 long laststarttime = 0;
-int wpm;
+int wpm = 20;
 
 void cw_decode()
 {
@@ -3089,18 +3089,18 @@ void start_rx()
 
 int16_t _centiGain = 0;
 
+uint8_t semi_qsk = false;
+uint32_t semi_qsk_timeout = 0;
+
 void switch_rxtx(uint8_t tx_enable){
 
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
   tx = tx_enable;
-  if(tx_enable){
+  if(tx_enable){  // tx
     _centiGain = centiGain;  // backup AGC setting
-  } else {
-    centiGain = _centiGain;  // restore AGC setting
-  }
-  if(tx_enable){
+    semi_qsk_timeout = 0;
     switch(mode){
       case USB:
       case LSB: func_ptr = dsp_tx; break;
@@ -3108,15 +3108,24 @@ void switch_rxtx(uint8_t tx_enable){
       case AM:  func_ptr = dsp_tx_am; break;
       case FM:  func_ptr = dsp_tx_fm; break;
     }
-  } else func_ptr = sdr_rx;
-  if((!dsp_cap) && (!tx_enable) && vox)  func_ptr = dummy; //hack: for SSB mode, disable dsp_rx during vox mode enabled as it slows down the vox loop too much!
+  } else {  // rx
+    if(!(semi_qsk_timeout)){
+      semi_qsk_timeout = millis() + ditTime * 8;
+      if((mode == CW) && semi_qsk) func_ptr = dummy; else func_ptr = sdr_rx;
+    } else {
+      centiGain = _centiGain;  // restore AGC setting
+      semi_qsk_timeout = 0;
+      func_ptr = sdr_rx;
+    }
+  }
+  if((!dsp_cap) && (!tx_enable) && vox) func_ptr = dummy; //hack: for SSB mode, disable dsp_rx during vox mode enabled as it slows down the vox loop too much!
   interrupts();
   if(tx_enable) ADMUX = admux[2];
   else _init = 1;
   rx_state = 0;
   if((cwdec) && (mode == CW)){ filteredstate = tx_enable; dec2(); }
   
-  if(tx_enable){
+  if(tx_enable){ // tx
 #ifdef KEYER
     if(practice){
       digitalWrite(RX, LOW); // TX (disable RX)
@@ -3141,7 +3150,7 @@ void switch_rxtx(uint8_t tx_enable){
       OCR1AL = 0; // make sure SIDETONE is set to 0%
       TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
     }
-  } else {
+  } else {  // rx
       //TCCR1A |= (1 << COM1A1);  // enable SIDETONE
       TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
       OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
@@ -3419,7 +3428,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, BACKL, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, BACKL, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3452,11 +3461,12 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef QCX
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
 #endif
+    case SEMIQSK: paramAction(action, semi_qsk,  0x24, F("Semi QSK"), offon_label, 0, 1, false); break;
 #ifdef KEYER
-    case KEY_WPM:  paramAction(action, keyer_speed,   0x24, F("Keyer Speed"), NULL, 0, 35, false); break;
-    case KEY_MODE: paramAction(action, keyer_mode, 0x25, F("Keyer Mode"), keyer_mode_label, 0, 2, false); break;
-    case KEY_PIN:  paramAction(action, keyer_swap,   0x26, F("Keyer Swap"), offon_label, 0, 1, false); break;
-    case KEY_TX:   paramAction(action, practice,   0x27, F("Practice"), offon_label, 0, 1, false); break;
+    case KEY_WPM:  paramAction(action, keyer_speed,   0x25, F("Keyer Speed"), NULL, 0, 35, false); break;
+    case KEY_MODE: paramAction(action, keyer_mode, 0x26, F("Keyer Mode"), keyer_mode_label, 0, 2, false); break;
+    case KEY_PIN:  paramAction(action, keyer_swap,   0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
+    case KEY_TX:   paramAction(action, practice,   0x28, F("Practice"), offon_label, 0, 1, false); break;
 #endif
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("VOX Level"), NULL, 0, 255, false); break;
@@ -4066,7 +4076,7 @@ void loop()
 //  delay(1);
 //#endif
 
-  if((mode == CW) && cwdec) cw_decode();
+  if((mode == CW) && cwdec && !(semi_qsk_timeout)) cw_decode();
 
   if(menumode == 0){ // in main    
     if(cw_event){
@@ -4168,6 +4178,7 @@ void loop()
 #ifdef KEYER
 }
 #endif //KEYER
+  if((semi_qsk_timeout) && (millis() > semi_qsk_timeout)){ switch_rxtx(0); }  // delayed QSK RX
 
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(inv ^ digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
@@ -4302,8 +4313,8 @@ void loop()
           wdt_reset();
           if(encoder_val){
             paramAction(UPDATE, VOLUME);
+            if(volume < 0){ volume = 10; paramAction(SAVE, VOLUME); powerDown(); }  // powerDown when volume < 0
             paramAction(SAVE, VOLUME);
-            if(volume < 0) powerDown();  // powerDown when volume < 0
           }
         }
         change = true; // refresh display
