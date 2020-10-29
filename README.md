@@ -95,7 +95,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 1.10 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
 | 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
 | 2.2 CW Tone         | CW Filter+Side-tone (600, 700) | |
-| 2.3 CW Offset       | CW RX Offset (use to align with CW Filter Tone) | |
+| 2.3 CW Offset       | CW RX filter offset alignment (QCX only) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | | |
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
@@ -105,6 +105,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 8.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
 | 8.4 Backlight       | Display backlight (ON, OFF) | |
 | 8.5 RX Phase Adj    | RX I/Q phase offset in degrees (45..135) | |
+| 8.6 IQ Test/Cal.    | CW-filter alignment (QCX only) | |
 | 9.1 Sample rate     | for debugging, testing and experimental purpose | |
 | 9.2 CPU load        | for debugging, testing and experimental purpose | |
 | 9.3 Param A         | for debugging, testing and experimental purpose | |

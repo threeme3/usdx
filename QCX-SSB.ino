@@ -90,13 +90,13 @@ ssb_cap=1; dsp_cap=2;
 
 int keyer_speed = 15;
 static unsigned long ditTime ;                    // No. milliseconds per dit
-static unsigned char keyerControl;
-static unsigned char keyerState;
-static unsigned char keyer_mode = 2; //->  SINGLE
-static unsigned char keyer_swap = 0; //->  DI/DAH
-static unsigned char practice = false;  // Practice mode
+static uint8_t keyerControl;
+static uint8_t keyerState;
+static uint8_t keyer_mode = 2; //->  SINGLE
+static uint8_t keyer_swap = 0; //->  DI/DAH
+static uint8_t practice = false;  // Practice mode
 
-static unsigned long ktimer;
+static uint32_t ktimer;
 static int Key_state;
 int debounce;
 
@@ -105,10 +105,10 @@ enum KSTYPE {IDLE, CHK_DIT, CHK_DAH, KEYED_PREP, KEYED, INTER_ELEMENT }; // Stat
 void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 {
     if(digitalRead(DIT) == LOW) {
-        keyerControl |= keyer_swap?DAH_L:DIT_L;
+        keyerControl |= keyer_swap ? DAH_L : DIT_L;
     }
     if(digitalRead(DAH) == LOW) {
-        keyerControl |= keyer_swap?DIT_L:DAH_L;
+        keyerControl |= keyer_swap ? DIT_L : DAH_L;
     }
 }
 
@@ -2971,11 +2971,11 @@ const byte fonts[N_FONTS][8] PROGMEM = {
   0b00000,
   0b00000,
   0b00000 },
-{ 0b00000,  // 8; tbd
-  0b00000,
-  0b00000,
-  0b00000,
-  0b00000,
+{ 0b11100,  // 8; rit
+  0b10010,
+  0b11100,
+  0b10100,
+  0b10010,
   0b00000,
   0b00000,
   0b00000 }
@@ -3464,7 +3464,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case BACKL:   paramAction(action, backlight, 0x84, F("Backlight"), offon_label, 0, 1, false); break;
     case IQ_ADJ:  paramAction(action, rx_ph_q, 0x85, F("IQ Phase"), NULL, 0, 180, false); break;
 #ifdef CAL_IQ
-    case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x84, F("IQ Test/Cal."), NULL, 0, 0, false); break;
+    case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x86, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
 #ifdef DEBUG
     case SR:      paramAction(action, sr, 0x91, F("Sample rate"), NULL, INT32_MIN, INT32_MAX, false); break;
@@ -3991,6 +3991,7 @@ void setup()
   change = true;
   prev_bandval = bandval;
   vox = false;  // disable VOX on start-up for safety
+  nr = 0; // disable NR on start-up for stability
 
   build_lut();
 
@@ -4023,7 +4024,6 @@ void setup()
 #ifdef KEYER
   keyerState = IDLE;
   keyerControl = IAMBICB;      // Or 0 for IAMBICA
-  //keyer_mode = SINGLE ;      // default Keyer wir durch Menue 10.2 später verändert
   paramAction(LOAD, KEY_MODE);
   paramAction(LOAD, KEY_PIN);
   loadWPM(keyer_speed);                 // Fix speed at 15 WPM
@@ -4114,21 +4114,16 @@ void loop()
         }
         break;
     case KEYED_PREP: // Assert key down, start timing, state shared for dit or dah
-        //digitalWrite(ledPin, HIGH);         // turn the LED on
         Key_state = HIGH;
         switch_rxtx(Key_state);
-        //lcd.setCursor(15, 1); lcd.print('h');
-        //lcd.noCursor(); lcd.setCursor(0, 0); lcd.print((int16_t)ditTime);
         ktimer += millis();                 // set ktimer to interval end time
         keyerControl &= ~(DIT_L + DAH_L);   // clear both paddle latch bits
         keyerState = KEYED;                 // next state
         break;
     case KEYED: // Wait for timer to expire
         if(millis() > ktimer) {            // are we at end of key down ?
-            //digitalWrite(ledPin, LOW);      // turn the LED off
             Key_state = LOW;
             switch_rxtx(Key_state);
-            //lcd.setCursor(15, 1); lcd.print('l');
             ktimer = millis() + ditTime;    // inter-element time
             keyerState = INTER_ELEMENT;     // next state
         } else if(keyerControl & IAMBICB) {
@@ -4150,25 +4145,6 @@ void loop()
         break;
     }
 
-    // Simple Iambic mode select. The mode is toggled between A & B every time switch is pressed. Flash LED to indicate new mode.
-    /* if(LOW == LOW) {
-        // Give switch time to settle
-        debounce = 100;
-        do {
-            // wait here until switch is released, we debounce to be sure
-            if(LOW == LOW) {
-                debounce = 100;
-            }
-            delay(2);
-        } while (debounce--);
-
-        keyerControl ^= IAMBICB;        // Toggle Iambic B bit
-        if(keyerControl & IAMBICB) {   // Flash once for A, twice for B
-            flashLED(2);
-        } else {
-            flashLED(1);
-        }
-    } */
   } else {
 #endif //KEYER
 
