@@ -1,4 +1,4 @@
-//  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
+//  QCX-SSB.ino - https://github.com/threeme3v/QCX-SSB
 //
 //  Copyright 2019, 2020   Guido PE1NNZ <pe1nnz@amsat.org>
 //
@@ -1061,7 +1061,7 @@ public:
 
   void oe(uint8_t mask){ SendRegister(3, ~mask); } // output-enable mask: CLK2=4; CLK1=2; CLK0=1
 
-  void freq(uint32_t fout, uint16_t i, uint16_t q){  // Set a CLK0,1,2 to fout Hz with phase i, q (on PLLA)
+  void freq(int32_t fout, uint16_t i, uint16_t q){  // Set a CLK0,1,2 to fout Hz with phase i, q (on PLLA)
       uint8_t rdiv = 0; // CLK pin sees fout/(2^rdiv)
       if(fout > 300000000){ i/=3; q/=3; fout/=3; }  // for higher freqs, use 3rd harmonic
       if(fout < 500000){ rdiv = 7; fout *= 128; } // Divide by 128 for fout 4..500kHz
@@ -2971,11 +2971,11 @@ const byte fonts[N_FONTS][8] PROGMEM = {
   0b00000,
   0b00000,
   0b00000 },
-{ 0b11100,  // 8; rit
-  0b10010,
-  0b11100,
-  0b10100,
-  0b10010,
+{ 0b00000,  // 8; TBD
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
   0b00000,
   0b00000,
   0b00000 }
@@ -3021,6 +3021,12 @@ uint16_t analogSampleMic()
 
 volatile bool change = true;
 volatile int32_t freq = 7074000;
+static int32_t vfo[] = { 7074000, 14074000 };
+static uint8_t vfomode[] = { LSB, USB };
+const char* vfosel_label[] = { "A", "B"/*, "Split"*/ };
+enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
+volatile uint8_t vfosel = VFOA;
+volatile int16_t rit = 0;
 
 // We measure the average amplitude of the signal (see slow_dsp()) but the S-meter should be based on RMS value.
 // So we multiply by 0.707/0.639 in an attempt to roughly compensate, although that only really works if the input
@@ -3141,6 +3147,7 @@ void switch_rxtx(uint8_t tx_enable){
 #endif
       lcd.setCursor(15, 1); lcd.print('T');
       if(mode == CW){ si5351.freq_calc_fast(-cw_offset); si5351.SendPLLRegisterBulk(); } // for CW, TX at freq
+      if(rit){ si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk(); }
 #ifdef TX_CLK0_CLK1
       si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN,CLK1_EN,CLK0_EN=1
 #else
@@ -3229,8 +3236,13 @@ void process_encoder_tuning_step(int8_t steps)
 {
   int32_t stepval = stepsizes[stepsize];
   //if(stepsize < STEP_100) freq %= 1000; // when tuned and stepsize > 100Hz then forget fine-tuning details
-  freq += steps * stepval;
-  //freq = max(1, min(99999999, freq));
+  if(rit){
+    rit += steps * stepval;
+    rit = max(-9999, min(9999, rit));
+  } else {
+    freq += steps * stepval;
+    freq = max(1, min(999999999, freq));
+  }
   change = true;
 }
 
@@ -3311,15 +3323,21 @@ void show_banner(){
 
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
 
-void display_vfo(uint32_t f){
+void display_vfo(int32_t f){
   lcd.setCursor(0, 1);
-  lcd.print('\x06');  // VFO A/B
+  lcd.print((rit) ? ' ' : ((vfosel%2)|((vfosel==SPLIT) & tx)) ? '\x07' : '\x06');  // RIT, VFO A/B
 
-  uint32_t scale=10e6;  // VFO frequency
-  if(f/scale == 0){ lcd.print(' '); scale/=10; }  // Initial space instead of zero
+  int32_t scale=10e6;
+  if(rit){
+    f = rit;
+    scale=1e3;  // RIT frequency
+    lcd.print(F("RIT ")); lcd.print(rit < 0 ? '-' : '+');
+  } else {
+    if(f/scale == 0){ lcd.print(' '); scale/=10; }  // Initial space instead of zero
+  }
   for(; scale!=1; f%=scale, scale/=10){
-    lcd.print(f/scale);
-    if(scale == (uint32_t)1e3 || scale == (uint32_t)1e6) lcd.print(',');  // Thousands separator
+    lcd.print(abs(f/scale));
+    if(scale == (int32_t)1e3 || scale == (int32_t)1e6) lcd.print(',');  // Thousands separator
   }
   
   lcd.print(' '); lcd.print(mode_label[mode]); lcd_blanks();
@@ -3424,11 +3442,11 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 32  // number of (visible) parameters
+#define N_PARAMS 34  // number of (visible) parameters
 
-#define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
+#define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, BACKL, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, BACKL, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQA, FREQB, MODEA, MODEB, VERS};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3451,11 +3469,13 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case FILTER:  paramAction(action, filt, 0x13, F("Filter BW"), filt_label, 0, _N(filt_label) - 1, false); break;
     case BAND:    paramAction(action, bandval, 0x14, F("Band"), band_label, 0, _N(band_label) - 1, false); break;
     case STEP:    paramAction(action, stepsize, 0x15, F("Tune Rate"), stepsize_label, 0, _N(stepsize_label) - 1, false); break;
-    case AGC:     paramAction(action, agc, 0x16, F("AGC"), offon_label, 0, 1, false); break;
-    case NR:      paramAction(action, nr, 0x17, F("NR"), NULL, 0, 8, false); break;
-    case ATT:     paramAction(action, att, 0x18, F("ATT"), att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, att2, 0x19, F("ATT2"), NULL, 0, 16, false); break;
-    case SMETER:  paramAction(action, smode, 0x1A, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
+    case VFOSEL:  paramAction(action, vfosel, 0x16, F("VFO Mode"), vfosel_label, 0, _N(vfosel_label) - 1, false); break;
+    case RIT:     paramAction(action, rit, 0x17, F("RIT"), offon_label, 0, 1, false); break;    
+    case AGC:     paramAction(action, agc, 0x18, F("AGC"), offon_label, 0, 1, false); break;
+    case NR:      paramAction(action, nr, 0x19, F("NR"), NULL, 0, 8, false); break;
+    case ATT:     paramAction(action, att, 0x1A, F("ATT"), att_label, 0, 7, false); break;
+    case ATT2:    paramAction(action, att2, 0x1B, F("ATT2"), NULL, 0, 16, false); break;
+    case SMETER:  paramAction(action, smode, 0x1C, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
     case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
 #ifdef QCX
@@ -3490,8 +3510,13 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, INT16_MIN, INT16_MAX, false); break;
 #endif
     // Invisible parameters
-    case FREQ:    paramAction(action, freq, 0, NULL, NULL, 0, 0, false); break;
+    case FREQA:   paramAction(action, vfo[VFOA], 0, NULL, NULL, 0, 0, false); break;
+    case FREQB:   paramAction(action, vfo[VFOB], 0, NULL, NULL, 0, 0, false); break;
+    case MODEA:   paramAction(action, vfomode[VFOA], 0, NULL, NULL, 0, 0, false); break;
+    case MODEB:   paramAction(action, vfomode[VFOB], 0, NULL, NULL, 0, 0, false); break;
     case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0, false); break;
+
+    // Non-parameters
     case NULL:    menumode = 0; show_banner(); change = true; break;
     default:      if(id != N_PARAMS) id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
@@ -4000,8 +4025,11 @@ void setup()
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
-  vox = false;  // disable VOX on start-up for safety
-  nr = 0; // disable NR on start-up for stability
+  vox = false;  // disable VOX
+  nr = 0; // disable NR
+  rit = false;  // disable RIT
+  freq = vfo[vfosel%2];
+  mode = vfomode[vfosel%2];
 
   build_lut();
 
@@ -4076,7 +4104,7 @@ void loop()
 //  delay(1);
 //#endif
 
-  if((mode == CW) && cwdec && !(semi_qsk_timeout)) cw_decode();
+  if((mode == CW) && cwdec) cw_decode();  // if(!(semi_qsk_timeout)) cw_decode(); else dec2();
 
   if(menumode == 0){ // in main    
     if(cw_event){
@@ -4239,11 +4267,14 @@ void loop()
           prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
 #endif
           paramAction(UPDATE, MODE);
+          vfomode[vfosel%2] = mode;
+          paramAction(SAVE, (vfosel%2) ? MODEB : MODEA);  // save vfoa/b changes
           paramAction(SAVE, MODE); 
           paramAction(SAVE, FILTER);
           si5351.iqmsa = 0;  // enforce PLL reset
           if((prev_mode == CW) && (cwdec)) show_banner();
           change = true;
+          rit = 0;
         } else {
           if(menumode == 1){ menumode = 0; show_banner(); change = true; }  // short right-click while in menu: enter value selection screen
           if(menumode == 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
@@ -4288,6 +4319,9 @@ void loop()
           //for(;micros() < next;);  next = micros() + 16;   // sync every 1000000/62500=16ms (or later if missed)
         } //
         #endif //SIMPLE_RX
+        rit = !rit;
+        stepsize = (rit) ?  STEP_10 : STEP_500;
+        change = true;
         break;
       case BR|PT: break;
       case BE|SC:
@@ -4336,6 +4370,8 @@ void loop()
       if(encoder_change){
         lcd.setCursor(0, 1); lcd.cursor();  // edits menu item value; make cursor visible
         if(menu == MODE){ // post-handling Mode parameter
+          vfomode[vfosel%2] = mode;
+          paramAction(SAVE, (vfosel%2) ? MODEB : MODEA);  // save vfoa/b changes
           change = true;
           si5351.iqmsa = 0;  // enforce PLL reset
           // make more generic: 
@@ -4343,6 +4379,18 @@ void loop()
           if(mode == CW) { filt = 4; nr = 0; } else filt = 0;
         }
         if(menu == BAND){
+          change = true;
+        }
+        if(menu == VFOSEL){
+          freq = vfo[vfosel%2];
+          mode = vfomode[vfosel%2];
+          // make more generic: 
+          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500;
+          if(mode == CW) { filt = 4; nr = 0; } else filt = 0;
+          change = true;
+        }
+        if(menu == RIT){
+          stepsize = (rit) ?  STEP_10 : STEP_500;
           change = true;
         }
         if(menu == ATT){ // post-handling ATT parameter
@@ -4421,6 +4469,7 @@ void loop()
   if(change){
     change = false;
     if(prev_bandval != bandval){ freq = band[bandval]; prev_bandval = bandval; }
+    vfo[vfosel%2] = freq;
     save_event_time = millis() + 1000;  // schedule time to save freq (no save while tuning, hence no EEPROM wear out)
  
     if(menumode == 0){
@@ -4442,17 +4491,18 @@ void loop()
 
     noInterrupts();
     if(mode == CW){
-      si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
+      si5351.freq(freq + cw_offset + (int32_t)rit, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
     } else
     if(mode == LSB)
       si5351.freq(freq, rx_ph_q, 0/*90, 0*/);  // RX in LSB
     else
       si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
+    if(rit){ si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk(); }
     interrupts();
   }
   
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
-    paramAction(SAVE, FREQ);  // save freq changes
+    paramAction(SAVE, (vfosel%2) ? FREQB : FREQA);  // save vfoa/b changes
     save_event_time = 0;
     //lcd.setCursor(15, 1); lcd.print('S'); delay(100); lcd.setCursor(15, 1); lcd.print('R');
   }

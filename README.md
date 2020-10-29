@@ -24,7 +24,7 @@ pe1nnz@amsat.org
 - SSB opposite side-band/carrier supression **Transmit: better than -45dBc, IMD3 (two-tone) -33dBc, Receive: better than -50dBc**
 - **Multiband** support, continuously tunable through bands **80m-10m** (and from 20kHz..99MHz with loss in performance)
 - **Open source** firmware, built with Arduino IDE; allows experimentation, new features can be added, contributions can be shared via Github, software-complexity: 2000 lines of code
-- Software-based **VOX** that can be used as **fast Full Break-In** (QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
+- Software-based **VOX** that can be used as **fast Full Break-In** (QSK and semi-QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
 - **Simple to install modification** with **8 component changes and 8 wires**
 - **Lightweight and low-cost transceiver design**: because of the EER-transmitter class-E stage it is **highly power-efficient** (no bulky heatsinks required), and has a **simple design** (no complex balanced linear power amplifier required)
 - **Fully digital and software-based SSB transmit-stage**: samples microphone-input and reconstruct a SSB-signal by controlling the phase of the SI5351 PLL (through tiny frequency changes over 800kbits/s I2C) and the amplitude of the PA (through PWM of the PA key-shaping circuit)
@@ -34,6 +34,7 @@ pe1nnz@amsat.org
 - Receiver Front-end selectivity: **steep -45dB/decade roll-off +/-2kHz from tuned-frequency**
 - Blocking **dynamic range: 20kHz offset 123dB, 2kHz offset 78dB**
 - **CW decoder (experimental).**
+- **VFO A/B + RIT and Split**, and switching corresponding band-filter relays via I2C
 - Probably the most **cost effective** and **easy** to build standalone SDR/SSB transceiver that you can find. Very much **simplifies** the original QCX circuit (i.e. **50% less components to install**, **no complex transformer windings**, **no alignment procedure**) and more **versatile** in use.
 
 
@@ -88,18 +89,21 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 1.3 Filter BW       | Audio passband (Full, 300..3000, 300..2400, 300..1800, 500, 200, 100, 50 Hz) | **R double** |
 | 1.4 Band            | Band-switch to pre-defined CW/FT8 freqs (80,60,40,30,20,17,15,12,10,6m) | **E double** |
 | 1.5 Tuning Rate     | Tuning step size 10M, 1M, 0.5M, 100k, 10k, 1k, 0.5k, 100, 10, 1 | **E or E long** |
-| 1.6 AGC             | Automatic Gain Control (ON, OFF) | |
-| 1.7 NR              | Noise-reduction level (0-8), load-pass & smooth | |
-| 1.8 ATT             | Analog Attenuator (0, -13, -20, -33, -40, -53, -60, -73 dB) | |
-| 1.9 ATT2            | Digital Attenuator in CIC-stage (0-16) in steps of 6dB | |
-| 1.10 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
+| 1.6 VFO Mode        | Selects different VFO, or RX/TX split-VFO (A, B, Split) | |
+| 1.7 RIT             | RX in transit (ON, OFF) | **R long** |
+| 1.8 AGC             | Automatic Gain Control (ON, OFF) | |
+| 1.9 NR              | Noise-reduction level (0-8), load-pass & smooth | |
+| 1.10 ATT            | Analog Attenuator (0, -13, -20, -33, -40, -53, -60, -73 dB) | |
+| 1.11 ATT2           | Digital Attenuator in CIC-stage (0-16) in steps of 6dB | |
+| 1.12 S-meter        | Type of S-Meter (OFF, dBm, S, S-bar) | |
 | 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
 | 2.2 CW Tone         | CW Filter+Side-tone (600, 700) | |
 | 2.3 CW Offset       | CW RX filter offset alignment (QCX only) | |
-| 2.4 Keyer speed     | CW Keyer speed in Paris-WPM (0..35) | |
-| 2.5 Keyer mode      | Type of keyer (Iambic-A, -B, Straight) | |
-| 2.6 Keyer swap      | to swap keyer DIH, DAH inputs (ON, OFF) | |
-| 2.7 Practice        | to disable TX for practice purposes (ON, OFF) | |
+| 2.4 Semi QSK        | On TX silents RX on CW sign and word spaces | | 
+| 2.5 Keyer speed     | CW Keyer speed in Paris-WPM (0..35) | |
+| 2.6 Keyer mode      | Type of keyer (Iambic-A, -B, Straight) | |
+| 2.7 Keyer swap      | to swap keyer DIH, DAH inputs (ON, OFF) | |
+| 2.8 Practice        | to disable TX for practice purposes (ON, OFF) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | | |
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
