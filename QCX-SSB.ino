@@ -3419,7 +3419,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define N_ALL_PARAMS (N_PARAMS+2)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, BACKL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, FREQ, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, BACKL, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQ, VERS};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3452,6 +3452,12 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef QCX
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
 #endif
+#ifdef KEYER
+    case KEY_WPM:  paramAction(action, keyer_speed,   0x24, F("Keyer Speed"), NULL, 0, 35, false); break;
+    case KEY_MODE: paramAction(action, keyer_mode, 0x25, F("Keyer Mode"), keyer_mode_label, 0, 2, false); break;
+    case KEY_PIN:  paramAction(action, keyer_swap,   0x26, F("Keyer Swap"), offon_label, 0, 1, false); break;
+    case KEY_TX:   paramAction(action, practice,   0x27, F("Practice"), offon_label, 0, 1, false); break;
+#endif
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("VOX Level"), NULL, 0, 255, false); break;
 #ifdef MOX
@@ -3461,11 +3467,11 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
     case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, pwm_min, 255, false); break;
-    case BACKL:   paramAction(action, backlight, 0x84, F("Backlight"), offon_label, 0, 1, false); break;
-    case IQ_ADJ:  paramAction(action, rx_ph_q, 0x85, F("IQ Phase"), NULL, 0, 180, false); break;
+    case IQ_ADJ:  paramAction(action, rx_ph_q, 0x84, F("IQ Phase"), NULL, 0, 180, false); break;
 #ifdef CAL_IQ
-    case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x86, F("IQ Test/Cal."), NULL, 0, 0, false); break;
+    case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x85, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
+    case BACKL:   paramAction(action, backlight, 0x86, F("Backlight"), offon_label, 0, 1, false); break;
 #ifdef DEBUG
     case SR:      paramAction(action, sr, 0x91, F("Sample rate"), NULL, INT32_MIN, INT32_MAX, false); break;
     case CPULOAD: paramAction(action, cpu_load, 0x92, F("CPU load %"), NULL, INT32_MIN, INT32_MAX, false); break;
@@ -3473,17 +3479,11 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, INT16_MIN, INT16_MAX, false); break;
     case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, INT16_MIN, INT16_MAX, false); break;
 #endif
-#ifdef KEYER
-    case KEY_WPM:  paramAction(action, keyer_speed,   0xA1, F("Keyer speed"), NULL, 0, 35, false); break;
-    case KEY_MODE: paramAction(action, keyer_mode, 0xA2, F("Keyer mode"), keyer_mode_label, 0, 2, false); break;
-    case KEY_PIN:  paramAction(action, keyer_swap,   0xA3, F("Keyer swap"), offon_label, 0, 1, false); break;
-    case KEY_TX:   paramAction(action, practice,   0xA4, F("Practice"), offon_label, 0, 1, false); break;
-#endif
     // Invisible parameters
     case FREQ:    paramAction(action, freq, 0, NULL, NULL, 0, 0, false); break;
     case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0, false); break;
     case NULL:    menumode = 0; show_banner(); change = true; break;
-    default:      id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
+    default:      if(id != N_PARAMS) id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
   return id;
 }

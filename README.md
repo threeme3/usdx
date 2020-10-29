@@ -83,7 +83,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 
 | Menu Item           | Function                                     | Button |
 | ------------------- | -------------------------------------------- | ------ |
-| 1.1 Volume          | Audio level (0..16) & power-off/on | **E +turn** |
+| 1.1 Volume          | Audio level (0..16) & power-off/on (turn left) | **E +turn** |
 | 1.2 Mode            | Modulation (LSB, USB, CW, AM, FM) | **R** |
 | 1.3 Filter BW       | Audio passband (Full, 300..3000, 300..2400, 300..1800, 500, 200, 100, 50 Hz) | **R double** |
 | 1.4 Band            | Band-switch to pre-defined CW/FT8 freqs (80,60,40,30,20,17,15,12,10,6m) | **E double** |
@@ -96,6 +96,10 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 2.1 CW Decoder      | Enable/disable CW Decoder (ON, OFF) | |
 | 2.2 CW Tone         | CW Filter+Side-tone (600, 700) | |
 | 2.3 CW Offset       | CW RX filter offset alignment (QCX only) | |
+| 2.4 Keyer speed     | CW Keyer speed in Paris-WPM (0..35) | |
+| 2.5 Keyer mode      | Type of keyer (Iambic-A, -B, Straight) | |
+| 2.6 Keyer swap      | to swap keyer DIH, DAH inputs (ON, OFF) | |
+| 2.7 Practice        | to disable TX for practice purposes (ON, OFF) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | | |
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
@@ -103,18 +107,14 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 8.1 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
 | 8.2 PA Bias min     | KEY_OUT PWM level (0-255) for representing   0% RF output | |
 | 8.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
-| 8.4 Backlight       | Display backlight (ON, OFF) | |
-| 8.5 RX Phase Adj    | RX I/Q phase offset in degrees (45..135) | |
-| 8.6 IQ Test/Cal.    | CW-filter alignment (QCX only) | |
+| 8.4 RX Phase Adj    | RX I/Q phase offset in degrees (45..135) | |
+| 8.5 IQ Test/Cal.    | CW-filter alignment (QCX only) | |
+| 8.6 Backlight       | Display backlight (ON, OFF) | |
 | 9.1 Sample rate     | for debugging, testing and experimental purpose | |
 | 9.2 CPU load        | for debugging, testing and experimental purpose | |
 | 9.3 Param A         | for debugging, testing and experimental purpose | |
 | 9.4 Param B         | for debugging, testing and experimental purpose | |
 | 9.5 Param C         | for debugging, testing and experimental purpose | |
-| 10.1 Keyer speed    | CW Keyer speed in Paris-WPM (0..35) | |
-| 10.2 Keyer mode     | Type of keyer (Iambic-A, -B, Straight) | |
-| 10.3 Keyer swap     | to swap keyer DIH, DAH inputs (ON, OFF) | |
-| 10.4 Practice       | to disable TX for practice purposes (ON, OFF) | |
 | power-up            | Reset to factory settings | **E long** |
 | main                | Tune frequency (20kHz..99MHz) | **turn** |
 | main                | Quick menu | **L +turn** |
