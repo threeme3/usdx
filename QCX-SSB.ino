@@ -3147,7 +3147,7 @@ void switch_rxtx(uint8_t tx_enable){
 #endif
       lcd.setCursor(15, 1); lcd.print('T');
       if(mode == CW){ si5351.freq_calc_fast(-cw_offset); si5351.SendPLLRegisterBulk(); } // for CW, TX at freq
-      if(rit){ si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk(); }
+      else if(rit){ si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk(); }
 #ifdef TX_CLK0_CLK1
       si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN,CLK1_EN,CLK0_EN=1
 #else
@@ -3165,7 +3165,7 @@ void switch_rxtx(uint8_t tx_enable){
 #ifdef NTX
       digitalWrite(NTX, HIGH);  // RX (disable TX)
 #endif
-      si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
+      si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
 #ifdef TX_CLK0_CLK1
       si5351.SendRegister(16, 0x0f);  // disable invert on CLK0
       si5351.SendRegister(17, 0x0f);  // disable invert on CLK1
@@ -4491,7 +4491,7 @@ void loop()
 
     noInterrupts();
     if(mode == CW){
-      si5351.freq(freq + cw_offset + (int32_t)rit, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
+      si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
     } else
     if(mode == LSB)
       si5351.freq(freq, rx_ph_q, 0/*90, 0*/);  // RX in LSB
