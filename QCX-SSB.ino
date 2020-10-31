@@ -1,4 +1,4 @@
-//  QCX-SSB.ino - https://github.com/threeme3v/QCX-SSB
+//  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
 //
 //  Copyright 2019, 2020   Guido PE1NNZ <pe1nnz@amsat.org>
 //
@@ -4527,7 +4527,7 @@ att extended agc
 single ATT
 configurable F_CPU
 CW-L mode
-VFO-A/B+split+RIT
+Split
 undersampling, IF-offset
 K2/TS480 CAT control
 faster RX-TX switch to support CW
