@@ -3116,7 +3116,11 @@ void switch_rxtx(uint8_t tx_enable){
     }
   } else {  // rx
     if(!(semi_qsk_timeout)){
+#ifdef KEYER
       semi_qsk_timeout = millis() + ditTime * 8;
+#else
+      semi_qsk_timeout = millis() + 8 * 8;  // no keyer? assume dit-time of 20 WPM
+#endif
       if((mode == CW) && semi_qsk) func_ptr = dummy; else func_ptr = sdr_rx;
     } else {
       centiGain = _centiGain;  // restore AGC setting
