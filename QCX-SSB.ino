@@ -3022,7 +3022,7 @@ uint16_t analogSampleMic()
 volatile bool change = true;
 volatile int32_t freq = 7074000;
 static int32_t vfo[] = { 7074000, 14074000 };
-static uint8_t vfomode[] = { LSB, USB };
+static uint8_t vfomode[] = { USB, USB };
 const char* vfosel_label[] = { "A", "B"/*, "Split"*/ };
 enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 volatile uint8_t vfosel = VFOA;
@@ -3115,7 +3115,7 @@ void switch_rxtx(uint8_t tx_enable){
       case FM:  func_ptr = dsp_tx_fm; break;
     }
   } else {  // rx
-    if(!(semi_qsk_timeout)){
+    if(semi_qsk && (!(semi_qsk_timeout))){
 #ifdef KEYER
       semi_qsk_timeout = millis() + ditTime * 8;
 #else
