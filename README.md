@@ -113,12 +113,12 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 8.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
 | 8.4 RX Phase Adj    | RX I/Q phase offset in degrees (45..135) | |
 | 8.5 IQ Test/Cal.    | CW-filter alignment (QCX only) | |
-| 8.6 Backlight       | Display backlight (ON, OFF) | |
 | 9.1 Sample rate     | for debugging, testing and experimental purpose | |
 | 9.2 CPU load        | for debugging, testing and experimental purpose | |
 | 9.3 Param A         | for debugging, testing and experimental purpose | |
 | 9.4 Param B         | for debugging, testing and experimental purpose | |
 | 9.5 Param C         | for debugging, testing and experimental purpose | |
+| 10.1 Backlight      | Display backlight (ON, OFF) | |
 | power-up            | Reset to factory settings | **E long** |
 | main                | Tune frequency (20kHz..99MHz) | **turn** |
 | main                | Quick menu | **L +turn** |

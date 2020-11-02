@@ -2377,7 +2377,7 @@ void process(int16_t i_ac2, int16_t q_ac2)
   if(_init){ ac3 = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
   int16_t od1 = ac3 - ozd1; // Comb section
   ocomb = od1 - ozd2;
-//  if(tc++ == 0)
+//  if(tc++ == 0)   // prevent recursion
     interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing, prevent nested interrupts with tc
   ozd2 = od1;
   ozd1 = ac3;
@@ -3322,7 +3322,7 @@ void show_banner(){
 #else
   lcd.print(F("uSDX"));
 #endif //QCX
-  lcd.print('\x01'); lcd_blanks();
+  lcd.print('\x01'); lcd_blanks(); lcd_blanks();
 }
 
 const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
@@ -3446,11 +3446,11 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 34  // number of (visible) parameters
+#define N_PARAMS 35  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, BACKL, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, FREQA, FREQB, MODEA, MODEB, VERS};
+enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3505,7 +3505,6 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x85, F("IQ Test/Cal."), NULL, 0, 0, false); break;
 #endif
-    case BACKL:   paramAction(action, backlight, 0x86, F("Backlight"), offon_label, 0, 1, false); break;
 #ifdef DEBUG
     case SR:      paramAction(action, sr, 0x91, F("Sample rate"), NULL, INT32_MIN, INT32_MAX, false); break;
     case CPULOAD: paramAction(action, cpu_load, 0x92, F("CPU load %"), NULL, INT32_MIN, INT32_MAX, false); break;
@@ -3513,6 +3512,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, INT16_MIN, INT16_MAX, false); break;
     case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, INT16_MIN, INT16_MAX, false); break;
 #endif
+    case BACKL:   paramAction(action, backlight, 0xA1, F("Backlight"), offon_label, 0, 1, false); break;
     // Invisible parameters
     case FREQA:   paramAction(action, vfo[VFOA], 0, NULL, NULL, 0, 0, false); break;
     case FREQB:   paramAction(action, vfo[VFOB], 0, NULL, NULL, 0, 0, false); break;
@@ -4270,7 +4270,7 @@ void loop()
           prev_stepsize[prev_mode == CW] = stepsize; stepsize = prev_stepsize[mode == CW]; // backup stepsize setting for previous mode, restore previous stepsize setting for current selected mode; filter settings captured for either CQ or other modes.
           prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
 #endif
-          paramAction(UPDATE, MODE);
+          //paramAction(UPDATE, MODE);
           vfomode[vfosel%2] = mode;
           paramAction(SAVE, (vfosel%2) ? MODEB : MODEA);  // save vfoa/b changes
           paramAction(SAVE, MODE); 
