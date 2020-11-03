@@ -12,7 +12,7 @@
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
 //#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or SI5351 break-out board)
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
-//#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with alignment-feature)
+//#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
 //#define DEBUG         1   // for development purposes only (frees cpu&memory when disabled, adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH     1
@@ -164,18 +164,24 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     //delayMicroseconds(52);                         // Execution time
     delayMicroseconds(60);                         // Execution time
   }
-#if defined(CAT) || defined(TESTBENCH)
   // Since LCD is using PD0(RXD), PD1(TXD) pins in the data-path, some co-existence feature is required when using the serial port.
   // The following functions are temporarily dsiabling the serial port when LCD writes happen, and make sure that serial transmission is ended.
   // To prevent that LCD writes are received by the serial receiver, PC2 is made HIGH during writes to pull-up TXD via a diode.
   // The RXD, TXD lines are connected to the host via 1k resistors, a 1N4148 is placed between PC2 (anode) and the TXD resistor.
   // There are two drawbacks when continuous LCD writes happen: 1. noise is leaking via the AREF pull-ups into the receiver 2. serial data cannot be received.
-  void pre(){ Serial.flush(); PORTC |= 1<<2; DDRC |= 1<<2; UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); }  // Wait until serial TX stops; make PC2 high (to pull-up TXD); enable PD0/PD1 - disable serial port
-  void post(){ UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2); }  // Enable serial port - disable PD0, PD1; disable PC2
-#else
-  void pre(){ noInterrupts(); }
-  void post(){ if(backlight) PORTD |= 0x08; else PORTD &= ~0x08; /* backlight */ interrupts(); }
+  void pre(){
+#if defined(CAT) || defined(TESTBENCH)
+    Serial.flush(); PORTC |= 1<<2; DDRC |= 1<<2; UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0));  // Wait until serial TX stops; make PC2 high (to pull-up TXD); enable PD0/PD1 - disable serial port
 #endif
+    noInterrupts();  // do not allow LCD tranfer to be interrupted, to prevent backlight to light-up
+  }
+  void post(){
+#if defined(CAT) || defined(TESTBENCH)
+    UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2);   // Enable serial port - disable PD0, PD1; disable PC2
+#endif
+    if(backlight) PORTD |= 0x08; else PORTD &= ~0x08;   // Backlight control
+    interrupts();
+  }
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); } // Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
     pre();
@@ -798,8 +804,10 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
     case 0x31: case 0x10: case 0x02: case 0x23: encoder_val++; break;
     case 0x32: case 0x20: case 0x01: case 0x13: encoder_val--; break;
 #else
-    case 0x31: case 0x10: case 0x02: case 0x23: if(encoder_step < 0) encoder_step = 0; encoder_step++; if(encoder_step >  3){ encoder_step = 0; encoder_val++; } break;
-    case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;  
+//    case 0x31: case 0x10: case 0x02: case 0x23: if(encoder_step < 0) encoder_step = 0; encoder_step++; if(encoder_step >  3){ encoder_step = 0; encoder_val++; } break;  // encoder processing for additional immunity to weared-out rotary encoders
+//    case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;
+    case 0x23:  encoder_val++; break;
+    case 0x32:  encoder_val--; break;
 #endif
   }
   PCMSK2 |= (1 << PCINT22) | (1 << PCINT23);  // allow ROT_A, ROT_B interrupts
@@ -1525,7 +1533,7 @@ inline void _vox(uint8_t trigger)
 #define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #define _UA  (F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
 //#define MAX_DP  (_UA/4)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
-//#define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
+#define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
 //#define TX_CLK0_CLK1  1   // use CLK0, CLK1 for TX (instead of CLK2): you SHOULD enable NTX (which should disable QSD on TX) in order to prevent TX feedback into the ADC feed
 //#define QUAD  1       // invert TX signal for phase changes > 180
@@ -3191,7 +3199,7 @@ int16_t cal_iq_dummy = 0;
 void calibrate_iq()
 {
   smode = 1;
-  lcd.setCursor(0, 0); lcd.print(blanks); lcd.print(blanks);
+  lcd.setCursor(0, 0); lcd_blanks(); lcd_blanks();
   digitalWrite(SIG_OUT, true); // loopback on
   si5351.freq(freq, 0, 90);  // RX in USB  
   si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
@@ -3199,20 +3207,20 @@ void calibrate_iq()
   si5351.freqb(freq+700); delay(100);
   dbc = smeter();
   si5351.freqb(freq-700); delay(100);
-  lcd.setCursor(0, 1); lcd.print("I-Q bal. 700Hz"); lcd.print(blanks);
+  lcd.setCursor(0, 1); lcd.print("I-Q bal. 700Hz"); lcd_blanks();
   for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
   si5351.freqb(freq+600); delay(100);
   dbc = smeter();
   si5351.freqb(freq-600); delay(100);
-  lcd.setCursor(0, 1); lcd.print("Phase Lo 600Hz"); lcd.print(blanks);
+  lcd.setCursor(0, 1); lcd.print("Phase Lo 600Hz"); lcd_blanks();
   for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
   si5351.freqb(freq+800); delay(100);
   dbc = smeter();
   si5351.freqb(freq-800); delay(100);
-  lcd.setCursor(0, 1); lcd.print("Phase Hi 800Hz"); lcd.print(blanks);
+  lcd.setCursor(0, 1); lcd.print("Phase Hi 800Hz"); lcd_blanks();
   for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
 
-  lcd.setCursor(9, 0); lcd.print(blanks);  // cleanup dbmeter
+  lcd.setCursor(9, 0); lcd_blanks();  // cleanup dbmeter
   digitalWrite(SIG_OUT, false); // loopback off
   si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
   change = true;  //restore original frequency setting
@@ -3512,7 +3520,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, INT16_MIN, INT16_MAX, false); break;
     case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, INT16_MIN, INT16_MAX, false); break;
 #endif
-    case BACKL:   paramAction(action, backlight, 0xA1, F("Backlight"), offon_label, 0, 1, false); break;
+    case BACKL:   paramAction(action, backlight, 0xA1, F("Backlight"), offon_label, 0, 1, false); break;   // workaround for varying N_PARAM and not being able to overflowing default cases properly
     // Invisible parameters
     case FREQA:   paramAction(action, vfo[VFOA], 0, NULL, NULL, 0, 0, false); break;
     case FREQB:   paramAction(action, vfo[VFOB], 0, NULL, NULL, 0, 0, false); break;
@@ -3522,7 +3530,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 
     // Non-parameters
     case NULL:    menumode = 0; show_banner(); change = true; break;
-    default:      if(id != N_PARAMS) id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
+    default:      if((action == NEXT_MENU) && (id != N_PARAMS)) id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
   return id;
 }
@@ -3999,6 +4007,7 @@ void setup()
     #define SI_SYNTH_PLL_A 26
     for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_A + j) != si5351.pll_regs[j]) i2c_error++;
   }
+  wdt_reset();
   if(i2c_error){
     fatal(F("BER_i2c"), i2c_error, ' ');
   }
@@ -4020,12 +4029,13 @@ void setup()
     eeprom_version = get_version_id();
     //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
     //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
-    paramAction(SAVE);  // save default parfameter values
+    paramAction(SAVE);  // save default parameter values
     lcd.setCursor(0, 1); lcd.print(F("Reset settings.."));
     delay(500); wdt_reset();
   } else {
     paramAction(LOAD);  // load all parameters
   }
+lcd.setCursor(0, 1); lcd.print(F("A"));
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
@@ -4042,8 +4052,7 @@ void setup()
   start_rx();
 
 #ifdef TESTBENCH   // for test bench only, open serial port for diagnostic output
-  //Serial.begin(115200);
-  Serial.begin(30720); // 38400 baud corrected for F_CPU=20M
+  Serial.begin(38400*4/5); // 38400 baud corrected for F_CPU=20M
 #ifndef OLED
    smode = 0;  // In case of LCD, turn of smeter
 #endif
