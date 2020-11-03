@@ -177,7 +177,11 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   }
   void post(){
 #if defined(CAT) || defined(TESTBENCH)
-    UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2);   // Enable serial port - disable PD0, PD1; disable PC2
+    //UCSR0B |= (1<<RXEN0)|(1<<TXEN0); DDRC &= ~(1<<2);   // Enable serial port - disable PD0, PD1; disable PC2
+    UCSR0B |= (1<<RXEN0)|(1<<TXEN0);   // Enable serial port - disable PD0, PD1
+    PORTC &= ~(1<<2);  // PC2 LOW (to prevent CAT TX disruption, caused by voltage on PC2) --> disrupts VOX and only during RX
+#else
+    PORTD |= 1<<1; /*DDRD |= 1<<1;*/  // keep PD1 HIGH so that in case diode is installed to PC2 it is kept blocked (otherwise ADC2 input is pulled down!)
 #endif
     if(backlight) PORTD |= 0x08; else PORTD &= ~0x08;   // Backlight control
     interrupts();
@@ -3107,7 +3111,6 @@ uint8_t semi_qsk = false;
 uint32_t semi_qsk_timeout = 0;
 
 void switch_rxtx(uint8_t tx_enable){
-
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
@@ -3168,6 +3171,10 @@ void switch_rxtx(uint8_t tx_enable){
       //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
       OCR1AL = 0; // make sure SIDETONE is set to 0%
       TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
+
+#if defined(CAT) || defined(TESTBENCH)
+    DDRC &= ~(1<<2);  // disable PC2, so that ADC2 can be used as mic input
+#endif
     }
   } else {  // rx
       //TCCR1A |= (1 << COM1A1);  // enable SIDETONE
@@ -3184,6 +3191,9 @@ void switch_rxtx(uint8_t tx_enable){
 #endif  //TX_CLK0_CLK1
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
       lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
+#if defined(CAT) || defined(TESTBENCH)
+      if(!vox) DDRC |= (1<<2);  // enable PC2, so that ADC2 is pulled-down so that CAT TX is not disrupted
+#endif
   }
   OCR2A = (((float)F_CPU / (float)64) / (float)((tx_enable) ? F_SAMP_TX : F_SAMP_RX) + 0.5) - 1;
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
@@ -3968,6 +3978,12 @@ void setup()
   }*/
 
   // Measure DVM bias; should be ~VAREF/2
+#if defined(CAT) || defined(TESTBENCH)
+    DDRC &= ~(1<<2);  // disable PC2, so that ADC2 can be used as mic input
+#else
+//    PORTD |= 1<<1; DDRD |= 1<<1;  // keep PD1 HIGH so that in case diode is installed to PC2 it is kept blocked (otherwise ADC2 input is pulled down!)
+#endif
+  delay(10);
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
   if((ssb_cap) && !(dvm > 1.8 && dvm < 3.2)){
     fatal(F("Vadc2"), dvm, 'V');
