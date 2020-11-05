@@ -1539,7 +1539,7 @@ inline void _vox(uint8_t trigger)
 //#define MAX_DP  (_UA/4)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 #define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
-//#define TX_CLK0_CLK1  1   // use CLK0, CLK1 for TX (instead of CLK2): you SHOULD enable NTX (which should disable QSD on TX) in order to prevent TX feedback into the ADC feed
+//#define TX_CLK0_CLK1  1   // use CLK0, CLK1 for TX (instead of CLK2), you may enable and use NTX pin for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
 //#define QUAD  1       // invert TX signal for phase changes > 180
 
 inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
@@ -1638,8 +1638,8 @@ void dsp_tx()
   si5351.SendPLLRegisterBulk();       // submit frequency registers to SI5351 over 731kbit/s I2C (transfer takes 64/731 = 88us, then PLL-loopfilter probably needs 50us to stabalize)
 #ifdef QUAD
 #ifdef TX_CLK0_CLK1
-  si5351.SendRegister(16, (quad) ? 0x1f : 0x0f);  // Invert/non-invert CLK2 in case of a huge phase-change
-  si5351.SendRegister(17, (quad) ? 0x1f : 0x0f);  // Invert/non-invert CLK2 in case of a huge phase-change
+  si5351.SendRegister(16, (quad) ? 0x1f : 0x0f);  // Invert/non-invert CLK0 in case of a huge phase-change
+  si5351.SendRegister(17, (quad) ? 0x1f : 0x0f);  // Invert/non-invert CLK1 in case of a huge phase-change
 #else
   si5351.SendRegister(18, (quad) ? 0x1f : 0x0f);  // Invert/non-invert CLK2 in case of a huge phase-change
 #endif
@@ -1666,7 +1666,11 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
   if(tx == 1){ si5351.SendRegister(SI_CLK_OE, 0b11111111); }   // disable carrier
+#ifdef TX_CLK0_CLK1
+  if(tx == 255){ si5351.SendRegister(SI_CLK_OE, 0b11111100); } // enable carrier
+#else //TX_CLK2
   if(tx == 255){ si5351.SendRegister(SI_CLK_OE, 0b11111011); } // enable carrier
+#endif //TX_CLK0_CLK1
 #endif
 
 //#define MOX   1   // Monitor-On-Xmit
@@ -1714,20 +1718,6 @@ void dsp_tx_am()
   //in = in - dc;     // DC decoupling
   #define AM_BASE 32
   in=max(0, min(255, (in + AM_BASE)));
-  amp=in;// lut[in];
-}
-
-uint8_t reg;
-void dsp_tx_dsb()
-{ // jitter dependent things first
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
-  OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
-  si5351.SendRegister(16+2, reg);             // CLK2 polarity depending on amplitude
-  int16_t adc = ADC - 512; // current ADC sample 10-bits analog input, NOTE: first ADCL, then ADCH
-  int16_t in = (adc >> MIC_ATTEN);
-  in = in << drive;
-  reg = (in < 0) ? 0x2C|3|0x10 : 0x2C|3;  //0x2C=PLLB local msynth 3=8mA 0x10=invert
-  in=min(255, abs(in));
   amp=in;// lut[in];
 }
 
@@ -2145,16 +2135,18 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     return zc0;
   } else { // for CW filters
     //   (2nd Order (SR=4465Hz) IIR in Direct Form I, 8x8:16), adding 64x front-gain (to deal with later division)
+//#define FILTER_700HZ   1
+#ifdef FILTER_700HZ
     if(cw_tone == 0){
       switch(filt){
         case 4: zb0=(za0+2*za1+za2)/2+(41L*zb1-23L*zb2)/32; break;   //500-1000Hz
         case 5: zb0=5*(za0-2*za1+za2)+(105L*zb1-58L*zb2)/64; break;   //650-840Hz
         case 6: zb0=3*(za0-2*za1+za2)+(108L*zb1-61L*zb2)/64; break;   //650-750Hz
         case 7: zb0=(2*za0-3*za1+2*za2)+(111L*zb1-62L*zb2)/64; break; //630-680Hz       
-        /*case 4: zb0=(0*za0+1*za1+0*za2)+(28*zb1-14*zb2)/16; break; //600Hz+-250Hz
-        case 5: zb0=(0*za0+1*za1+0*za2)+(28*zb1-15*zb2)/16; break; //600Hz+-100Hz
-        case 6: zb0=(0*za0+1*za1+0*za2)+(27*zb1-15*zb2)/16; break; //600Hz+-50Hz
-        case 7: zb0=(0*za0+1*za1+0*za2)+(27*zb1-15*zb2)/16; break; //630Hz+-18Hz*/
+        //case 4: zb0=(0*za0+1*za1+0*za2)+(28*zb1-14*zb2)/16; break; //600Hz+-250Hz
+        //case 5: zb0=(0*za0+1*za1+0*za2)+(28*zb1-15*zb2)/16; break; //600Hz+-100Hz
+        //case 6: zb0=(0*za0+1*za1+0*za2)+(27*zb1-15*zb2)/16; break; //600Hz+-50Hz
+        //case 7: zb0=(0*za0+1*za1+0*za2)+(27*zb1-15*zb2)/16; break; //630Hz+-18Hz
       }
     
       switch(filt){
@@ -2162,13 +2154,15 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         case 5: zc0=((zb0+2*zb1+zb2)+97L*zc1-57L*zc2)/64; break;      //650-840Hz
         case 6: zc0=((zb0+zb1+zb2)+104L*zc1-60L*zc2)/64; break;       //650-750Hz
         case 7: zc0=((zb1)+109L*zc1-62L*zc2)/64; break;               //630-680Hz
-        /*case 4: zc0=(zb0-2*zb1+zb2)/1+(24*zc1-13*zc2)/16; break; //600Hz+-250Hz
-        case 5: zc0=(zb0-2*zb1+zb2)/4+(26*zc1-14*zc2)/16; break; //600Hz+-100Hz
-        case 6: zc0=(zb0-2*zb1+zb2)/16+(28*zc1-15*zc2)/16; break; //600Hz+-50Hz
-        case 7: zc0=(zb0-2*zb1+zb2)/32+(27*zc1-15*zc2)/16; break; //630Hz+-18Hz*/
+        //case 4: zc0=(zb0-2*zb1+zb2)/1+(24*zc1-13*zc2)/16; break; //600Hz+-250Hz
+        //case 5: zc0=(zb0-2*zb1+zb2)/4+(26*zc1-14*zc2)/16; break; //600Hz+-100Hz
+        //case 6: zc0=(zb0-2*zb1+zb2)/16+(28*zc1-15*zc2)/16; break; //600Hz+-50Hz
+        //case 7: zc0=(zb0-2*zb1+zb2)/32+(27*zc1-15*zc2)/16; break; //630Hz+-18Hz
       }
     }
-    if(cw_tone == 1){
+    if(cw_tone == 1)
+#endif
+    {
       switch(filt){
         //case 4: zb0=(1*za0+2*za1+1*za2)+(90L*zb1-38L*zb2)/64; break; //600Hz+-250Hz
         //case 5: zb0=(1*za0+2*za1+1*za2)/2+(102L*zb1-52L*zb2)/64; break; //600Hz+-100Hz
@@ -3164,7 +3158,7 @@ void switch_rxtx(uint8_t tx_enable){
       if(mode == CW){ si5351.freq_calc_fast(-cw_offset); si5351.SendPLLRegisterBulk(); } // for CW, TX at freq
       else if(rit){ si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk(); }
 #ifdef TX_CLK0_CLK1
-      si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN,CLK1_EN,CLK0_EN=1
+      si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
 #else
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
 #endif  //TX_CLK0_CLK1
@@ -3185,10 +3179,14 @@ void switch_rxtx(uint8_t tx_enable){
       digitalWrite(NTX, HIGH);  // RX (disable TX)
 #endif
       si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
+#ifdef QUAD
 #ifdef TX_CLK0_CLK1
       si5351.SendRegister(16, 0x0f);  // disable invert on CLK0
       si5351.SendRegister(17, 0x0f);  // disable invert on CLK1
+#else
+      si5351.SendRegister(18, 0x0f);  // disable invert on CLK2
 #endif  //TX_CLK0_CLK1
+#endif //QUAD
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
       lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 #if defined(CAT) || defined(TESTBENCH)
@@ -3242,7 +3240,8 @@ uint8_t prev_bandval = 2;
 uint8_t bandval = 2;
 #define N_BANDS 10
 
-#ifdef KEYER
+//#define CW_FREQS  1
+#ifdef CW_FREQS
 uint32_t band[N_BANDS] = { /*472000, 1810000,*/ 3560000, 5351500, 7030000, 10106000, 14060000, 18096000, 21060000, 24906000, 28060000, 50096000/*, 70160000, 144060000*/ };  // CW QRP freqs
 //uint32_t band[N_BANDS] = { /*472000, 1818000,*/ 3558000, 5351500, 7028000, 10118000, 14058000, 18085000, 21058000, 24908000, 28058000, 50058000/*, 70158000, 144058000*/ };  // CW FISTS freqs
 #else
@@ -3499,7 +3498,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case ATT2:    paramAction(action, att2, 0x1B, F("ATT2"), NULL, 0, 16, false); break;
     case SMETER:  paramAction(action, smode, 0x1C, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
+#ifdef FILTER_700HZ
     case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
+#endif
 #ifdef QCX
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
 #endif
@@ -4083,9 +4084,6 @@ lcd.setCursor(0, 1); lcd.print(F("A"));
 //  Serial.begin(3840); // 4800 baud corrected for F_CPU=20M
 //  Serial.begin(1920); // 2400 baud corrected for F_CPU=20M
   Command_IF();
-#ifndef OLED
-  smode = 0;  // In case of LCD, turn of smeter
-#endif
 #endif //CAT
 
 #ifdef KEYER
