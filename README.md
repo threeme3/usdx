@@ -89,7 +89,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 1.3 Filter BW       | Audio passband (Full, 300..3000, 300..2400, 300..1800, 500, 200, 100, 50 Hz) | **R double** |
 | 1.4 Band            | Band-switch to pre-defined CW/FT8 freqs (80,60,40,30,20,17,15,12,10,6m) | **E double** |
 | 1.5 Tuning Rate     | Tuning step size 10M, 1M, 0.5M, 100k, 10k, 1k, 0.5k, 100, 10, 1 | **E or E long** |
-| 1.6 VFO Mode        | Selects different VFO, or RX/TX split-VFO (A, B, Split) | |
+| 1.6 VFO Mode        | Selects different VFO, or RX/TX split-VFO (A, B, Split) | **2x R long** |
 | 1.7 RIT             | RX in transit (ON, OFF) | **R long** |
 | 1.8 AGC             | Automatic Gain Control (ON, OFF) | |
 | 1.9 NR              | Noise-reduction level (0-8), load-pass & smooth | |
@@ -123,6 +123,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | main                | Tune frequency (20kHz..99MHz) | **turn** |
 | main                | Quick menu | **L +turn** |
 | main                | Menu enter | **L** |
+| RIT                 | RIT back | **R** |
 | menu                | Menu back | **R** |
 
 
