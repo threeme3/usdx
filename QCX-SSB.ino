@@ -126,6 +126,7 @@ void loadWPM (int wpm) // Calculate new time constants based on wpm value
 #endif //KEYER
 
 volatile uint8_t cat_active = 0;
+volatile uint32_t rxend_event = 0;
 
 #include <avr/sleep.h>
 #include <avr/wdt.h>
@@ -180,9 +181,9 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   // There are two drawbacks when continuous LCD writes happen: 1. noise is leaking via the AREF pull-ups into the receiver 2. serial data cannot be received.
   void pre(){
 #ifdef _SERIAL
-    if(cat_active){ Serial.flush(); PORTC |= 1<<2; DDRC |= 1<<2; } UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); // Complete serial TX; mask PD1 LCD data-exchange by pulling-up TXD via PC2 HIGH; enable PD0/PD1, disable serial port
+    if(cat_active){ Serial.flush(); for(; millis() < rxend_event;)wdt_reset(); PORTC |= 1<<2; DDRC |= 1<<2; } UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); // Complete serial TX and RX; mask PD1 LCD data-exchange by pulling-up TXD via PC2 HIGH; enable PD0/PD1, disable serial port
 #endif
-    noInterrupts();  // do not allow LCD tranfer to be interrupted, to prevent backlight to light-up
+    noInterrupts();  // do not allow LCD tranfer to be interrupted, to prevent backlight to lighten-up
   }
   void post(){
     if(backlight) PORTD |= 0x08; else PORTD &= ~0x08;   // Backlight control
@@ -1497,8 +1498,14 @@ inline void set_lpf(uint8_t f){
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
-#if(F_CPU!=16000000)
-   #error "F_CPU must be set to 16 MHz"
+#if(ARDUINO < 10813)
+  #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.13 or later from https://www.arduino.cc/en/software"
+#endif
+#if !(defined(ARDUINO_ARCH_AVR))
+   #error "Unsupported architecture, select Arduino IDE > Tools > Board > Arduino AVR Boards > Arduino Uno."
+#endif
+#if(F_CPU != 16000000)
+   #error "Unsupported CPU clock frequency, use 16 MHz only."
 #endif
 #undef F_CPU
 
@@ -3594,7 +3601,7 @@ void initPins(){
 #ifdef CAT
 // CAT support inspired by Charlie Morris, ZL2CTM, contribution by Alex, PE1EVX, source: http://zl2ctm.blogspot.com/2020/06/digital-modes-transceiver.html?m=1
 // https://www.kenwood.com/i/products/info/amateur/ts_480/pdf/ts_480_pc.pdf
-#define CATCMD_SIZE   64
+#define CATCMD_SIZE   32
 char CATcmd[CATCMD_SIZE];
 
 void analyseCATcmd()
@@ -3630,7 +3637,7 @@ void analyseCATcmd()
     Command_RX();
 
   else if((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
-    Command_TX();
+    Command_TX0();
 
   else if((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '0'))
     Command_TX0();
@@ -3645,27 +3652,28 @@ void analyseCATcmd()
     Command_RS();
 
   else if((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
-    Command_Vox(CATcmd[2]);
+    Command_VX(CATcmd[2]);
+
+  else {
+    Serial.print("?;");
+    { lcd.setCursor(0, 0); lcd.print(CATcmd); lcd_blanks(); }  // Print error cmd
+  }
 }
 
-static int catidx = 0;
-void rxCATcmd(){
-  if(Serial.available()){
-    uint16_t now = millis();
-    char data = Serial.read();
-    CATcmd[catidx++] = data;
-    if((data == ';') /*|| (catidx == (CATCMD_SIZE - 2))*/){
-      CATcmd[catidx] = '\0'; // terminate the array
-      catidx = 0;            // reset for next CAT command
-#ifdef _SERIAL
-      cat_active = 1;
-      smode = 0; // reduce display activity in case of CAT
-#endif
-      analyseCATcmd();
-      //break;
-    }
-    if(catidx == (CATCMD_SIZE - 1)) catidx = 0; // overrun
-  }
+volatile uint8_t cat_ptr = 0;
+void rxCATcmd(){ /*if(Serial.available());*/ }
+void serialEvent(){
+  rxend_event = millis() + 10;  // block display until this moment, to prevent CAT cmds that initiate display changes to interfere with the next CAT cmd e.g. Hamlib: FA00007071000;ID;
+  char data = Serial.read();
+  CATcmd[cat_ptr++] = data;
+  if(data == ';'){
+    CATcmd[cat_ptr] = '\0'; // terminate the array
+    cat_ptr = 0;            // reset for next CAT command
+  #ifdef _SERIAL
+    if(!cat_active){ cat_active = 1; smode = 0;} // disable smeter to reduce display activity
+  #endif
+    analyseCATcmd(); delay(10);
+  } else if(cat_ptr > (CATCMD_SIZE - 1)){ Serial.print("E;"); cat_ptr = 0; } // overrun
 }
 
 void Command_GETFreqA()
@@ -3699,7 +3707,6 @@ void Command_SETFreqA()
 
   freq=(uint32_t)atol(Catbuffer);
   change=true;
-  //Command_GETFreqA();
 }
 
 void Command_IF()
@@ -3749,28 +3756,19 @@ void Command_RX()
   Serial.print("RX0;");
 }
 
-void Command_TX()
-{
-  switch_rxtx(1);
-  Serial.print("TX0;");
-}
-
 void Command_TX0()
 {
   switch_rxtx(1);
-  Serial.print("TX0;");
 }
 
 void Command_TX1()
 {
   switch_rxtx(1);
-  Serial.print("TX1;");
 }
 
 void Command_TX2()
 {
   switch_rxtx(1);
-  Serial.print("TX2;");
 }
 
 void Command_RS()
@@ -3778,7 +3776,7 @@ void Command_RS()
   Serial.print("RS0;");
 }
 
-void Command_Vox(char mode)
+void Command_VX(char mode)
 {
   char Catbuffer[16];
   sprintf(Catbuffer, "VX%c;",mode);
@@ -3797,7 +3795,6 @@ void Command_PS()
 
 void Command_PS1()
 {
-  Serial.print("PS1;");
 }
 // END CAT support
 #endif //CAT
@@ -4073,7 +4070,6 @@ void setup()
   } else {
     paramAction(LOAD);  // load all parameters
   }
-lcd.setCursor(0, 1); lcd.print(F("A"));
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
@@ -4089,19 +4085,14 @@ lcd.setCursor(0, 1); lcd.print(F("A"));
 
   start_rx();
 
-#ifdef TESTBENCH   // for test bench only, open serial port for diagnostic output
-  Serial.begin(38400*4/5); // 38400 baud corrected for F_CPU=20M
-#ifndef OLED
+#if defined(CAT) || defined(TESTBENCH)
+  #define BAUD   38400            //38400 //115200 //4800 //Baudrate used for serial communications (CAT, TESTBENCH)
+  Serial.begin(BAUD*4/5); // corrected for F_CPU=20M
+  Command_IF();
+#if !defined(OLED) && defined(TESTBENCH)
    smode = 0;  // In case of LCD, turn of smeter
 #endif
-#endif  //TESTBENCH
-
-#ifdef CAT
-  //use 38k4 for WSJT-X 2.2.2 TS-480 protocol other lower or higher speed can cause problems
-  //other versions on WSJT-X may need others speeds to work correct. V1.8.0 works with all speeds, but protocol is obsolete after 2.0
-  Serial.begin(38400*4/5); // 38400 baud corrected for F_CPU=20M
-  Command_IF();
-#endif //CAT
+#endif //CAT TESTBENCH
 
 #ifdef KEYER
   keyerState = IDLE;
@@ -4118,7 +4109,6 @@ lcd.setCursor(0, 1); lcd.print(F("A"));
     delay(1000);
     wdt_reset();
   }
-
 }
 
 void loop()
@@ -4537,11 +4527,10 @@ void loop()
     }
 
     uint8_t f = freq / 1000000UL;
-    //wdt_reset();
     set_lpf(f);
     bandval = (f > 32) ? 9 : (f > 26) ? 8 : (f > 22) ? 7 : (f > 20) ? 6 : (f > 16) ? 5 : (f > 12) ? 4 : (f > 8) ? 3 : (f > 6) ? 2 : (f > 4) ? 1 : /*(f > 2)*/ 0;  prev_bandval = bandval; // align bandval with freq
 
-    //noInterrupts();
+    noInterrupts();  // do it fast
     if(mode == CW){
       si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
     } else
@@ -4550,7 +4539,7 @@ void loop()
     else
       si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
     if(rit){ si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk(); }
-    //interrupts();
+    interrupts();
   }
   
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
