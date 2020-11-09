@@ -2247,11 +2247,11 @@ inline int16_t slow_dsp(int16_t ac)
     ac = process_agc(ac);
     ac = ac >> (16-volume);
   } else {
-    ac = ac >> (16-volume);
-/*  if(volume <= 9)    // if no AGC allow volume control to boost weak signals
-      ac = ac >> (9-volume);
+    //ac = ac >> (16-volume);
+    if(volume <= 13)    // if no AGC allow volume control to boost weak signals
+      ac = ac >> (13-volume);
     else
-      ac = ac << (volume-9); */
+      ac = ac << (volume-13);
   }
   if(nr) ac = process_nr(ac);
 
@@ -4223,9 +4223,9 @@ void loop()
 #endif //KEYER
   if((semi_qsk_timeout) && (millis() > semi_qsk_timeout)){ switch_rxtx(0); }  // delayed QSK RX
 
-  enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
+  enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PLC=0x05, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(inv ^ digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
-    if(!(event & PL)){  // hack: if there was long-push before, then fast forward
+    if(!((event & PL) || (event & PLC))){  // hack: if there was long-push before, then fast forward
       uint16_t v = analogSafeRead(BUTTONS);
       event = SC;
       int32_t t0 = millis();
@@ -4244,10 +4244,11 @@ void loop()
       }  // Max. voltages at ADC3 for buttons L,R,E: 3.76V;4.55V;5V, thresholds are in center
       event |= (v < (4.2 * 1024.0 / 5.0)) ? BL : (v < (4.8 * 1024.0 / 5.0)) ? BR : BE; // determine which button pressed based on threshold levels
     } else {  // hack: fast forward handling
-      event = (event&0xf0) | ((encoder_val) ? PT : PL);  // only alternate bewteen push-long/turn when applicable
+      event = (event&0xf0) | ((encoder_val) ? PT : PLC/*PL*/);  // only alternate bewteen push-long/turn when applicable
     }
     switch(event){
-      case BL|PL:  // Called when menu button released
+      case BL|PL:  // Called when menu button pressed
+      case BL|PLC: // or kept pressed
         menumode = 2;
         break;
       case BL|PT:
@@ -4346,7 +4347,12 @@ void loop()
         }
         change = true;
         break;
-      case BR|PT: break;
+      case BR|PLC:  // while pressed long continues
+      case BE|PLC:
+        break;
+      case BR|PT:
+        //encoder_val = 0; lcd.setCursor(0, 0); lcd.print(millis());
+        break;
       case BE|SC:
         if(!menumode)
           stepsize_change(+1);
@@ -4358,7 +4364,7 @@ void loop()
         }
         break;
       case BE|DC:
-        delay(100);
+        //delay(100);
         bandval++;
         if(bandval >= N_BANDS) bandval = 0;
         stepsize = STEP_1k;
