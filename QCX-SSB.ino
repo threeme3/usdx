@@ -80,6 +80,15 @@ ssb_cap=1; dsp_cap=2;
 #define F_CPU F_XTAL
 */
 
+#if(ARDUINO < 10810)
+   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.10 or later from https://www.arduino.cc/en/software"
+#endif
+#if !(defined(ARDUINO_ARCH_AVR))
+   #error "Unsupported architecture, select Arduino IDE > Tools > Board > Arduino AVR Boards > Arduino Uno."
+#endif
+
+//FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be set at programming (Arduino IDE > Tools > Burn bootloader)
+
 extern char __bss_end;
 static int freeMemory(){ char* sp = reinterpret_cast<char*>(SP); return sp - &__bss_end; }  // see: http://www.nongnu.org/avr-libc/user-manual/malloc.html
 
@@ -132,8 +141,6 @@ volatile uint32_t rxend_event = 0;
 #include <avr/wdt.h>
 
 uint8_t backlight = 8;
-
-//FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be these at programming.
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
@@ -1478,17 +1485,10 @@ inline void set_lpf(uint8_t f){
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
-#if(ARDUINO < 10810)
-   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.10 or later from https://www.arduino.cc/en/software"
-#endif
-#if !(defined(ARDUINO_ARCH_AVR))
-   #error "Unsupported architecture, select Arduino IDE > Tools > Board > Arduino AVR Boards > Arduino Uno."
-#endif
 #if(F_CPU != 16000000)
    #error "Unsupported CPU clock frequency, use 16 MHz only."
 #endif
 #undef F_CPU
-
 #define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 //#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
 
@@ -3466,7 +3466,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {ALL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3539,7 +3539,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0, false); break;
 
     // Non-parameters
-    case NULL:    menumode = 0; show_banner(); change = true; break;
+    case _NULL:   menumode = 0; show_banner(); change = true; break;
     default:      if((action == NEXT_MENU) && (id != N_PARAMS)) id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
   return id;
@@ -4258,7 +4258,7 @@ void loop()
         int8_t _menumode;
         if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short left-click while in default screen: enter menu mode
         if(menumode == 1){ _menumode = 2; }                          // short left-click while in menu: enter value selection screen
-        if(menumode == 2){ _menumode = 0; show_banner(); change = true; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
+        if(menumode == 2){ _menumode = 0; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
         menumode = _menumode;
         break;
       case BL|DC:
@@ -4291,7 +4291,7 @@ void loop()
           if((prev_mode == CW) && (cwdec)) show_banner();
           change = true;
         } else {
-          if(menumode == 1){ menumode = 0; show_banner(); change = true; }  // short right-click while in menu: enter value selection screen
+          if(menumode == 1){ menumode = 0; }  // short right-click while in menu: enter value selection screen
           if(menumode == 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
         }
         break;
@@ -4379,7 +4379,7 @@ void loop()
     }
   } else event = 0;  // no button pressed: reset event
 
-  if(menumode != 0){  // Show parameter and value
+  if((menumode) || (prev_menumode != menumode)){  // Show parameter and value
     int8_t encoder_change = encoder_val;
     if((menumode == 1) && encoder_change){
       menu += encoder_val;   // Navigate through menu
@@ -4387,7 +4387,7 @@ void loop()
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
       encoder_val = 0;
     }
-    if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
+    if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, (menumode) ? menu : NULL);  // update param with encoder change and display
     prev_menumode = menumode;
     if(menumode == 2){
       if(encoder_change){

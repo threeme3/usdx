@@ -191,6 +191,8 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 - Rüdiger Möller, HPSDR presentation by [DJ1MR], 2018. Transmitter architectures for high efficiency amplification
 - [Arduino PWM]
 - [Serial interface]
+- [AN1981] [AN1981-1994] AN1981, New Low Power Single Sideband Circuits” — Philips Semiconductors
+Linear Data Manual, 1988.
 -->
 [Simple, fun and versatile]: ucx.png
 
@@ -233,6 +235,10 @@ The following performance measurements were made with QCX-SSB R1.01, a modified 
 [QRPLabs Forum]: https://groups.io/g/QRPLabs/topic/29572792
 
 [Forum]: https://groups.io/g/ucx
+
+[AN1981]: https://archive.org/details/bitsavers_signeticsdataManualVolume1Communications_72411912
+
+[AN1981-1994]: http://www.b-kainka.de/Daten/HF/SSB.pdf
 
 [Norcal 2030]: http://www.norcalqrp.org/nc2030.htm
 
