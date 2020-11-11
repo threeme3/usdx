@@ -4513,7 +4513,7 @@ void loop()
     }
   }
 
-  if(change){
+  if((change) && (!tx) && (!vox_tx)){  // only change if TX is OFF, prevent simultaneous I2C bus access
     change = false;
     if(prev_bandval != bandval){ freq = band[bandval]; prev_bandval = bandval; }
     vfo[vfosel%2] = freq;
