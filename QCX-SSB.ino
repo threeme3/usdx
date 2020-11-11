@@ -4138,7 +4138,7 @@ void loop()
   if((mode == CW) && cwdec) cw_decode();  // if(!(semi_qsk_timeout)) cw_decode(); else dec2();
 
   if(menumode == 0){ // in main    
-    if(cw_event){
+    if((cw_event) && (cwdec)){
       cw_event = false;
       uint8_t offset = (smode) ? (smode == 1) ? 7 : (smode == 2) ? 3 : (smode == 3) ? 5 : 3 : 0;  // depending on smeter more/less cw-text
       lcd.noCursor(); lcd.setCursor(0, 0); lcd.print(out + offset); stepsize_showcursor();
