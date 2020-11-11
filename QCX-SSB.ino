@@ -2379,6 +2379,7 @@ void process(int16_t i_ac2, int16_t q_ac2)
 #define OUTLET  1
 #ifdef OUTLET
   if(tc++ == 0)   // prevent recursion
+  //if(tc++ > 16)   // prevent recursion
 #endif
     interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing, prevent nested interrupts with tc
   ozd2 = od1;
@@ -4093,6 +4094,8 @@ void setup()
   }
 }
 
+static int32_t _step = 0;
+
 void loop()
 {
 #ifdef CAT
@@ -4349,9 +4352,11 @@ void loop()
         break;
       case BR|PLC:  // while pressed long continues
       case BE|PLC:
+        freq = freq + ((_step > 0) ? 1 : -1) * pow(2, abs(_step)); change=true;
         break;
       case BR|PT:
-        //encoder_val = 0; lcd.setCursor(0, 0); lcd.print(millis());
+        _step += encoder_val; encoder_val = 0;
+        lcd.setCursor(0, 0); lcd.print(_step); lcd_blanks();
         break;
       case BE|SC:
         if(!menumode)
@@ -4518,7 +4523,7 @@ void loop()
     set_lpf(f);
     bandval = (f > 32) ? 9 : (f > 26) ? 8 : (f > 22) ? 7 : (f > 20) ? 6 : (f > 16) ? 5 : (f > 12) ? 4 : (f > 8) ? 3 : (f > 6) ? 2 : (f > 4) ? 1 : /*(f > 2)*/ 0;  prev_bandval = bandval; // align bandval with freq
 
-    noInterrupts();  // do it fast
+    //noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
     } else
@@ -4527,7 +4532,7 @@ void loop()
     else
       si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
     if(rit){ si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk(); }
-    interrupts();
+    //interrupts();
   }
   
   if((save_event_time) && (millis() > save_event_time)){  // save freq when time has reached schedule
