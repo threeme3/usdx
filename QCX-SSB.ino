@@ -307,16 +307,21 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
 };
 
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
-class I2C_ {  // direct port I/O (disregards/does-not-need pull-ups)
+class I2C_ {
 public:
   #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
   #define _I2C_SDA (1<<2) // PD2
   #define _I2C_SCL (1<<3) // PD3
-  #define _I2C_INIT() _I2C_SDA_HI(); _I2C_SCL_HI(); DDRD |= (_I2C_SDA | _I2C_SCL);
-  #define _I2C_SDA_HI() PORTD |=  _I2C_SDA; _DELAY();
-  #define _I2C_SDA_LO() PORTD &= ~_I2C_SDA; _DELAY();
-  #define _I2C_SCL_HI() PORTD |=  _I2C_SCL; _DELAY();
-  #define _I2C_SCL_LO() PORTD &= ~_I2C_SCL; _DELAY();
+  //#define _I2C_INIT() _I2C_SDA_HI(); _I2C_SCL_HI(); DDRD |= (_I2C_SDA | _I2C_SCL);  // direct I/O (no need for pull-ups)
+  //#define _I2C_SDA_HI() PORTD |=  _I2C_SDA; _DELAY();
+  //#define _I2C_SDA_LO() PORTD &= ~_I2C_SDA; _DELAY();
+  //#define _I2C_SCL_HI() PORTD |=  _I2C_SCL; _DELAY();
+  //#define _I2C_SCL_LO() PORTD &= ~_I2C_SCL; _DELAY();
+  #define _I2C_INIT()   PORTD &= ~_I2C_SDA; PORTD &= ~_I2C_SCL;_I2C_SDA_HI(); _I2C_SCL_HI();  // open-drain
+  #define _I2C_SDA_HI() DDRD &= ~_I2C_SDA; _DELAY();
+  #define _I2C_SDA_LO() DDRD |=  _I2C_SDA; _DELAY();
+  #define _I2C_SCL_HI() DDRD &= ~_I2C_SCL; _DELAY();
+  #define _I2C_SCL_LO() DDRD |=  _I2C_SCL; _DELAY();
   #define _I2C_START() _I2C_SDA_LO(); _I2C_SCL_LO(); _I2C_SDA_HI();
   #define _I2C_STOP()  _I2C_SCL_HI(); _I2C_SDA_HI();
   #define _I2C_SUSPEND() //_I2C_SDA_LO(); // SDA_LO to allow re-use as output port
@@ -674,7 +679,7 @@ const uint8_t font[]PROGMEM = {
 #define FONT_STRETCHH 0
 */
 
-#define BRIGHT  1
+//#define BRIGHT  1
 static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence
 //  0xAE,     // Display OFF (sleep mode)
     0x20, 0b10,   // Set Memory Addressing Mode
@@ -696,14 +701,14 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
    0xA4,     // Output RAM to Display
           // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
   0xD3, 0x00,   // Set display offset. 00 = no offset
-   0xD5, 0x80,   // --set display clock divide ratio/oscillator frequency
+   0xD5, 0x01,   // 0x80--set display clock divide ratio/oscillator frequency
 #ifdef BRIGHT
-  0xD9, 0xF1, // 0xF1=brighter //0x22,   // Set pre-charge period
+  0xD9, 0xF1, // 0xF1=brighter //0x22 Set pre-charge period
 #else
-  0xD9, 0x22,   // Set pre-charge period
+  0xD9, 0x03,   // 0x22 Set pre-charge period
 #endif
   0xDA, 0x02,   // Set com pins hardware configuration
-//   0xDB, 0x40, //0x20,   // --set vcomh 0x20 = 0.77xVcc
+   0xDB, 0x05, //0x20, --set vcomh 0x20 = 0.77xVcc
   0x8D, 0x14,    // Set DC-DC enable
   0xAF,     // Display ON
 };
@@ -4605,5 +4610,8 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 
 atmega328p signature: https://forum.arduino.cc/index.php?topic=341799.15   https://www.eevblog.com/forum/microcontrollers/bootloader-on-smd-atmega328p-au/msg268938/#msg268938 https://www.avrfreaks.net/forum/undocumented-signature-row-contents
 
+Chargegpump noise reduction: https://groups.io/g/ucx/message/3991
+Rudolf OK1FFI: found a little problem on my USDR transceiver. When operating LSB at the frequency 3.774 to 3.378 MHz frequency synthesa does not work. The same on the frequency 3.704 to 3.707MHz. In the CW test on the frequency 3.703 to 3.703.7 also does not work. On the oscilloscope screen, the false signal is about three times higher than the desired. I measured on Gates of transistors Q2 to Q4. Firmware 1.02a, 1.02D and 1.02Exp K Work correctly. I tested the "M" version of 27 modifications, I did not test all but the last most interesting and sophisticated versions do it as well. My Friends OK1IF OK1UP OK1UFI OK1FFF have the same problem. Synteze crystal frequency is 25MHz. I send pictures of the oscilloscope screen at 3.773 and at the 3,774 frequency where Syntheza does not work. I didn't try other bands, the priority for me 80m band. I hope this inconvenience will be removed, the versions of "M" are otherwise nice and sophisticated.
+Alain k1fm AGC sens issue:  https://groups.io/g/ucx/message/3998  PLL issue:  https://groups.io/g/ucx/message/3999
 
 */
