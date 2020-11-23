@@ -39,7 +39,7 @@
 #define LCD_RS  18        //PC4    (pin 27)
 #define SDA     18        //PC4    (pin 27)
 #define SCL     19        //PC5    (pin 28)
-//#define NTX     11        //PB3    (pin 17)  - experimental: LOW on TX
+//#define NTX     11        //PB3    (pin 17)  - experimental: LOW on TX, used as PTT out to enable external PAs
 
 #ifdef SWAP_ROTARY
 #undef ROT_A
@@ -713,7 +713,7 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
   0xAF,     // Display ON
 };
 
-class SSD1306Device: public Print {
+class SSD1306Device: public Print {  // https://www.buydisplay.com/download/manual/ER-OLED0.91-3_Series_Datasheet.pdf
 public:
   #define SSD1306_ADDR 0x3C  // Slave address  
   #define SSD1306_PAGES 4
@@ -3177,11 +3177,6 @@ void switch_rxtx(uint8_t tx_enable){
       //TCCR1A |= (1 << COM1A1);  // enable SIDETONE
       TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
       OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
-      digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
-#ifdef NTX
-      digitalWrite(NTX, HIGH);  // RX (disable TX)
-#endif
-      si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
 #ifdef QUAD
 #ifdef TX_CLK0_CLK1
       si5351.SendRegister(16, 0x0f);  // disable invert on CLK0
@@ -3191,6 +3186,11 @@ void switch_rxtx(uint8_t tx_enable){
 #endif  //TX_CLK0_CLK1
 #endif //QUAD
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+      digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
+#ifdef NTX
+      digitalWrite(NTX, HIGH);  // RX (disable TX)
+#endif
+      si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
       lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 #ifdef _SERIAL
       if(!vox) if(cat_active){ DDRC |= (1<<2); } // enable PC2, so that ADC2 is pulled-down so that CAT TX is not disrupted via mic input
@@ -4610,8 +4610,9 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 
 atmega328p signature: https://forum.arduino.cc/index.php?topic=341799.15   https://www.eevblog.com/forum/microcontrollers/bootloader-on-smd-atmega328p-au/msg268938/#msg268938 https://www.avrfreaks.net/forum/undocumented-signature-row-contents
 
-Chargegpump noise reduction: https://groups.io/g/ucx/message/3991
 Rudolf OK1FFI: found a little problem on my USDR transceiver. When operating LSB at the frequency 3.774 to 3.378 MHz frequency synthesa does not work. The same on the frequency 3.704 to 3.707MHz. In the CW test on the frequency 3.703 to 3.703.7 also does not work. On the oscilloscope screen, the false signal is about three times higher than the desired. I measured on Gates of transistors Q2 to Q4. Firmware 1.02a, 1.02D and 1.02Exp K Work correctly. I tested the "M" version of 27 modifications, I did not test all but the last most interesting and sophisticated versions do it as well. My Friends OK1IF OK1UP OK1UFI OK1FFF have the same problem. Synteze crystal frequency is 25MHz. I send pictures of the oscilloscope screen at 3.773 and at the 3,774 frequency where Syntheza does not work. I didn't try other bands, the priority for me 80m band. I hope this inconvenience will be removed, the versions of "M" are otherwise nice and sophisticated.
-Alain k1fm AGC sens issue:  https://groups.io/g/ucx/message/3998  PLL issue:  https://groups.io/g/ucx/message/3999
+-> 3703.6-3704.2
+
+Alain k1fm AGC sens issue:  https://groups.io/g/ucx/message/3998   https://groups.io/g/ucx/message/3999
 
 */
