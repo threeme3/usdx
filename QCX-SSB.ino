@@ -3198,6 +3198,7 @@ void switch_rxtx(uint8_t tx_enable){
   }
   OCR2A = (((float)F_CPU / (float)64) / (float)((tx_enable) ? F_SAMP_TX : F_SAMP_RX) + 0.5) - 1;
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
+  stepsize_showcursor();
 }
 
 uint8_t rx_ph_q = 90;
