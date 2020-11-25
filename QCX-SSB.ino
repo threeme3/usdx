@@ -1098,9 +1098,9 @@ public:
       if(fout < 500000){ rdiv = 7; fout *= 128; } // Divide by 128 for fout 4..500kHz
       uint16_t d; if(fout < 30000000) d = (16 * fxtal) / fout; else d = (32 * fxtal) / fout;  // Integer part  .. maybe 44?
       if(fout < 3500000) d = (7 * fxtal) / fout;  // PLL at 189MHz to cover 160m (freq>1.48MHz) when using 27MHz crystal
-      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d++; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
       if(fout > 140000000) d = 4; // for f=140..300MHz; AN619; 4.1.3, this implies integer mode
       if(d % 2) d++;  // even numbers preferred for divider (AN619 p.4 and p.6)
+      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d++; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
       uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
       // si5351 spectral purity considerations: https://groups.io/g/QRPLabs/message/42662
 
@@ -1448,45 +1448,52 @@ void set_latch(uint8_t io){ // reset all latches and set latch k to correspondin
 
 static uint8_t prev_lpf_io = 0xff;
 inline void set_lpf(uint8_t f){
-  uint8_t lpf_io = (f >  8) ? 1 : (f > 4) ? 2 : /*(f > 2)*/ 3; // cut-off freq in MHz to IO port of LPF relay
+  uint8_t lpf_io = (f >  8) ? 1 : (f > 4) ? 2 : /*(f <= 4)*/ 3; // cut-off freq in MHz to IO port of LPF relay
   if(prev_lpf_io != lpf_io){ prev_lpf_io = lpf_io; set_latch(lpf_io); };  // set relay
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV1
 
+//#define LPF_SWITCHING_DL2MAN_USDX_REV3  1        // Enable filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 6m, 10/12m, 15/17m, 20m, 30m, 40m, 60m, 80m
 #define LPF_SWITCHING_DL2MAN_USDX_REV2  1        // Enable filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
-#if defined(LPF_SWITCHING_DL2MAN_USDX_REV2) || defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA)
+#if defined(LPF_SWITCHING_DL2MAN_USDX_REV3) || defined(LPF_SWITCHING_DL2MAN_USDX_REV2) || defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA)
 class IOExpander16 {
 public:
-#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
-  #define IOEXP16_ADDR  0x24  // TCA/PCA9555 with A2=1 A1..A0=0   https://www.ti.com/lit/ds/symlink/tca9555.pdf
-#else  //LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
   #define IOEXP16_ADDR  0x74  // PCA9539 with A1..A0 set to 0   https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
+#else  // LPF_SWITCHING_DL2MAN_USDX_REV3 REV2
+  #define IOEXP16_ADDR  0x24  // TCA/PCA9555 with A2=1 A1..A0=0   https://www.ti.com/lit/ds/symlink/tca9555.pdf
 #endif
   inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(IOEXP16_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
   inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0x00); SendRegister(0x06, 0x00); SendRegister(0x03, 0x00); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 0, IO0 as output, IO1 to 0, IO1 as output
   inline void write(uint16_t data){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, data); SendRegister(0x06, 0x00); SendRegister(0x03, data >> 8); SendRegister(0x07, 0x00); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
 };
 IOExpander16 ioext;
+enum gpioext_t { IO0_0, IO0_1, IO0_2, IO0_3, IO0_4, IO0_5, IO0_6, IO0_7, IO1_0, IO1_1, IO1_2, IO1_3, IO1_4, IO1_5, IO1_6, IO1_7 };
 
-void set_latch(uint8_t io, bool latch = true){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
+void set_latch(uint8_t io, uint8_t common_io, bool latch = true){ // reset all latches and set latch k to corresponding GPIO, all relays share a common (ground) GPIO
   #define LATCH_TIME  30   // set/reset time latch relay
   if(latch){
     ioext.write((1U << io)| 0x0000); delay(LATCH_TIME); ioext.write(0x0000); // set latch wired to io port
   } else {
-    if(io == 0xff){ ioext.init(); for(int io = 0; io != 16; io++) set_latch(io, latch); } // reset all latches
-    else { ioext.write( (~(1U << io))| 0x0002); delay(LATCH_TIME); ioext.write(0x0000); } // reset latch wired to io port
+    if(io == 0xff){ ioext.init(); for(int io = 0; io != 16; io++) set_latch(io, common_io, latch); } // reset all latches
+    else { ioext.write( (~(1U << io))| (1U << common_io)); delay(LATCH_TIME); ioext.write(0x0000); } // reset latch wired to io port
   }
 }
 
 static uint8_t prev_lpf_io = 0xff; // inits and resets all latches
 inline void set_lpf(uint8_t f){
-  uint8_t lpf_io = (f > 12) ? 3 : (f > 8) ? 5 : (f > 6) ? 7 : (f > 4) ? 9 : /*(f > 2)*/ 11; // cut-off freq in MHz to IO port of LPF relay
-  if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, false); set_latch(lpf_io); prev_lpf_io = lpf_io; };  // set relay
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV3
+  uint8_t lpf_io = (f > 30) ? IO1_0 : (f > 22) ? IO1_1 : (f > 16) ? IO1_2 : (f > 12) ? IO1_3 : (f > 8) ? IO1_4 : (f > 6) ? IO1_5 : (f > 4) ? IO1_6 : /*(f <= 4)*/ IO1_7; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, IO0_0, false); set_latch(lpf_io, IO0_0); prev_lpf_io = lpf_io; };  // set relay
+#else //LPF_SWITCHING_DL2MAN_USDX_REV2 LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
+  uint8_t lpf_io = (f > 12) ? IO0_3 : (f > 8) ? IO0_5 : (f > 6) ? IO0_7 : (f > 4) ? IO1_1 : /*(f <= 4)*/ IO1_3; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, IO0_1, false); set_latch(lpf_io, IO0_1); prev_lpf_io = lpf_io; };  // set relay
+#endif
 }
-#endif  //LPF_SWITCHING_DL2MAN_USDX_REV2 REV2_BETA
+#endif  //LPF_SWITCHING_DL2MAN_USDX_REV3 LPF_SWITCHING_DL2MAN_USDX_REV2 REV2_BETA
 
-#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2)
+#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV3)
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
@@ -1687,7 +1694,7 @@ volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
 volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
 inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam.ac.uk/~am21/hakmemc.html, ITEM 149]: p_sin+=n_cos*2*PI*f/fs; n_cos-=p_sin*2*PI*f/fs;
 {
-  uint8_t alpha100 = tones[cw_tone]/*cw_offset*/ * 628 / F_SAMP_TX;  // alpha = f_tone * 6.28 / fs
+  uint8_t alpha100 = tones[cw_tone]/*cw_offset*/ * 628 / F_SAMP_TX;  // alpha = f_tone * 2 * pi / fs
   p_sin += alpha100 * n_cos / 100;
   n_cos -= alpha100 * p_sin / 100;
 }
@@ -3642,7 +3649,7 @@ void analyseCATcmd()
   else if((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
     Command_VX(CATcmd[2]);
 
-// todo:  AG0;MD1;MD2;MD3;XT1;RT1;RC;FL0..;
+// @todo:  AG0;MD1;MD2;MD3;XT1;RT1;RC;FL0..;
 
   else {
     Serial.print("?;");
@@ -4609,9 +4616,6 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 50MHz LSB OK, USB NOK
 
 atmega328p signature: https://forum.arduino.cc/index.php?topic=341799.15   https://www.eevblog.com/forum/microcontrollers/bootloader-on-smd-atmega328p-au/msg268938/#msg268938 https://www.avrfreaks.net/forum/undocumented-signature-row-contents
-
-Rudolf OK1FFI: found a little problem on my USDR transceiver. When operating LSB at the frequency 3.774 to 3.378 MHz frequency synthesa does not work. The same on the frequency 3.704 to 3.707MHz. In the CW test on the frequency 3.703 to 3.703.7 also does not work. On the oscilloscope screen, the false signal is about three times higher than the desired. I measured on Gates of transistors Q2 to Q4. Firmware 1.02a, 1.02D and 1.02Exp K Work correctly. I tested the "M" version of 27 modifications, I did not test all but the last most interesting and sophisticated versions do it as well. My Friends OK1IF OK1UP OK1UFI OK1FFF have the same problem. Synteze crystal frequency is 25MHz. I send pictures of the oscilloscope screen at 3.773 and at the 3,774 frequency where Syntheza does not work. I didn't try other bands, the priority for me 80m band. I hope this inconvenience will be removed, the versions of "M" are otherwise nice and sophisticated.
--> 3703.6-3704.2
 
 Alain k1fm AGC sens issue:  https://groups.io/g/ucx/message/3998   https://groups.io/g/ucx/message/3999
 
