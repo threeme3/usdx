@@ -39,7 +39,8 @@
 #define LCD_RS  18        //PC4    (pin 27)
 #define SDA     18        //PC4    (pin 27)
 #define SCL     19        //PC5    (pin 28)
-//#define NTX     11        //PB3    (pin 17)  - experimental: LOW on TX, used as PTT out to enable external PAs
+//#define NTX     11        //PB3    (pin 17)  - experimental: LOW  on TX, used as PTT out to enable external PAs
+//#define PTX     11        //PB3    (pin 17)  - experimental: HIGH on TX, used as PTT out to enable external PAs
 
 #ifdef SWAP_ROTARY
 #undef ROT_A
@@ -80,8 +81,8 @@ ssb_cap=1; dsp_cap=2;
 #define F_CPU F_XTAL
 */
 
-#if(ARDUINO < 10810)
-   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.10 or later from https://www.arduino.cc/en/software"
+#if(ARDUINO < 10800)
+   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.0 or later from https://www.arduino.cc/en/software"
 #endif
 #if !(defined(ARDUINO_ARCH_AVR))
    #error "Unsupported architecture, select Arduino IDE > Tools > Board > Arduino AVR Boards > Arduino Uno."
@@ -1100,7 +1101,7 @@ public:
       if(fout < 3500000) d = (7 * fxtal) / fout;  // PLL at 189MHz to cover 160m (freq>1.48MHz) when using 27MHz crystal
       if(fout > 140000000) d = 4; // for f=140..300MHz; AN619; 4.1.3, this implies integer mode
       if(d % 2) d++;  // even numbers preferred for divider (AN619 p.4 and p.6)
-      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d++; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
+      if( (d * (fout - 5000) / fxtal) != (d * (fout + 5000) / fxtal) ) d += 2; // Test if multiplier remains same for freq deviation +/- 5kHz, if not use different divider to make same
       uint32_t fvcoa = d * fout;  // Variable PLLA VCO frequency at integer multiple of fout at around 27MHz*16 = 432MHz
       // si5351 spectral purity considerations: https://groups.io/g/QRPLabs/message/42662
 
@@ -3112,6 +3113,9 @@ void start_rx()
 
 int16_t _centiGain = 0;
 
+#define TX_DELAY    1     // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
+uint8_t txdelay = 0;
+#define SEMI_QSK    1     // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
 uint8_t semi_qsk = false;
 uint32_t semi_qsk_timeout = 0;
 
@@ -3119,10 +3123,28 @@ void switch_rxtx(uint8_t tx_enable){
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
   noInterrupts();
+#ifdef TX_DELAY
+#ifdef SEMI_QSK
+  if(!(semi_qsk_timeout))
+#endif
+    if((tx_enable) && (!(tx)) && (txdelay) && (!(practice))){  // key-up TX relay in advance before actual transmission
+      digitalWrite(RX, LOW); // TX (disable RX)
+#ifdef NTX
+      digitalWrite(NTX, LOW);  // TX (enable TX)
+#endif //NTX
+#ifdef PTX
+      digitalWrite(PTX, HIGH);  // TX (enable TX)
+#endif //PTX
+      lcd.setCursor(15, 1); lcd.print('D');
+      delay(txdelay);
+    }
+#endif //TX_DELAY
   tx = tx_enable;
   if(tx_enable){  // tx
     _centiGain = centiGain;  // backup AGC setting
+#ifdef SEMI_QSK
     semi_qsk_timeout = 0;
+#endif
     switch(mode){
       case USB:
       case LSB: func_ptr = dsp_tx; break;
@@ -3132,15 +3154,19 @@ void switch_rxtx(uint8_t tx_enable){
     }
   } else {  // rx
     if(semi_qsk && (!(semi_qsk_timeout))){
+#ifdef SEMI_QSK
 #ifdef KEYER
       semi_qsk_timeout = millis() + ditTime * 8;
 #else
       semi_qsk_timeout = millis() + 8 * 8;  // no keyer? assume dit-time of 20 WPM
-#endif
+#endif //KEYER
+#endif //SEMI_QSK
       if((mode == CW) && semi_qsk) func_ptr = dummy; else func_ptr = sdr_rx;
     } else {
       centiGain = _centiGain;  // restore AGC setting
+#ifdef SEMI_QSK
       semi_qsk_timeout = 0;
+#endif
       func_ptr = sdr_rx;
     }
   }
@@ -3164,7 +3190,10 @@ void switch_rxtx(uint8_t tx_enable){
       digitalWrite(RX, LOW); // TX (disable RX)
 #ifdef NTX
       digitalWrite(NTX, LOW);  // TX (enable TX)
-#endif
+#endif //NTX
+#ifdef PTX
+    digitalWrite(PTX, HIGH);  // TX (enable TX)
+#endif //PTX
       lcd.setCursor(15, 1); lcd.print('T');
       if(mode == CW){ si5351.freq_calc_fast(-cw_offset); si5351.SendPLLRegisterBulk(); } // for CW, TX at freq
       else if(rit){ si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk(); }
@@ -3193,10 +3222,18 @@ void switch_rxtx(uint8_t tx_enable){
 #endif  //TX_CLK0_CLK1
 #endif //QUAD
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-      digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
+#ifdef SEMI_QSK
+      if(!semi_qsk_timeout)   // enable RX when no longer in semi-qsk phase; so RX and NTX/PTX outputs are switching only when in RX mode
+#endif //SEMI_QSK
+      {
+        digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
 #ifdef NTX
-      digitalWrite(NTX, HIGH);  // RX (disable TX)
-#endif
+        digitalWrite(NTX, HIGH);  // RX (disable TX)
+#endif //NTX
+#ifdef PTX
+    digitalWrite(PTX, HIGH);  // TX (enable TX)
+#endif //PTX
+      }
       si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
       lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 #ifdef _SERIAL
@@ -3481,7 +3518,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, TXDELAY, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3518,7 +3555,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef QCX
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
 #endif
+#ifdef SEMI_QSK
     case SEMIQSK: paramAction(action, semi_qsk,  0x24, F("Semi QSK"), offon_label, 0, 1, false); break;
+#endif
 #ifdef KEYER
     case KEY_WPM:  paramAction(action, keyer_speed,   0x25, F("Keyer Speed"), NULL, 0, 35, false); break;
     case KEY_MODE: paramAction(action, keyer_mode, 0x26, F("Keyer Mode"), keyer_mode_label, 0, 2, false); break;
@@ -3531,6 +3570,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
 #endif
     case DRIVE:   paramAction(action, drive, 0x34, F("TX Drive"), NULL, 0, 8, false); break;
+#ifdef TX_DELAY
+    case TXDELAY: paramAction(action, txdelay, 0x35, F("TX Delay"), NULL, 0, 255, false); break;
+#endif
     case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
     case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, pwm_min, 255, false); break;
@@ -3590,7 +3632,11 @@ void initPins(){
 #ifdef NTX
   digitalWrite(NTX, HIGH);
   pinMode(NTX, OUTPUT);
-#endif
+#endif //NTX
+#ifdef PTX
+  digitalWrite(PTX, LOW);
+  pinMode(PTX, OUTPUT);
+#endif //PTX
 }
 
 #ifdef CAT
@@ -4249,8 +4295,9 @@ void loop()
 #ifdef KEYER
 }
 #endif //KEYER
+#ifdef SEMI_QSK
   if((semi_qsk_timeout) && (millis() > semi_qsk_timeout)){ switch_rxtx(0); }  // delayed QSK RX
-
+#endif
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PLC=0x05, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
   if(inv ^ digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
     if(!((event & PL) || (event & PLC))){  // hack: if there was long-push before, then fast forward
@@ -4495,6 +4542,11 @@ void loop()
           if(keyer_mode == 2){ keyerControl = SINGLE; }
         }
 #endif //KEYER
+#ifdef TX_DELAY
+        if(menu == TXDELAY){
+          semi_qsk = (txdelay > 0);
+        }
+#endif //TX_DELAY
       }
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate

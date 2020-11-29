@@ -108,10 +108,11 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
 | 3.4 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
+| 3.5 TX Delay        | Delays TX to allow PA relay to be fully switched on before TX (0-255 ms) | |
 | 8.1 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
 | 8.2 PA Bias min     | KEY_OUT PWM level (0-255) for representing   0% RF output | |
 | 8.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
-| 8.4 RX Phase Adj    | RX I/Q phase offset in degrees (45..135) | |
+| 8.4 IQ Phase        | RX I/Q phase offset in degrees (0..180 degrees) | |
 | 8.5 IQ Test/Cal.    | CW-filter alignment (QCX only) | |
 | 9.1 Sample rate     | for debugging, testing and experimental purpose | |
 | 9.2 CPU load        | for debugging, testing and experimental purpose | |
