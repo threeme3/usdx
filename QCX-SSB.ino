@@ -146,7 +146,7 @@ uint8_t backlight = 8;
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
   #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
-  #define _en  4      // PC4 - MUST have pull-up resistor
+  #define _en  4      // PD4 - MUST have pull-up resistor
   #define _rs  4      // PC4 - MUST have pull-up resistor
   //#define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
   //#define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
@@ -1082,6 +1082,7 @@ public:
     if(n < 0){
       SendRegister(n+16+8, 0x80|(0x40*_int)); // MSNx PLLn: 0x40=FBA_INT; 0x80=CLKn_PDN
     } else {
+      //SendRegister(n+16, ((pll)*0x20)|0x0C|0|(0x40*_int));  // MSx CLKn: 0x0C=PLLA,0x2C=PLLB local msynth; 0=2mA; 0x40=MSx_INT; 0x80=CLKx_PDN
       SendRegister(n+16, ((pll)*0x20)|0x0C|3|(0x40*_int));  // MSx CLKn: 0x0C=PLLA,0x2C=PLLB local msynth; 3=8mA; 0x40=MSx_INT; 0x80=CLKx_PDN
       SendRegister(n+165, (!_int) * phase * msa / 90);      // when using: make sure to configure MS in fractional-mode, perform reset afterwards
     }
@@ -1679,8 +1680,8 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 #endif //TX_CLK0_CLK1
 #endif
 
-//#define MOX   1   // Monitor-On-Xmit
-#ifdef MOX
+//#define MOX_ENABLE   1   // Monitor-On-Xmit
+#ifdef MOX_ENABLE
   if(!mox) return;
   OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
 #endif
@@ -3566,7 +3567,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #endif
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("VOX Level"), NULL, 0, 255, false); break;
-#ifdef MOX
+#ifdef MOX_ENABLE
     case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
 #endif
     case DRIVE:   paramAction(action, drive, 0x34, F("TX Drive"), NULL, 0, 8, false); break;
@@ -4670,5 +4671,11 @@ Q- I+ Q+ I-   Q- I+ Q+ I-
 atmega328p signature: https://forum.arduino.cc/index.php?topic=341799.15   https://www.eevblog.com/forum/microcontrollers/bootloader-on-smd-atmega328p-au/msg268938/#msg268938 https://www.avrfreaks.net/forum/undocumented-signature-row-contents
 
 Alain k1fm AGC sens issue:  https://groups.io/g/ucx/message/3998   https://groups.io/g/ucx/message/3999
+txdelay when vox is on (disregading the tx>0 state due to ssb() overrule, instead use RX-digitalinput)
+Adrian: issue #41, set cursor just after writing 'R' when smeter is off, and (menumode == 0)
+Konstantinos: backup/restore vfofilt settings when changing vfo.
+Miguel issue: CW filt noise
+Bob: 2mA for clk0/1 during RX
+Uli: periodic SDA pulses and 3.3V compliance
 
 */
