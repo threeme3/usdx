@@ -81,8 +81,8 @@ ssb_cap=1; dsp_cap=2;
 #define F_CPU F_XTAL
 */
 
-#if(ARDUINO < 10800)
-   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.0 or later from https://www.arduino.cc/en/software"
+#if(ARDUINO < 10810)
+   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.10 or later from https://www.arduino.cc/en/software"
 #endif
 #if !(defined(ARDUINO_ARCH_AVR))
    #error "Unsupported architecture, select Arduino IDE > Tools > Board > Arduino AVR Boards > Arduino Uno."
@@ -93,7 +93,7 @@ ssb_cap=1; dsp_cap=2;
 extern char __bss_end;
 static int freeMemory(){ char* sp = reinterpret_cast<char*>(SP); return sp - &__bss_end; }  // see: http://www.nongnu.org/avr-libc/user-manual/malloc.html
 
-#ifdef KEYER
+//#ifdef KEYER
 // Iambic Morse Code Keyer Sketch, Contribution by Uli, DL2DBG. Copyright (c) 2009 Steven T. Elliott Source: http://openqrp.org/?p=343,  Trimmed by Bill Bishop - wrb[at]wrbishop.com.  This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version. This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details: Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA.
 
 // keyerControl bit definitions
@@ -111,7 +111,6 @@ static uint8_t keyerControl;
 static uint8_t keyerState;
 static uint8_t keyer_mode = 2; //->  SINGLE
 static uint8_t keyer_swap = 0; //->  DI/DAH
-static uint8_t practice = false;  // Practice mode
 
 static uint32_t ktimer;
 static int Key_state;
@@ -133,7 +132,8 @@ void loadWPM (int wpm) // Calculate new time constants based on wpm value
 {
     ditTime = 1200/wpm * 5/4;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
 }
-#endif //KEYER
+//#endif //KEYER
+static uint8_t practice = false;  // Practice mode
 
 volatile uint8_t cat_active = 0;
 volatile uint32_t rxend_event = 0;
@@ -148,10 +148,14 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   #define _dn  0      // PD0 to PD3 connect to D4 to D7 on the display
   #define _en  4      // PD4 - MUST have pull-up resistor
   #define _rs  4      // PC4 - MUST have pull-up resistor
-  //#define LCD_RS_HI() DDRC &= ~(1 << _rs);         // RS high (pull-up)
-  //#define LCD_RS_LO() DDRC |= 1 << _rs;            // RS low (pull-down)
+#define RS_PULLUP  1   // Use pullup on RS line, ensures compliancy to the absolute maximum ratings for the si5351 sda input that is shared with rs pin of lcd
+#ifdef RS_PULLUP
+  #define LCD_RS_HI() DDRC &= ~(1 << _rs); asm("nop"); // RS high (pull-up)
+  #define LCD_RS_LO() DDRC |= 1 << _rs;                // RS low (pull-down)
+#else
   #define LCD_RS_LO() PORTC &= ~(1 << _rs);        // RS low
   #define LCD_RS_HI() PORTC |= (1 << _rs);         // RS high
+#endif //RS_PULLUP
   #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
   #define LCD_EN_HI() PORTD |= (1 << _en);         // EN high
   #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
@@ -1672,7 +1676,7 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 #endif
 
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
-  if(tx == 1){ si5351.SendRegister(SI_CLK_OE, 0b11111111); }   // disable carrier
+  if(tx == 1){ OCR1BL = 0; si5351.SendRegister(SI_CLK_OE, 0b11111111); }   // disable carrier
 #ifdef TX_CLK0_CLK1
   if(tx == 255){ si5351.SendRegister(SI_CLK_OE, 0b11111100); } // enable carrier
 #else //TX_CLK2
@@ -4674,7 +4678,6 @@ Alain k1fm AGC sens issue:  https://groups.io/g/ucx/message/3998   https://group
 txdelay when vox is on (disregading the tx>0 state due to ssb() overrule, instead use RX-digitalinput)
 Adrian: issue #41, set cursor just after writing 'R' when smeter is off, and (menumode == 0)
 Konstantinos: backup/restore vfofilt settings when changing vfo.
-Miguel issue: CW filt noise
 Bob: 2mA for clk0/1 during RX
 Uli: periodic SDA pulses and 3.3V compliance
 
