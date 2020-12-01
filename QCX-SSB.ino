@@ -3158,7 +3158,7 @@ void switch_rxtx(uint8_t tx_enable){
       case FM:  func_ptr = dsp_tx_fm; break;
     }
   } else {  // rx
-    if(semi_qsk && (!(semi_qsk_timeout))){
+    if((!(semi_qsk_timeout))){
 #ifdef SEMI_QSK
 #ifdef KEYER
       semi_qsk_timeout = millis() + ditTime * 8;
@@ -3228,7 +3228,7 @@ void switch_rxtx(uint8_t tx_enable){
 #endif //QUAD
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
 #ifdef SEMI_QSK
-      if(!semi_qsk_timeout)   // enable RX when no longer in semi-qsk phase; so RX and NTX/PTX outputs are switching only when in RX mode
+      if((!semi_qsk_timeout) || (!semi_qsk))   // enable RX when no longer in semi-qsk phase; so RX and NTX/PTX outputs are switching only when in RX mode
 #endif //SEMI_QSK
       {
         digitalWrite(RX, !(att == 2)); // RX (enable RX when attenuator not on)
@@ -4198,7 +4198,8 @@ void loop()
 //  delay(1);
 //#endif
 
-  if((mode == CW) && cwdec) cw_decode();  // if(!(semi_qsk_timeout)) cw_decode(); else dec2();
+  //if((mode == CW) && cwdec) cw_decode();  // if(!(semi_qsk_timeout)) cw_decode(); else dec2();
+  if((mode == CW) && cwdec && ((!tx) && (!semi_qsk_timeout))) cw_decode();  // CW decoder only active during RX
 
   if(menumode == 0){ // in main    
     if((cw_event) && (cwdec)){
