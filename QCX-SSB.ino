@@ -3132,7 +3132,7 @@ void switch_rxtx(uint8_t tx_enable){
 #ifdef SEMI_QSK
   if(!(semi_qsk_timeout))
 #endif
-    if((tx_enable) && (!(tx)) && (txdelay) && (!(practice))){  // key-up TX relay in advance before actual transmission
+    if((txdelay) && (tx_enable) && (!(tx)) && (!(practice))){  // key-up TX relay in advance before actual transmission
       digitalWrite(RX, LOW); // TX (disable RX)
 #ifdef NTX
       digitalWrite(NTX, LOW);  // TX (enable TX)
@@ -3208,7 +3208,7 @@ void switch_rxtx(uint8_t tx_enable){
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
 #endif  //TX_CLK0_CLK1
       //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
-      OCR1AL = 0; // make sure SIDETONE is set to 0%
+      OCR1AL = 0x80; // make sure SIDETONE is set to 0%
       TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
 #ifdef _SERIAL
       if(cat_active){ DDRC &= ~(1<<2); } // disable PC2, so that ADC2 can be used as mic input
