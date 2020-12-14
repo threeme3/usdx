@@ -6,15 +6,17 @@
 
 #define VERSION   "1.02m"
 
-#define DIAG            1   // Hardware diagnostics on startup (frees memory when disabled)
+// Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. DEBUG, CAT, DIAG, KEYER
+#define DIAG            1   // Hardware diagnostics on startup
 #define KEYER           1   // CW keyer
 #define CAT             1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
 //#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or SI5351 break-out board)
+//#define F_XTAL 25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
-//#define DEBUG         1   // for development purposes only (frees cpu&memory when disabled, adds debugging features such as CPU, sample-rate measurement, additional parameters)
+//#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH     1
 
 // QCX pin defintions
@@ -1044,7 +1046,7 @@ public:
     pll_regs[6] = BB1(msp2);
     pll_regs[7] = BB0(msp2);
   }
-  #define SI5351_ADDR 0x60              // I2C address of Si5351   (typical)
+  #define SI5351_ADDR 0x60                // SI5351A I2C address: 0x60 for SI5351A-B-GT; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
   inline void SendPLLRegisterBulk(){
     i2c.start();
@@ -1467,8 +1469,12 @@ class IOExpander16 {
 public:
 #ifdef LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
   #define IOEXP16_ADDR  0x74  // PCA9539 with A1..A0 set to 0   https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
-#else  // LPF_SWITCHING_DL2MAN_USDX_REV3 REV2
+#endif
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
   #define IOEXP16_ADDR  0x24  // TCA/PCA9555 with A2=1 A1..A0=0   https://www.ti.com/lit/ds/symlink/tca9555.pdf
+#endif
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV3
+  #define IOEXP16_ADDR  0x20  // TCA/PCA9555 with A2=0 A1..A0=0   https://www.ti.com/lit/ds/symlink/tca9555.pdf
 #endif
   inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(IOEXP16_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
   inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0x00); SendRegister(0x06, 0x00); SendRegister(0x03, 0x00); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 0, IO0 as output, IO1 to 0, IO1 as output
@@ -1490,10 +1496,10 @@ void set_latch(uint8_t io, uint8_t common_io, bool latch = true){ // reset all l
 static uint8_t prev_lpf_io = 0xff; // inits and resets all latches
 inline void set_lpf(uint8_t f){
 #ifdef LPF_SWITCHING_DL2MAN_USDX_REV3
-  uint8_t lpf_io = (f > 30) ? IO1_0 : (f > 22) ? IO1_1 : (f > 16) ? IO1_2 : (f > 12) ? IO1_3 : (f > 8) ? IO1_4 : (f > 6) ? IO1_5 : (f > 4) ? IO1_6 : /*(f <= 4)*/ IO1_7; // cut-off freq in MHz to IO port of LPF relay
+  uint8_t lpf_io = (f > 26) ? IO1_3 : (f > 20) ? IO1_4 : (f > 17) ? IO1_2 : (f > 12) ? IO1_5 : (f > 8) ? IO1_1 : (f > 5) ? IO1_6 : (f > 4) ? IO1_0 : /*(f <= 4)*/ IO1_7; // cut-off freq in MHz to IO port of LPF relay
   if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, IO0_0, false); set_latch(lpf_io, IO0_0); prev_lpf_io = lpf_io; };  // set relay
 #else //LPF_SWITCHING_DL2MAN_USDX_REV2 LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
-  uint8_t lpf_io = (f > 12) ? IO0_3 : (f > 8) ? IO0_5 : (f > 6) ? IO0_7 : (f > 4) ? IO1_1 : /*(f <= 4)*/ IO1_3; // cut-off freq in MHz to IO port of LPF relay
+  uint8_t lpf_io = (f > 12) ? IO0_3 : (f > 8) ? IO0_5 : (f > 5) ? IO0_7 : (f > 4) ? IO1_1 : /*(f <= 4)*/ IO1_3; // cut-off freq in MHz to IO port of LPF relay
   if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, IO0_1, false); set_latch(lpf_io, IO0_1); prev_lpf_io = lpf_io; };  // set relay
 #endif
 }
@@ -1750,14 +1756,15 @@ void dsp_tx_fm()
 volatile uint8_t cwdec = 1;
 static int32_t avg = 256;
 static uint8_t sym;
-const char m2c[] PROGMEM = "**ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
+const char m2c[] PROGMEM = "~ ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
 static uint32_t amp32 = 0;
 volatile uint32_t _amp32 = 0;
 static char out[] = "                ";
 volatile bool cw_event = false;
 
-void printch(char ch){
-  for(int i=0; i!=15;i++) out[i]=out[i+1]; out[15] = ch; cw_event = true;  // update LCD  
+void printsym(){
+  if(sym<128){ char ch=pgm_read_byte_near(m2c + sym); if(ch != '*'){ for(int i=0; i!=15;i++) out[i]=out[i+1]; out[15] = ch; cw_event = true; }  }   // update LCD
+  sym=1;
 }
 
 int realstate = LOW;
@@ -1820,7 +1827,6 @@ void dec2()
     }
   }
  }
- char ch = 0;
 
  // now we will check which kind of baud we have - dit or dah, and what kind of pause we do have 1 - 3 or 7 pause, we think that hightimeavg = 1 bit
  if(filteredstate != filteredstatebefore){
@@ -1842,21 +1848,18 @@ void dec2()
 
      if(lowduration > (hightimesavg*(1.75*lacktime)) && lowduration < hightimesavg*(5*lacktime)){ // letter space
      //if(lowduration > (hightimesavg*(2*lacktime)) && lowduration < hightimesavg*(5*lacktime)){ // letter space
-          if(sym<128){ ch=pgm_read_byte_near(m2c + sym); if(ch != '*') printch(ch); }
-     sym=1;
+       printsym();
    }
    if(lowduration >= hightimesavg*(5*lacktime)){ // word space
-     if(sym<128){ ch=pgm_read_byte_near(m2c + sym); if(ch != '*') printch(ch); }
-     sym=1;
-     printch(' ');
+     printsym();
+     printsym();  // print space
    }
   }
  }
 
  // write if no more letters
   if((millis() - startttimelow) > (highduration * 6) && (sym > 1)){
-   if(sym<128){ ch=pgm_read_byte_near(m2c + sym); if(ch != '*') printch(ch); }
-   sym=1;
+    printsym();
   }
 
   filteredstatebefore = filteredstate;
@@ -1866,8 +1869,7 @@ void dec2()
 
 void dec2()
 {
- // Then we do want to have some durations on high and low
- if(filteredstate != filteredstatebefore){
+ if(filteredstate != filteredstatebefore){ // then we do want to have some durations on high and low
   lcd.noCursor(); lcd.setCursor(15, 1); lcd.print((filteredstate) ? 'R' : ' '); stepsize_showcursor();
 
   if(filteredstate == HIGH){
@@ -1875,13 +1877,12 @@ void dec2()
     lowduration = (millis() - startttimelow);
     //highduration = 0;
 
-    char ch = 0;
     if((sym > 1) && lowduration > (hightimesavg*2)/* && lowduration < hightimesavg*(5*lacktime)*/){ // letter space
-      if(sym<128){ ch=pgm_read_byte_near(m2c + sym); if(ch != '*') printch(ch); }
-      sym=1;
+      printsym();
       wpm = (1200/hightimesavg * 4/3);
+      //if(lowduration >= hightimesavg*(5)){ sym=1; printsym(); } // (print additional space) word space
     }
-    if(lowduration >= hightimesavg*(5)) printch(' '); // word space    
+    if(lowduration >= hightimesavg*(5)){ sym=1; printsym(); } // (print additional space) word space
   }
 
   if(filteredstate == LOW){
@@ -1889,22 +1890,22 @@ void dec2()
     highduration = (millis() - starttimehigh);
     //lowduration = 0;
     if(highduration < (2*hightimesavg) || hightimesavg == 0){
-      hightimesavg = (highduration+hightimesavg+hightimesavg)/3;     // now we know avg dit time ( rolling 3 avg)
+      hightimesavg = (highduration+hightimesavg+hightimesavg)/3;     // now we know avg dit time (rolling 3 avg)
     }
     if(highduration > (5*hightimesavg)){
       hightimesavg = highduration/3;     // if speed decrease fast ..      
       //hightimesavg = highduration+hightimesavg;     // if speed decrease fast ..
     }
-
     if(highduration > (hightimesavg/2)) sym=(sym<<1)|(highduration > (hightimesavg*2));        // dit (0) or dash (1)
   }
-
  }
  
- // write if no more letters
- if(((millis() - startttimelow) > hightimesavg*(6)) && (sym > 1)){
-   if(sym<128){ char ch=pgm_read_byte_near(m2c + sym); if(ch != '*') printch(ch); }
-   sym=1;
+ //if(((millis() - startttimelow) > hightimesavg*(6)) && (sym > 1)){
+ if(((millis() - startttimelow) > hightimesavg*(12)) && (sym > 1)){
+   if(sym == 2) sym = 1; else // skip E E E E E
+   printsym();  // write if no more letters
+   //sym=0; printsym(); // print special char
+   //startttimelow = millis();
  }
  
  filteredstatebefore = filteredstate;
@@ -3197,7 +3198,7 @@ void switch_rxtx(uint8_t tx_enable){
       digitalWrite(NTX, LOW);  // TX (enable TX)
 #endif //NTX
 #ifdef PTX
-    digitalWrite(PTX, HIGH);  // TX (enable TX)
+      digitalWrite(PTX, HIGH);  // TX (enable TX)
 #endif //PTX
       lcd.setCursor(15, 1); lcd.print('T');
       if(mode == CW){ si5351.freq_calc_fast(-cw_offset); si5351.SendPLLRegisterBulk(); } // for CW, TX at freq
@@ -3207,15 +3208,15 @@ void switch_rxtx(uint8_t tx_enable){
 #else
       si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
 #endif  //TX_CLK0_CLK1
-      //if(!mox) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during TX
-      OCR1AL = 0x80; // make sure SIDETONE is set to 0%
+      OCR1AL = 0x80; // make sure SIDETONE is set at 2.5V
+      if((!mox) && (mode != CW)) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during SSB TX
       TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
 #ifdef _SERIAL
       if(cat_active){ DDRC &= ~(1<<2); } // disable PC2, so that ADC2 can be used as mic input
 #endif
     }
   } else {  // rx
-      //TCCR1A |= (1 << COM1A1);  // enable SIDETONE
+      TCCR1A |= (1 << COM1A1);  // enable SIDETONE (was disabled to prevent interference during ssb tx)
       TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
       OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
 #ifdef QUAD
@@ -3236,7 +3237,7 @@ void switch_rxtx(uint8_t tx_enable){
         digitalWrite(NTX, HIGH);  // RX (disable TX)
 #endif //NTX
 #ifdef PTX
-    digitalWrite(PTX, HIGH);  // TX (enable TX)
+        digitalWrite(PTX, LOW);   // TX (disable TX)
 #endif //PTX
       }
       si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
@@ -3519,7 +3520,7 @@ const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "1
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 35  // number of (visible) parameters
+#define N_PARAMS 36  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
@@ -4098,7 +4099,7 @@ void setup()
 
   drive = 4;  // Init settings
 #ifdef QCX
-  if(!ssb_cap){ mode = CW; filt = 4; stepsize = STEP_500; }
+  if(!ssb_cap){ vfomode[0] = CW; vfomode[1] = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
   if(dsp_cap == DSP) volume = 10;
   if(!dsp_cap) cw_tone = 2;   // use internal 700Hz QCX filter, so use same offset and keyer tone
@@ -4680,6 +4681,11 @@ txdelay when vox is on (disregading the tx>0 state due to ssb() overrule, instea
 Adrian: issue #41, set cursor just after writing 'R' when smeter is off, and (menumode == 0)
 Konstantinos: backup/restore vfofilt settings when changing vfo.
 Bob: 2mA for clk0/1 during RX
-Uli: periodic SDA pulses and 3.3V compliance
+Uli: accuracate voltages during diag
+
+agc behind filter
+vcc adc extend. power/curr measurement
+swr predistort eff calc
+block ptt while in vox mode
 
 */
