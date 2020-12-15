@@ -7,7 +7,7 @@
 #define VERSION   "1.02m"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. DEBUG, CAT, DIAG, KEYER
-#define DIAG            1   // Hardware diagnostics on startup
+#define DIAG            1   // Hardware diagnostics on startup (only disable when your rig is working)
 #define KEYER           1   // CW keyer
 #define CAT             1   // CAT-interface
 #define F_XTAL 27005000     // 27MHz SI5351 crystal
@@ -1900,9 +1900,9 @@ void dec2()
   }
  }
  
- //if(((millis() - startttimelow) > hightimesavg*(6)) && (sym > 1)){
- if(((millis() - startttimelow) > hightimesavg*(12)) && (sym > 1)){
-   if(sym == 2) sym = 1; else // skip E E E E E
+ if(((millis() - startttimelow) > hightimesavg*(6)) && (sym > 1)){
+ //if(((millis() - startttimelow) > hightimesavg*(12)) && (sym > 1)){
+   //if(sym == 2) sym = 1; else // skip E E E E E
    printsym();  // write if no more letters
    //sym=0; printsym(); // print special char
    //startttimelow = millis();
@@ -2416,7 +2416,7 @@ void process(int16_t i_ac2, int16_t q_ac2)
   static int16_t v[7];  // Post processing I and Q (down-sampled) results
   i = i_ac2; q = q_ac2;   // tbd: this can be more efficient
   int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = i_ac2;  // Delay to match Hilbert transform on Q branch
-  ac3 = slow_dsp(i + qh);
+  ac3 = ac3 = slow_dsp(-i - qh);  //inverting I and Q helps dampening a feedback-loop between PWM out and ADC inputs
 #ifdef OUTLET
   tc--;
 #endif
@@ -2455,7 +2455,7 @@ inline int16_t sdr_rx_common_q(){
   ADMUX = admux[0]; ADCSRA |= (1 << ADSC); int16_t ac = ADC - 511;
 /*ozi2 = ozi1 + ozi2;          // Integrator section - needed?
   ozi1 = ocomb + ozi1;
-  OCR1AL = min(max((ozi2>>5) + 128, 0), 255); */
+  OCR1AL = min(max(128 - (ozi2>>5) + 128, 0), 255); */
   return ac;
 }
 
@@ -3141,8 +3141,10 @@ void switch_rxtx(uint8_t tx_enable){
 #ifdef PTX
       digitalWrite(PTX, HIGH);  // TX (enable TX)
 #endif //PTX
-      lcd.setCursor(15, 1); lcd.print('D');
-      delay(txdelay);
+      lcd.setCursor(15, 1); lcd.print('D');  // note that this enables interrupts again.
+      interrupts();    //hack.. to allow delay()
+      delay(txdelay * 5/4);
+      noInterrupts();  //end of hack
     }
 #endif //TX_DELAY
   tx = tx_enable;
@@ -3718,17 +3720,18 @@ void serialEvent(){
   if(data == ';'){
     CATcmd[cat_ptr] = '\0'; // terminate the array
     cat_ptr = 0;            // reset for next CAT command
-  #ifdef _SERIAL
+#ifdef _SERIAL
     if(!cat_active){ cat_active = 1; smode = 0;} // disable smeter to reduce display activity
-  #endif
+#endif
     analyseCATcmd(); delay(10);
   } else if(cat_ptr > (CATCMD_SIZE - 1)){ Serial.print("E;"); cat_ptr = 0; } // overrun
 }
 
 void Command_GETFreqA()
 {
+#ifdef _SERIAL
   if(!cat_active) return;
-
+#endif
   char Catbuffer[32];
   unsigned int g,m,k,h;
   uint32_t tf;
@@ -3760,8 +3763,9 @@ void Command_SETFreqA()
 
 void Command_IF()
 {
+#ifdef _SERIAL
   if(!cat_active) return;
-
+#endif
   char Catbuffer[32];
   unsigned int g,m,k,h;
   uint32_t tf;
@@ -4687,5 +4691,8 @@ agc behind filter
 vcc adc extend. power/curr measurement
 swr predistort eff calc
 block ptt while in vox mode
+
+adc bias error and potential error correction
+noise burst on tx
 
 */
