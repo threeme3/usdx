@@ -686,7 +686,7 @@ const uint8_t font[]PROGMEM = {
 #define FONT_STRETCHH 0
 */
 
-//#define BRIGHT  1
+#define BRIGHT  1
 static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence
 //  0xAE,     // Display OFF (sleep mode)
     0x20, 0b10,   // Set Memory Addressing Mode
@@ -1534,7 +1534,7 @@ const uint8_t ssb_cap = 1;
 const uint8_t dsp_cap = SDR;
 #endif
 
-enum mode_t { LSB, USB, CW, AM, FM };
+enum mode_t { LSB, USB, CW, FM, AM };
 volatile uint8_t mode = USB;
 volatile uint16_t numSamples = 0;
 
@@ -3680,7 +3680,10 @@ void analyseCATcmd()
     Command_AI0();
 
   else if((CATcmd[0] == 'M') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))
-    Command_MD();
+    Command_GetMD();
+
+  else if((CATcmd[0] == 'M') && (CATcmd[1] == 'D') && (CATcmd[3] == ';'))
+    Command_SetMD();
 
   else if((CATcmd[0] == 'R') && (CATcmd[1] == 'X') && (CATcmd[2] == ';'))
     Command_RX();
@@ -3697,13 +3700,26 @@ void analyseCATcmd()
   else if((CATcmd[0] == 'T') && (CATcmd[1] == 'X') && (CATcmd[2] == '2'))
     Command_TX2();
 
+  else if((CATcmd[0] == 'A') && (CATcmd[1] == 'G') && (CATcmd[2] == '0'))  // add
+    Command_AG0();
+
+  else if((CATcmd[0] == 'X') && (CATcmd[1] == 'T') && (CATcmd[2] == '1'))  // add
+    Command_XT1();
+
+  else if((CATcmd[0] == 'R') && (CATcmd[1] == 'T') && (CATcmd[2] == '1'))  // add
+    Command_RT1();
+
+  else if((CATcmd[0] == 'R') && (CATcmd[1] == 'C') && (CATcmd[2] == ';'))  // add
+    Command_RC();
+
+  else if((CATcmd[0] == 'F') && (CATcmd[1] == 'L') && (CATcmd[2] == '0'))  // need?
+    Command_FL0();
+
   else if((CATcmd[0] == 'R') && (CATcmd[1] == 'S') && (CATcmd[2] == ';'))
     Command_RS();
 
   else if((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
     Command_VX(CATcmd[2]);
-
-// @todo:  AG0;MD1;MD2;MD3;XT1;RT1;RC;FL0..;
 
   else {
     Serial.print("?;");
@@ -3783,7 +3799,9 @@ void Command_IF()
   Serial.print(Catbuffer);
   sprintf(Catbuffer,"00000+000000");
   Serial.print(Catbuffer);
-  sprintf(Catbuffer,"000020000000;");
+  sprintf(Catbuffer,"0000");
+  Serial.print(mode + 1);
+  sprintf(Catbuffer,"0000000;");
   Serial.print(Catbuffer);
 }
 
@@ -3792,10 +3810,46 @@ void Command_AI()
   Serial.print("AI0;");
 }
 
-void Command_MD()
+void Command_AG0()
 {
-  Serial.print("MD2;");
+  Serial.print("AG0;");
+}
 
+void Command_XT1()
+{
+  Serial.print("XT1;");
+}
+
+void Command_RT1()
+{
+  Serial.print("RT1;");
+}
+
+void Command_RC()
+{
+  rit = 0;
+  Serial.print("RC;");
+}
+
+void Command_FL0()
+{
+  Serial.print("FL0;");
+}
+
+void Command_GetMD()
+{
+  Serial.print("MD");
+  Serial.print(mode + 1);
+  Serial.print(';');
+}
+
+void Command_SetMD()
+{
+  mode = CATcmd[2] - '1';
+
+  vfomode[vfosel%2] = mode;
+  change = true;
+  si5351.iqmsa = 0;  // enforce PLL reset
 }
 
 void Command_AI0()
