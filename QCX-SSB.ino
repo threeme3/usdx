@@ -18,6 +18,10 @@
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
 //#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH     1
+//#define LPF_SWITCHING_DL2MAN_USDX_REV3       1   // Enable 8-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
+#define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+//#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable 5-band filter bank switching: latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+//#define LPF_SWITCHING_DL2MAN_USDX_REV1       1   // Enable 3-band filter bank switching: latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -1438,7 +1442,6 @@ public:
 static SI5351 si5351;
  */
 
-//#define LPF_SWITCHING_DL2MAN_USDX_REV1  1   // Enable filter bank switching: latching relays wired to a PCA9536D   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
 #ifdef LPF_SWITCHING_DL2MAN_USDX_REV1
 class PCA9536 {
 public:
@@ -1461,9 +1464,6 @@ inline void set_lpf(uint8_t f){
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV1
 
-//#define LPF_SWITCHING_DL2MAN_USDX_REV3  1        // Enable filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 6m, 10/12m, 15/17m, 20m, 30m, 40m, 60m, 80m
-#define LPF_SWITCHING_DL2MAN_USDX_REV2  1        // Enable filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
-//#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable filter bank switching: latching relays wired to a PCA9539PW GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 #if defined(LPF_SWITCHING_DL2MAN_USDX_REV3) || defined(LPF_SWITCHING_DL2MAN_USDX_REV2) || defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA)
 class IOExpander16 {
 public:
@@ -3723,7 +3723,11 @@ void analyseCATcmd()
 
   else {
     Serial.print("?;");
+#ifdef DEBUG
     { lcd.setCursor(0, 0); lcd.print(CATcmd); lcd_blanks(); }  // Print error cmd
+#else
+    { lcd.setCursor(15, 1); lcd.print('E'); }
+#endif
   }
 }
 
@@ -4264,7 +4268,13 @@ void loop()
     if((cw_event) && (cwdec)){
       cw_event = false;
       uint8_t offset = (smode) ? (smode == 1) ? 7 : (smode == 2) ? 3 : (smode == 3) ? 5 : 3 : 0;  // depending on smeter more/less cw-text
-      lcd.noCursor(); lcd.setCursor(0, 0); lcd.print(out + offset); stepsize_showcursor();
+      lcd.noCursor(); lcd.setCursor(0, 0);
+#ifdef OLED
+      for(int i = 0; out[offset + i] != '\0'; i++){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); if((!tx) && (!semi_qsk_timeout)) cw_decode(); }   // like 'lcd.print(out + offset);' but then in parallel calling cw_decoding() to handle long OLED writes
+#else
+      lcd.print(out + offset);
+#endif
+      stepsize_showcursor();
     }
     smeter();
   }
