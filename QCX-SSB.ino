@@ -3726,7 +3726,7 @@ void analyseCATcmd()
 #ifdef DEBUG
     { lcd.setCursor(0, 0); lcd.print(CATcmd); lcd_blanks(); }  // Print error cmd
 #else
-    { lcd.setCursor(15, 1); lcd.print('E'); }
+    //{ lcd.setCursor(15, 1); lcd.print('E'); }
 #endif
   }
 }
@@ -3804,6 +3804,7 @@ void Command_IF()
   sprintf(Catbuffer,"00000+000000");
   Serial.print(Catbuffer);
   sprintf(Catbuffer,"0000");
+  Serial.print(Catbuffer);
   Serial.print(mode + 1);
   sprintf(Catbuffer,"0000000;");
   Serial.print(Catbuffer);
