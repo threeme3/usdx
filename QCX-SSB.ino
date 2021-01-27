@@ -3397,7 +3397,7 @@ void show_banner(){
   lcd.print('\x01'); lcd_blanks(); lcd_blanks();
 }
 
-const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
+const char* mode_label[5] = { "LSB", "USB", "CW ", "FM ", "AM " };
 
 inline void display_vfo(int32_t f){
   lcd.setCursor(0, 1);
