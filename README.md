@@ -18,13 +18,13 @@ pe1nnz@amsat.org
 - **[Simple, fun and versatile] QRP SSB HF transceiver** with embedded **DSP and SDR functions**;
 - **[EER Class-E]** driven SSB transmit-stage
 - Approximately **5W PEP SSB output** from 13.8V supply
-- **All-Mode support: USB, LSB, experimental modes: CW, AM, FM**
+- **All-Mode support: USB, LSB, CW, AM, FM**
 - **DSP filters: 4000, 2500, 1700, 500, 200, 100, 50 Hz passband**
-- **DSP features: Automatic Gain Control (AGC), Noise-reduction (NR), Voice-triggered Xmit (VOX), RX Attentuators (ATT), TX drive control, Volume control, dBm/S-meter.**
+- **DSP features: Automatic Gain Control (AGC), Noise-reduction (NR), Voice-triggered Xmit (VOX), RX Attentuators (ATT), TX noise gate, TX drive control, Volume control, dBm/S-meter.**
 - SSB opposite side-band/carrier supression **Transmit: better than -45dBc, IMD3 (two-tone) -33dBc, Receive: better than -50dBc**
-- **Multiband** support, continuously tunable through bands **80m-10m** (and from 20kHz..99MHz with loss in performance)
+- **Multiband** support, continuously tunable through bands **160m-10m** (and from 20kHz..99MHz with loss in performance)
 - **Open source** firmware, built with Arduino IDE; allows experimentation, new features can be added, contributions can be shared via Github, software-complexity: 2000 lines of code
-- Software-based **VOX** that can be used as **fast Full Break-In** (QSK and semi-QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required)
+- Software-based **VOX** that can be used as **fast Full Break-In** (QSK and semi-QSK operation) or assist in RX/TX switching for operating digital modes (no CAT or PTT interface required), external PTT output/PA control with **TX-delay**
 - **Simple to install modification** with **8 component changes and 8 wires**
 - **Lightweight and low-cost transceiver design**: because of the EER-transmitter class-E stage it is **highly power-efficient** (no bulky heatsinks required), and has a **simple design** (no complex balanced linear power amplifier required)
 - **Fully digital and software-based SSB transmit-stage**: samples microphone-input and reconstruct a SSB-signal by controlling the phase of the SI5351 PLL (through tiny frequency changes over 800kbits/s I2C) and the amplitude of the PA (through PWM of the PA key-shaping circuit)
@@ -33,17 +33,19 @@ pe1nnz@amsat.org
 - Receiver Noise floor **MDS: –135 dBm** at 28MHz (in 200Hz BW)
 - Receiver Front-end selectivity: **steep -45dB/decade roll-off +/-2kHz from tuned-frequency**
 - Blocking **dynamic range: 20kHz offset 123dB, 2kHz offset 78dB**
-- **CW decoder (experimental).**
-- **VFO A/B + RIT and Split**, and switching corresponding band-filter relays via I2C
+- **CW decoder**, Straight/Iambic-A/B **keyer**
+- **VFO A/B + RIT and Split**, and corresponding relay band-filter switching via I2C
+- **CAT support** (TS480 subset), possibility to stream audio, keys, display-text over CAT
 - Probably the most **cost effective** and **easy** to build standalone SDR/SSB transceiver that you can find. Very much **simplifies** the original QCX circuit (i.e. **50% less components to install**, **no complex transformer windings**, **no alignment procedure**) and more **versatile** in use.
 
 
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| R1.02 (**current**) | 2020-04-12 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix, selectable CW pitch. |
-| R1.01d | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. **See here [original QCX-SSB modification] (it is also supported by current firmware!)** |
-| R1.00 | 2019-01-29 | Initial release of SSB transceiver prototype. |
+| [R1.02m] | 2020-01-27 | CW support, TS480 CAT support, RX quality improvments, semi-QSK, PA PTT out with TX-delay, VFO-A/B/RIT, LPF switching, backlight saving, 160m. |
+| [R1.02j] | 2020-10-10 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix, selectable CW pitch. |
+| [R1.01d] | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. (Original QCX-SSB mod is described here [R1.01d]) |
+| [R1.00] | 2019-01-29 | Initial release of SSB transceiver prototype. |
 
 
 ## Schematic:
@@ -52,7 +54,22 @@ Below the schematic after the modification is applied, unused components are lef
 
 
 ## Installation:
-Please find here the latest **[PCB Rev5 Assembly Manual CLICK HERE] by Manuel, DL2MAN (document revision 1.1), 23-May-2020**. Instruction for older PCB revisions can be found below:
+There are many uSDX constructions possible, here are a few common implementations:
+- [uSDX Sandwich] by Manuel, DL2MAN;
+- [uSDX Transceiver] by Barbaros Asuroglu, WB2CBA;
+- QRP Labs [QCX Mini modification] with uSDX daughter board;
+- QRP Labs [QCX Rev 5 modification] by Manuel, DL2MAN;
+- QRP Labs [QCX+ modification] by Mike Dunstan, G8GYW
+- more designs see here: https://groups.io/g/ucx/wiki
+
+Kits, PCB's and pre-assembled PCBs can be sourced from:
+- Andrew (KD7NYQ), with shop: http://shop.offline.systems , serving the american continent;
+- Sunil (VU3SUA), with shop: https://inkits.in , providing kits in India;
+- Ondra (OK1CDJ) and XYL Alexandra (OK1RS) with shop: https://www.hamshop.cz/ , provide kits in Europe;
+- Hans (G0UPL), with shop: http://qrp-labs.com , globally distribute QRP Labs products.
+
+
+Instruction for older QCX PCB revisions can be found here below:
 
 This modification consists of a few component changes and wires:
 - **To simplify things, 79 components are no longer needed** (and you could omit them on an unbuilt QCX): IC6-10,R11-40,43,55,R59-64,C1,5,8,C9-28,C31,C52-54,L1-3,D5,Q7,T1,JP1/DVM/FREQ.
@@ -86,7 +103,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | ------------------- | -------------------------------------------- | ------ |
 | 1.1 Volume          | Audio level (0..16) & power-off/on (turn left) | **E +turn** |
 | 1.2 Mode            | Modulation (LSB, USB, CW, AM, FM) | **R** |
-| 1.3 Filter BW       | Audio passband (Full, 300..3000, 300..2400, 300..1800, 500, 200, 100, 50 Hz) | **R double** |
+| 1.3 Filter BW       | Audio passband (Full, 300..3000, 300..2400, 300..1800, 500, 200, 100, 50 Hz), this also controls the SSB TX BW. | **R double** |
 | 1.4 Band            | Band-switch to pre-defined CW/FT8 freqs (80,60,40,30,20,17,15,12,10,6m) | **E double** |
 | 1.5 Tuning Rate     | Tuning step size 10M, 1M, 0.5M, 100k, 10k, 1k, 0.5k, 100, 10, 1 | **E or E long** |
 | 1.6 VFO Mode        | Selects different VFO, or RX/TX split-VFO (A, B, Split) | **2x R long** |
@@ -105,7 +122,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 2.7 Keyer swap      | to swap keyer DIH, DAH inputs (ON, OFF) | |
 | 2.8 Practice        | to disable TX for practice purposes (ON, OFF) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | | |
-| 3.2 VOX Level       | Audio threshold of VOX (0-255) | |
+| 3.2 Noise Gate      | Audio threshold for SSB TX and VOX (0-255) | |
 | 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
 | 3.4 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
 | 3.5 TX Delay        | Delays TX to allow PA relay to be fully switched on before TX (0-255 ms) | |
@@ -205,8 +222,6 @@ Linear Data Manual, 1988.
 
 [latest released hex file]: https://github.com/threeme3/QCX-SSB/releases
 
-[original QCX-SSB modification]: https://github.com/threeme3/QCX-SSB/tree/R1.01d
-
 [2-stage QCX-SDR modification]: https://github.com/threeme3/QCX-SSB/tree/653e2d8c387138d30269ffd003065be78cc648ca
 
 [standard QCX firmware upload procedure]: https://www.qrp-labs.com/qcx/qcxfirmware.html
@@ -293,10 +308,26 @@ Linear Data Manual, 1988.
 
 [Serial interface]: https://groups.io/g/QRPLabs/attachment/40706/0/connections.png
 
-[PCB Rev5 Assembly Manual CLICK HERE]: QCX-SSB_assembly_Rev-5.pdf
+[uSDX Sandwich]: https://dl2man.de/
+
+[uSDX Transceiver]: https://antrak.org.tr/author/barbarosasuroglu/
+
+[QCX Mini modification]: https://dl2man.de/qcx-mini-usdx-mod/
+
+[QCX Rev 5 modification]: https://github.com/threeme3/QCX-SSB/blob/faa4447d61c32efebadd9413b78c4a0094815611/QCX-SSB_assembly_Rev-5.pdf
+
+[QCX+ modification]: https://groups.io/g/ucx/files/QCX+%20SSB%20Mods/Modifying%20the%20QCX+%20for%20SSB%20v2.pdf
 
 [Ghetto-class-E]: https://www.ncqrpp.org/files/qrpp_volume_10.pdf
 
 [Ghetto-class-E-later-publication]: http://www.iw3sgt.it/IW3SGT_PRJ/IW3SGT_AMP_LF/ClassDEF1.pdf
+
+[R1.02m]: https://github.com/threeme3/QCX-SSB/tree/860e73f28e91a30eb37cc951219c4e360c2c7e5d
+
+[R1.02j]: https://github.com/threeme3/QCX-SSB/tree/faa4447d61c32efebadd9413b78c4a0094815611
+
+[R1.01d]: https://github.com/threeme3/QCX-SSB/tree/1d18d5ff7a503d0d80bca9fe106fd5fce5223542
+
+[R1.00]: https://github.com/threeme3/QCX-SSB/tree/0a90ce8afdbbcdafb89cc13261a38b9f99067a66
 
 

@@ -1,10 +1,10 @@
 //  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
 //
-//  Copyright 2019, 2020   Guido PE1NNZ <pe1nnz@amsat.org>
+//  Copyright 2019, 2020, 2021   Guido PE1NNZ <pe1nnz@amsat.org>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02m"
+#define VERSION   "1.02n"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. DEBUG, CAT, DIAG, KEYER
 #define DIAG            1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -22,6 +22,9 @@
 #define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable 5-band filter bank switching: latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV1       1   // Enable 3-band filter bank switching: latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+//#define CAT_EXT        1  // Extended CAT support: remote button and screen control commands over CAT
+//#define CAT_STREAMING  1  // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd. 
+#define KEY_CLICK 1         // Reduce key clicks by envelope shaping
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -290,7 +293,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   void createChar(uint8_t l, uint8_t glyph[]){ cmd(0x40 | ((l & 0x7) << 3)); for(int i = 0; i != 8; i++) write(glyph[i]); }
 };
 */
-
+/*
 #include <LiquidCrystal.h>
 class LCD_ : public LiquidCrystal {
 public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD_RS, as done on QCX. LCD_RS needs to be set to LOW in advance of calling any operation.
@@ -316,7 +319,7 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
     delayMicroseconds(100);   // commands need > 37us to settle
   };
 };
-
+*/
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
 class I2C_ {
 public:
@@ -483,102 +486,158 @@ const uint8_t font[]PROGMEM = {
 
 // C64 real
 const uint8_t font[]PROGMEM = {
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-   0x00, 0x00, 0x00, 0x4f, 0x4f, 0x00, 0x00, 0x00, 
-   0x00, 0x07, 0x07, 0x00, 0x00, 0x07, 0x07, 0x00, 
-   0x14, 0x7f, 0x7f, 0x14, 0x14, 0x7f, 0x7f, 0x14, 
-   0x00, 0x24, 0x2e, 0x6b, 0x6b, 0x3a, 0x12, 0x00, 
-   0x00, 0x63, 0x33, 0x18, 0x0c, 0x66, 0x63, 0x00, 
-   0x00, 0x32, 0x7f, 0x4d, 0x4d, 0x77, 0x72, 0x50, 
-   0x00, 0x00, 0x00, 0x04, 0x06, 0x03, 0x01, 0x00, 
-   0x00, 0x00, 0x1c, 0x3e, 0x63, 0x41, 0x00, 0x00, 
-   0x00, 0x00, 0x41, 0x63, 0x3e, 0x1c, 0x00, 0x00, 
-   0x08, 0x2a, 0x3e, 0x1c, 0x1c, 0x3e, 0x2a, 0x08, 
-   0x00, 0x08, 0x08, 0x3e, 0x3e, 0x08, 0x08, 0x00, 
-   0x00, 0x00, 0x80, 0xe0, 0x60, 0x00, 0x00, 0x00, 
-   0x00, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x00, 
-   0x00, 0x00, 0x00, 0x60, 0x60, 0x00, 0x00, 0x00, 
-   0x00, 0x40, 0x60, 0x30, 0x18, 0x0c, 0x06, 0x02, 
-   0x00, 0x3e, 0x7f, 0x49, 0x45, 0x7f, 0x3e, 0x00, 
-   0x00, 0x40, 0x44, 0x7f, 0x7f, 0x40, 0x40, 0x00, 
-   0x00, 0x62, 0x73, 0x51, 0x49, 0x4f, 0x46, 0x00, 
-   0x00, 0x22, 0x63, 0x49, 0x49, 0x7f, 0x36, 0x00, 
-   0x00, 0x18, 0x18, 0x14, 0x16, 0x7f, 0x7f, 0x10, 
-   0x00, 0x27, 0x67, 0x45, 0x45, 0x7d, 0x39, 0x00, 
-   0x00, 0x3e, 0x7f, 0x49, 0x49, 0x7b, 0x32, 0x00, 
-   0x00, 0x03, 0x03, 0x79, 0x7d, 0x07, 0x03, 0x00, 
-   0x00, 0x36, 0x7f, 0x49, 0x49, 0x7f, 0x36, 0x00, 
-   0x00, 0x26, 0x6f, 0x49, 0x49, 0x7f, 0x3e, 0x00, 
-   0x00, 0x00, 0x00, 0x24, 0x24, 0x00, 0x00, 0x00, 
-   0x00, 0x00, 0x80, 0xe4, 0x64, 0x00, 0x00, 0x00, 
-   0x00, 0x08, 0x1c, 0x36, 0x63, 0x41, 0x41, 0x00, 
-   0x00, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x00, 
-   0x00, 0x41, 0x41, 0x63, 0x36, 0x1c, 0x08, 0x00, 
-   0x00, 0x02, 0x03, 0x51, 0x59, 0x0f, 0x06, 0x00, 
-   0x00, 0x3e, 0x7f, 0x41, 0x4d, 0x4f, 0x2e, 0x00, 
-   0x00, 0x7c, 0x7e, 0x0b, 0x0b, 0x7e, 0x7c, 0x00, 
-   0x00, 0x7f, 0x7f, 0x49, 0x49, 0x7f, 0x36, 0x00, 
-   0x00, 0x3e, 0x7f, 0x41, 0x41, 0x63, 0x22, 0x00, 
-   0x00, 0x7f, 0x7f, 0x41, 0x63, 0x3e, 0x1c, 0x00, 
-   0x00, 0x7f, 0x7f, 0x49, 0x49, 0x41, 0x41, 0x00, 
-   0x00, 0x7f, 0x7f, 0x09, 0x09, 0x01, 0x01, 0x00, 
-   0x00, 0x3e, 0x7f, 0x41, 0x49, 0x7b, 0x3a, 0x00, 
-   0x00, 0x7f, 0x7f, 0x08, 0x08, 0x7f, 0x7f, 0x00, 
-   0x00, 0x00, 0x41, 0x7f, 0x7f, 0x41, 0x00, 0x00, 
-   0x00, 0x20, 0x60, 0x41, 0x7f, 0x3f, 0x01, 0x00, 
-   0x00, 0x7f, 0x7f, 0x1c, 0x36, 0x63, 0x41, 0x00, 
-   0x00, 0x7f, 0x7f, 0x40, 0x40, 0x40, 0x40, 0x00, 
-   0x00, 0x7f, 0x7f, 0x06, 0x0c, 0x06, 0x7f, 0x7f, 
-   0x00, 0x7f, 0x7f, 0x0e, 0x1c, 0x7f, 0x7f, 0x00, 
-   0x00, 0x3e, 0x7f, 0x41, 0x41, 0x7f, 0x3e, 0x00, 
-   0x00, 0x7f, 0x7f, 0x09, 0x09, 0x0f, 0x06, 0x00, 
-   0x00, 0x1e, 0x3f, 0x21, 0x61, 0x7f, 0x5e, 0x00, 
-   0x00, 0x7f, 0x7f, 0x19, 0x39, 0x6f, 0x46, 0x00, 
-   0x00, 0x26, 0x6f, 0x49, 0x49, 0x7b, 0x32, 0x00, 
-   0x00, 0x01, 0x01, 0x7f, 0x7f, 0x01, 0x01, 0x00, 
-   0x00, 0x3f, 0x7f, 0x40, 0x40, 0x7f, 0x3f, 0x00, 
-   0x00, 0x1f, 0x3f, 0x60, 0x60, 0x3f, 0x1f, 0x00, 
-   0x00, 0x7f, 0x7f, 0x30, 0x18, 0x30, 0x7f, 0x7f, 
-   0x00, 0x63, 0x77, 0x1c, 0x1c, 0x77, 0x63, 0x00, 
-   0x00, 0x07, 0x0f, 0x78, 0x78, 0x0f, 0x07, 0x00, 
-   0x00, 0x61, 0x71, 0x59, 0x4d, 0x47, 0x43, 0x00, 
-   0x00, 0x00, 0x7f, 0x7f, 0x41, 0x41, 0x00, 0x00, 
-   0x00, 0x02, 0x06, 0x0c, 0x18, 0x30, 0x60, 0x40, 
-   0x00, 0x00, 0x41, 0x41, 0x7f, 0x7f, 0x00, 0x00, 
-   0x00, 0x08, 0x0c, 0xfe, 0xfe, 0x0c, 0x08, 0x00, 
-   0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 
-   0x00, 0x01, 0x03, 0x06, 0x04, 0x00, 0x00, 0x00, 
-   0x00, 0x20, 0x74, 0x54, 0x54, 0x7c, 0x78, 0x00, 
-   0x00, 0x7e, 0x7e, 0x48, 0x48, 0x78, 0x30, 0x00, 
-   0x00, 0x38, 0x7c, 0x44, 0x44, 0x44, 0x00, 0x00, 
-   0x00, 0x30, 0x78, 0x48, 0x48, 0x7e, 0x7e, 0x00, 
-   0x00, 0x38, 0x7c, 0x54, 0x54, 0x5c, 0x18, 0x00, 
-   0x00, 0x00, 0x08, 0x7c, 0x7e, 0x0a, 0x0a, 0x00, 
-   0x00, 0x98, 0xbc, 0xa4, 0xa4, 0xfc, 0x7c, 0x00, 
-   0x00, 0x7e, 0x7e, 0x08, 0x08, 0x78, 0x70, 0x00, 
-   0x00, 0x00, 0x48, 0x7a, 0x7a, 0x40, 0x00, 0x00, 
-   0x00, 0x00, 0x80, 0x80, 0x80, 0xfa, 0x7a, 0x00, 
-   0x00, 0x7e, 0x7e, 0x10, 0x38, 0x68, 0x40, 0x00, 
-   0x00, 0x00, 0x42, 0x7e, 0x7e, 0x40, 0x00, 0x00, 
-   0x00, 0x7c, 0x7c, 0x18, 0x38, 0x1c, 0x7c, 0x78, 
-   0x00, 0x7c, 0x7c, 0x04, 0x04, 0x7c, 0x78, 0x00, 
-   0x00, 0x38, 0x7c, 0x44, 0x44, 0x7c, 0x38, 0x00, 
-   0x00, 0xfc, 0xfc, 0x24, 0x24, 0x3c, 0x18, 0x00, 
-   0x00, 0x18, 0x3c, 0x24, 0x24, 0xfc, 0xfc, 0x00, 
-   0x00, 0x7c, 0x7c, 0x04, 0x04, 0x0c, 0x08, 0x00, 
-   0x00, 0x48, 0x5c, 0x54, 0x54, 0x74, 0x24, 0x00, 
-   0x00, 0x04, 0x04, 0x3e, 0x7e, 0x44, 0x44, 0x00, 
-   0x00, 0x3c, 0x7c, 0x40, 0x40, 0x7c, 0x7c, 0x00, 
-   0x00, 0x1c, 0x3c, 0x60, 0x60, 0x3c, 0x1c, 0x00, 
-   0x00, 0x1c, 0x7c, 0x70, 0x38, 0x70, 0x7c, 0x1c, 
-   0x00, 0x44, 0x6c, 0x38, 0x38, 0x6c, 0x44, 0x00, 
-   0x00, 0x9c, 0xbc, 0xa0, 0xe0, 0x7c, 0x3c, 0x00, 
-   0x00, 0x44, 0x64, 0x74, 0x5c, 0x4c, 0x44, 0x00, 
-   0x00, 0x08, 0x3e, 0x77, 0x41, 0x41, 0x00, 0x00, 
-   0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 
-   0x00, 0x00, 0x41, 0x41, 0x77, 0x3e, 0x08, 0x00, 
-   0x00, 0x04, 0x02, 0x02, 0x04, 0x04, 0x02, 0x00
-   };
+   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ' '
+   0x00, 0x00, 0x00, 0x4f, 0x4f, 0x00, 0x00, 0x00, // !
+   0x00, 0x07, 0x07, 0x00, 0x00, 0x07, 0x07, 0x00, // "
+   0x14, 0x7f, 0x7f, 0x14, 0x14, 0x7f, 0x7f, 0x14, // #
+   0x00, 0x24, 0x2e, 0x6b, 0x6b, 0x3a, 0x12, 0x00, // $
+   0x00, 0x63, 0x33, 0x18, 0x0c, 0x66, 0x63, 0x00, // %
+   0x00, 0x32, 0x7f, 0x4d, 0x4d, 0x77, 0x72, 0x50, // &
+   0x00, 0x00, 0x00, 0x04, 0x06, 0x03, 0x01, 0x00, // '
+   0x00, 0x00, 0x1c, 0x3e, 0x63, 0x41, 0x00, 0x00, // (
+   0x00, 0x00, 0x41, 0x63, 0x3e, 0x1c, 0x00, 0x00, // )
+   0x08, 0x2a, 0x3e, 0x1c, 0x1c, 0x3e, 0x2a, 0x08, // *
+   0x00, 0x08, 0x08, 0x3e, 0x3e, 0x08, 0x08, 0x00, // +
+   0x00, 0x00, 0x80, 0xe0, 0x60, 0x00, 0x00, 0x00, // ,
+   0x00, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x00, // -
+   0x00, 0x00, 0x00, 0x60, 0x60, 0x00, 0x00, 0x00, // .
+   0x00, 0x40, 0x60, 0x30, 0x18, 0x0c, 0x06, 0x02, // /
+   0x00, 0x3e, 0x7f, 0x49, 0x45, 0x7f, 0x3e, 0x00, // 0
+   0x00, 0x40, 0x44, 0x7f, 0x7f, 0x40, 0x40, 0x00, // 1
+   0x00, 0x62, 0x73, 0x51, 0x49, 0x4f, 0x46, 0x00, // 2
+   0x00, 0x22, 0x63, 0x49, 0x49, 0x7f, 0x36, 0x00, // 3
+   0x00, 0x18, 0x18, 0x14, 0x16, 0x7f, 0x7f, 0x10, // 4
+   0x00, 0x27, 0x67, 0x45, 0x45, 0x7d, 0x39, 0x00, // 5
+   0x00, 0x3e, 0x7f, 0x49, 0x49, 0x7b, 0x32, 0x00, // 6
+   0x00, 0x03, 0x03, 0x79, 0x7d, 0x07, 0x03, 0x00, // 7
+   0x00, 0x36, 0x7f, 0x49, 0x49, 0x7f, 0x36, 0x00, // 8
+   0x00, 0x26, 0x6f, 0x49, 0x49, 0x7f, 0x3e, 0x00, // 9
+   0x00, 0x00, 0x00, 0x24, 0x24, 0x00, 0x00, 0x00, // :
+   0x00, 0x00, 0x80, 0xe4, 0x64, 0x00, 0x00, 0x00, // ;
+   0x00, 0x08, 0x1c, 0x36, 0x63, 0x41, 0x41, 0x00, // <
+   0x00, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x00, // =
+   0x00, 0x41, 0x41, 0x63, 0x36, 0x1c, 0x08, 0x00, // >
+   0x00, 0x02, 0x03, 0x51, 0x59, 0x0f, 0x06, 0x00, // ?
+   0x00, 0x3e, 0x7f, 0x41, 0x4d, 0x4f, 0x2e, 0x00, // @
+   0x00, 0x7c, 0x7e, 0x0b, 0x0b, 0x7e, 0x7c, 0x00, // A
+   0x00, 0x7f, 0x7f, 0x49, 0x49, 0x7f, 0x36, 0x00, // B
+   0x00, 0x3e, 0x7f, 0x41, 0x41, 0x63, 0x22, 0x00, // C
+   0x00, 0x7f, 0x7f, 0x41, 0x63, 0x3e, 0x1c, 0x00, // D
+   0x00, 0x7f, 0x7f, 0x49, 0x49, 0x41, 0x41, 0x00, // E
+   0x00, 0x7f, 0x7f, 0x09, 0x09, 0x01, 0x01, 0x00, // F
+   0x00, 0x3e, 0x7f, 0x41, 0x49, 0x7b, 0x3a, 0x00, // G
+   0x00, 0x7f, 0x7f, 0x08, 0x08, 0x7f, 0x7f, 0x00, // H
+   0x00, 0x00, 0x41, 0x7f, 0x7f, 0x41, 0x00, 0x00, // I
+   0x00, 0x20, 0x60, 0x41, 0x7f, 0x3f, 0x01, 0x00, // J
+   0x00, 0x7f, 0x7f, 0x1c, 0x36, 0x63, 0x41, 0x00, // K
+   0x00, 0x7f, 0x7f, 0x40, 0x40, 0x40, 0x40, 0x00, // L
+   0x00, 0x7f, 0x7f, 0x06, 0x0c, 0x06, 0x7f, 0x7f, // M
+   0x00, 0x7f, 0x7f, 0x0e, 0x1c, 0x7f, 0x7f, 0x00, // N
+   0x00, 0x3e, 0x7f, 0x41, 0x41, 0x7f, 0x3e, 0x00, // O
+   0x00, 0x7f, 0x7f, 0x09, 0x09, 0x0f, 0x06, 0x00, // P
+   0x00, 0x1e, 0x3f, 0x21, 0x61, 0x7f, 0x5e, 0x00, // Q
+   0x00, 0x7f, 0x7f, 0x19, 0x39, 0x6f, 0x46, 0x00, // R
+   0x00, 0x26, 0x6f, 0x49, 0x49, 0x7b, 0x32, 0x00, // S
+   0x00, 0x01, 0x01, 0x7f, 0x7f, 0x01, 0x01, 0x00, // T
+   0x00, 0x3f, 0x7f, 0x40, 0x40, 0x7f, 0x3f, 0x00, // U
+   0x00, 0x1f, 0x3f, 0x60, 0x60, 0x3f, 0x1f, 0x00, // V
+   0x00, 0x7f, 0x7f, 0x30, 0x18, 0x30, 0x7f, 0x7f, // W
+   0x00, 0x63, 0x77, 0x1c, 0x1c, 0x77, 0x63, 0x00, // X
+   0x00, 0x07, 0x0f, 0x78, 0x78, 0x0f, 0x07, 0x00, // Y
+   0x00, 0x61, 0x71, 0x59, 0x4d, 0x47, 0x43, 0x00, // Z
+   0x00, 0x00, 0x7f, 0x7f, 0x41, 0x41, 0x00, 0x00, // [
+   0x00, 0x02, 0x06, 0x0c, 0x18, 0x30, 0x60, 0x40,
+   0x00, 0x00, 0x41, 0x41, 0x7f, 0x7f, 0x00, 0x00, // ]
+   0x00, 0x08, 0x0c, 0xfe, 0xfe, 0x0c, 0x08, 0x00, // ^
+   0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // _
+   0x00, 0x01, 0x03, 0x06, 0x04, 0x00, 0x00, 0x00, // '
+   0x00, 0x20, 0x74, 0x54, 0x54, 0x7c, 0x78, 0x00, // a
+   0x00, 0x7e, 0x7e, 0x48, 0x48, 0x78, 0x30, 0x00, // b
+   0x00, 0x38, 0x7c, 0x44, 0x44, 0x44, 0x00, 0x00, // c
+   0x00, 0x30, 0x78, 0x48, 0x48, 0x7e, 0x7e, 0x00, // d
+   0x00, 0x38, 0x7c, 0x54, 0x54, 0x5c, 0x18, 0x00, // e
+   0x00, 0x00, 0x08, 0x7c, 0x7e, 0x0a, 0x0a, 0x00, // f
+   0x00, 0x98, 0xbc, 0xa4, 0xa4, 0xfc, 0x7c, 0x00, // g
+   0x00, 0x7e, 0x7e, 0x08, 0x08, 0x78, 0x70, 0x00, // h
+   0x00, 0x00, 0x48, 0x7a, 0x7a, 0x40, 0x00, 0x00, // i
+   0x00, 0x00, 0x80, 0x80, 0x80, 0xfa, 0x7a, 0x00, // j
+   0x00, 0x7e, 0x7e, 0x10, 0x38, 0x68, 0x40, 0x00, // k
+   0x00, 0x00, 0x42, 0x7e, 0x7e, 0x40, 0x00, 0x00, // l
+   0x00, 0x7c, 0x7c, 0x18, 0x38, 0x1c, 0x7c, 0x78, // m
+   0x00, 0x7c, 0x7c, 0x04, 0x04, 0x7c, 0x78, 0x00, // n
+   0x00, 0x38, 0x7c, 0x44, 0x44, 0x7c, 0x38, 0x00, // o
+   0x00, 0xfc, 0xfc, 0x24, 0x24, 0x3c, 0x18, 0x00, // p
+   0x00, 0x18, 0x3c, 0x24, 0x24, 0xfc, 0xfc, 0x00, // q
+   0x00, 0x7c, 0x7c, 0x04, 0x04, 0x0c, 0x08, 0x00, // r
+   0x00, 0x48, 0x5c, 0x54, 0x54, 0x74, 0x24, 0x00, // s
+   0x00, 0x04, 0x04, 0x3e, 0x7e, 0x44, 0x44, 0x00, // t
+   0x00, 0x3c, 0x7c, 0x40, 0x40, 0x7c, 0x7c, 0x00, // u
+   0x00, 0x1c, 0x3c, 0x60, 0x60, 0x3c, 0x1c, 0x00, // v
+   0x00, 0x1c, 0x7c, 0x70, 0x38, 0x70, 0x7c, 0x1c, // w
+   0x00, 0x44, 0x6c, 0x38, 0x38, 0x6c, 0x44, 0x00, // x
+   0x00, 0x9c, 0xbc, 0xa0, 0xe0, 0x7c, 0x3c, 0x00, // y
+   0x00, 0x44, 0x64, 0x74, 0x5c, 0x4c, 0x44, 0x00, // z
+   0x00, 0x08, 0x3e, 0x77, 0x41, 0x41, 0x00, 0x00, // {
+   0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, // |
+   0x00, 0x00, 0x41, 0x41, 0x77, 0x3e, 0x08, 0x00, // }
+   0x00, 0x04, 0x02, 0x02, 0x04, 0x04, 0x02, 0x00, // ~
+
+  0b0000000,  // 126+1; logo
+  0b1010101,
+  0b0101010,
+  0b0101010,
+  0b0010100,
+  0b0010100,
+  0b0001000,
+  0b0001000,
+  0b00000,  // 126+2; s-meter, 0 bars
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,  // 126+3; s-meter, 1 bars
+  0b00000,
+  0b00000,
+  0b11111,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,  // 126+4; s-meter, 2 bars
+  0b00000,
+  0b00000,
+  0b11111,
+  0b00000,
+  0b11111,
+  0b00000,
+  0b00000,
+  0b00000,  // 126+5; s-meter, 3 bars
+  0b00000,
+  0b00000,
+  0b11111,
+  0b00000,
+  0b11111,
+  0b00000,
+  0b11111,
+  0b00000,  // 126+6; vfo-a
+  0b11100,
+  0b11110,
+  0b00101,
+  0b00101,
+  0b11110,
+  0b11100,
+  0b00000,
+  0b00000,  // 126+7; vfo-b
+  0b11111,
+  0b11111,
+  0b10101,
+  0b10101,
+  0b01010,
+  0b01010,
+  0b00000   };
 
 #define FONT_W 8
 #define FONT_H 2
@@ -691,6 +750,7 @@ const uint8_t font[]PROGMEM = {
 */
 
 #define BRIGHT  1
+//#define CONDENSED 1
 static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence
 //  0xAE,     // Display OFF (sleep mode)
     0x20, 0b10,   // Set Memory Addressing Mode
@@ -718,7 +778,11 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
 #else
   0xD9, 0x03,   // 0x22 Set pre-charge period
 #endif
+#ifdef CONDENSED
+  0xDA, 0x12,   // Set com pins hardware configuration
+#else
   0xDA, 0x02,   // Set com pins hardware configuration
+#endif
    0xDB, 0x05, //0x20, --set vcomh 0x20 = 0.77xVcc
   0x8D, 0x14,    // Set DC-DC enable
   0xAF,     // Display ON
@@ -733,7 +797,11 @@ public:
   uint8_t oledX = 0, oledY = 0;
   uint8_t renderingFrame = 0xB0;
   bool wrap = false;
-
+  void cmd(uint8_t b){
+    Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_COMMAND);
+    Wire.write(b);
+    Wire.endTransmission();
+  }
   void begin(uint8_t cols, uint8_t rows, uint8_t charsize = 0){
     Wire.begin();
     Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_COMMAND);
@@ -743,39 +811,51 @@ public:
     Wire.endTransmission();
     delayMicroseconds(100);
   }
-  void noCursor(){}
-  void cursor(){}
-  void noDisplay(){}
+  bool curs = false;
+  void noCursor(){ curs = false; }
+  void cursor(){ curs = true; }
+  void noDisplay(){ cmd(0xAE); }
   void createChar(uint8_t l, uint8_t glyph[]){}
 
-  void _setCursor(uint8_t x, uint8_t y) { oledX = x; oledY = y;
+  void _setCursor(uint8_t x, uint8_t y) {
+    oledX = x; oledY = y;
     Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_COMMAND);
     Wire.write(renderingFrame | (oledY & 0x07));
     Wire.write(0x10 | ((oledX & 0xf0) >> 4));
     Wire.write(oledX & 0x0f);
     Wire.endTransmission();
   }
-  void setCursor(uint8_t x, uint8_t y) { _setCursor(x * FONT_W, y * FONT_H); }
+  void drawCursor(bool en){
+    //_setCursor(oledX, oledY + (FONT_W/(FONT_STRETCHH+1)));
+    Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_DATA);
+    Wire.write((en) ? 0xf0 : 0x00);  // horizontal line
+    Wire.endTransmission();
+  }
+  void setCursor(uint8_t x, uint8_t y) {
+    if(curs){ drawCursor(false); } _setCursor(x * FONT_W, y * FONT_H); if(curs){ drawCursor(true); _setCursor(oledX, oledY); }
+  }
     
   void newLine() {
     oledY+=FONT_H;
     if(oledY > SSD1306_PAGES - FONT_H) {
       oledY = SSD1306_PAGES - FONT_H;
     }
-    setCursor(0, oledY);
+    _setCursor(0, oledY);
   }
     
   size_t write(byte c) {
-    if((c == '\n') || (oledX > ((uint8_t)128 - FONT_W))) {
+    if((c == '\n') || (oledX > ((uint8_t)128 - FONT_W)) ) {
       if(wrap)  newLine();
       return 1;
     }
+    //if(oledY > SSD1306_PAGES - FONT_H) return; //needed?
+    c = ((c < 9) ? (c + '~') : c) - ' ';
     
-    uint16_t offset = ((uint16_t)c - ' ') * FONT_W/(FONT_STRETCHH+1) * FONT_H;
+    uint16_t offset = ((uint16_t)c) * FONT_W/(FONT_STRETCHH+1) * FONT_H;
     uint8_t line = FONT_H;
     do
     {
-      if(FONT_STRETCHV) offset = ((uint16_t)c - ' ') * FONT_W/(FONT_STRETCHH+1) * FONT_H/(2*FONT_STRETCHV);
+      if(FONT_STRETCHV) offset = ((uint16_t)c) * FONT_W/(FONT_STRETCHH+1) * FONT_H/(2*FONT_STRETCHV);
       Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_DATA);
       for (uint8_t i = 0; i < (FONT_W/(FONT_STRETCHH+1)); i++) {
         uint8_t b = pgm_read_byte(&(font[offset++]));
@@ -817,13 +897,43 @@ public:
     setCursor(0, 0);
   }
 };
-#ifdef OLED
-SSD1306Device lcd;
+
+template<class parent>class Display : public parent {  // This class spoofs display contents and cursor state
+public:
+#ifdef CAT_EXT
+  uint8_t x, y;
+  bool curs;
+  char text[2*16+1];
+  Display() : parent() { clear(); };
+  size_t write(uint8_t b){ if((x<16) && (y<2)){ text[y*16+x] = ((b < 9) ? "> :*#AB"[b-1] /*(b + 0x80 - 1)*/ /*(uint8_t[]){ 0xAF, 0x20, 0xB0, 0xB1, 0xB2, 0xA6, 0xE1, 0x20 }[b-1]*/ : b); x++; } return parent::write(b); }
+  void setCursor(uint8_t _x, uint8_t _y){ x = _x; y = _y; parent::setCursor(_x, _y); }
+  void cursor(){ curs = true; parent::cursor(); }
+  void noCursor(){ curs = false; parent::noCursor(); }
+  void clear(){ for(uint8_t i = 0; i != 2*16; i++) text[i] = ' ' ; text[2*16] = '\0'; x = 0; y = 0; }
+#endif //CAT_EXT
+};
+//#define BLIND 1             // uSDX in head-less operation
+#ifdef BLIND
+class Blind : public Print {  // This class is a dummy LCD replacement
+public:
+  size_t write(uint8_t b){}
+  void setCursor(uint8_t _x, uint8_t _y){}
+  void cursor(){}
+  void noCursor(){}
+  void begin(uint8_t x = 0, uint8_t y = 0){}
+  void noDisplay(){}
+  void createChar(uint8_t l, uint8_t glyph[]){}
+};
+Display<Blind> lcd;
 #else
-LCD lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
+#ifdef OLED
+Display<SSD1306Device> lcd;
+#else
+Display<LCD> lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
 //LCD_ lcd;  // slower LCD, suitable for non-QCX supplied displays
 //#include <LiquidCrystal.h>
 //LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+#endif
 #endif
 
 volatile int8_t encoder_val = 0;
@@ -1050,7 +1160,7 @@ public:
     pll_regs[6] = BB1(msp2);
     pll_regs[7] = BB0(msp2);
   }
-  #define SI5351_ADDR 0x60                // SI5351A I2C address: 0x60 for SI5351A-B-GT; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
+  #define SI5351_ADDR 0x60                // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
   inline void SendPLLRegisterBulk(){
     i2c.start();
@@ -1217,8 +1327,10 @@ public:
     return data;
   }
   void powerDown(){
+    SendRegister(3, 0b11111111); // Disable all CLK outputs
+    SendRegister(24, 0b00000000); // Disable state: LOW state when disabled
+    SendRegister(25, 0b00000000); // Disable state: LOW state when disabled
     for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b10000000);  // Conserve power when output is disabled
-    SendRegister(3, 0b11111111); // Disable all CLK outputs    
     SendRegister(187, 0);        // Disable fanout (power-safe)
   }
   #define SI_CLK_OE 3
@@ -1540,8 +1652,9 @@ volatile uint16_t numSamples = 0;
 
 volatile uint8_t tx = 0;
 volatile uint8_t vox = 0;
+volatile uint8_t filt = 0;
 
-inline void _vox(uint8_t trigger)
+inline void _vox(bool trigger)
 {
   if(trigger){
     tx = (tx) ? 254 : 255; // hangtime = 255 / 4402 = 58ms (the time that TX at least stays on when not triggered again). tx == 255 when triggered first, 254 follows for subsequent triggers, until tx is off.
@@ -1553,7 +1666,7 @@ inline void _vox(uint8_t trigger)
 //#define F_SAMP_TX 4402
 #define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #define _UA  (F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
-//#define MAX_DP  (_UA/4)  //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
+#define MAX_DP  ((filt == 0) ? _UA : (filt == 3) ? _UA/4 : _UA/2)     //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 #define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
 //#define TX_CLK0_CLK1  1   // use CLK0, CLK1 for TX (instead of CLK2), you may enable and use NTX pin for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
@@ -1594,9 +1707,10 @@ inline int16_t ssb(int16_t in)
 
   //dc += (in - dc) / 2;       // fast moving average
   dc = (in + dc) / 2;        // average
-  uint16_t ac = (in - dc);   // DC decoupling
-  v[15] = ac;// - z1;        // high-pass (emphasis) filter
-  //z1 = ac;
+  int16_t ac = (in - dc);   // DC decoupling
+  //v[15] = ac;// - z1;        // high-pass (emphasis) filter
+  v[15] = (ac + z1) / 2;           // low-pass filter with notch at Fs/2
+  z1 = ac;
 
   i = v[7];
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
@@ -1711,12 +1825,23 @@ inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam
   n_cos -= alpha100 * p_sin / 100;
 }
 
+// CW Key-click shaping, ramping up/down amplitude with sample-interval of 60us. Tnx: Yves HB9EWY https://groups.io/g/ucx/message/5107
+const uint8_t ramp[] = { 255, 254, 252, 249, 245, 239, 233, 226, 217, 208, 198, 187, 176, 164, 152, 139, 127, 115, 102, 90, 78, 67, 56, 46, 37, 28, 21, 15, 9, 5, 2 }; // raised-cosine(i) = 255 * sq(cos(HALF_PI * i/32))
+
 void dummy()
 {
 }
 
 void dsp_tx_cw()
 { // jitter dependent things first
+#ifdef KEY_CLICK
+  if(OCR1BL < lut[255]) { //check if already ramped up: ramp up of amplitude 
+     for(uint16_t i = 31; i != 0; i--) {   // soft rising slope against key-clicks
+        OCR1BL = lut[ramp[i]];
+        delayMicroseconds(60);
+     }
+  }
+#endif // KEY_CLICK
   OCR1BL = lut[255];
   
   process_minsky();
@@ -1760,7 +1885,7 @@ const char m2c[] PROGMEM = "~ ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/*
 static uint32_t amp32 = 0;
 volatile uint32_t _amp32 = 0;
 static char out[] = "                ";
-volatile bool cw_event = false;
+volatile uint8_t cw_event = false;
 
 void printsym(){
   if(sym<128){ char ch=pgm_read_byte_near(m2c + sym); if(ch != '*'){ for(int i=0; i!=15;i++) out[i]=out[i+1]; out[15] = ch; cw_event = true; }  }   // update LCD
@@ -2051,7 +2176,7 @@ inline int16_t process_nr(int16_t in)
 */
 
 #define N_FILT 7
-volatile uint8_t filt = 0;
+//volatile uint8_t filt = 0;
 uint8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
 
 /* basicdsp filter simulation:
@@ -2343,6 +2468,9 @@ int16_t NCO_I()
 }
 #endif // TESTBENCH
 
+volatile uint8_t cat_streaming = 0;
+volatile uint8_t _cat_streaming = 0;
+
 typedef void (*func_t)(void);
 volatile func_t func_ptr;
 #undef  R  // Decimating 2nd Order CIC filter
@@ -2391,18 +2519,27 @@ static uint8_t tc = 0;
 void process(int16_t i_ac2, int16_t q_ac2)
 {
   static int16_t ac3;
+#ifdef CAT_STREAMING
+  //UCSR0B &= ~(TXCIE0);  // disable USART TX interrupts
+  //while (!( UCSR0A & (1<<UDRE0)));  // wait for empty buffer
+  if(cat_streaming){ uint8_t out = ac3 + 128; if(out == ';') out++; Serial.write(out); } //UDR0 = (uint8_t)(ac3 + 128);   // from:  https://www.xanthium.in/how-to-avr-atmega328p-microcontroller-usart-uart-embedded-programming-avrgcc
+  // stty -F /dev/ttyUSB1 raw -echo -echoe -echoctl -echoke 115200;  cat /dev/ttyUSB1| aplay -r 7812 -c 1 -f U8 -B 1
+#else // CAT_STREAMING
   static int16_t ozd1, ozd2;  // Output stage
   if(_init){ ac3 = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
   int16_t od1 = ac3 - ozd1; // Comb section
   ocomb = od1 - ozd2;
+#endif
 #define OUTLET  1
 #ifdef OUTLET
   if(tc++ == 0)   // prevent recursion
   //if(tc++ > 16)   // prevent recursion
 #endif
-    interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing, prevent nested interrupts with tc
+  interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing, prevent nested interrupts with tc
+#ifndef CAT_STREAMING
   ozd2 = od1;
   ozd1 = ac3;
+#endif
   int16_t qh;
   {
     q_ac2 >>= att2;  // digital gain control
@@ -2462,12 +2599,12 @@ inline int16_t sdr_rx_common_q(){
 inline int16_t sdr_rx_common_i()
 {
   ADMUX = admux[1]; ADCSRA |= (1 << ADSC); int16_t adc = ADC - 511; 
-
+#ifndef CAT_STREAMING
   if(_init){ ocomb=0; ozi1 = 0; ozi2 = 0; } // hack
   ozi2 = ozi1 + ozi2;          // Integrator section
   ozi1 = ocomb + ozi1;
   OCR1AL = min(max((ozi2>>5) + 128, 0), 255);
-
+#endif
   static int16_t prev_adc;
   int16_t ac = (prev_adc + adc) / 2; prev_adc = adc;
   return ac;
@@ -3005,7 +3142,7 @@ const byte fonts[N_FONTS][8] PROGMEM = {
   0b00000 }
 };
 
-int analogSafeRead(uint8_t pin)
+int analogSafeRead(uint8_t pin, bool ref1v1 = false)
 {  // performs classical analogRead with default Arduino sample-rate and analog reference setting; restores previous settings
   noInterrupts();
   for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
@@ -3013,7 +3150,8 @@ int analogSafeRead(uint8_t pin)
   uint8_t admux = ADMUX;
   ADCSRA &= ~(1 << ADIE);  // disable interrupts when measurement complete
   ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);    // 128 prescaler for 9.6kHz
-  ADMUX = (1 << REFS0);  // restore reference voltage AREF (5V)
+  if(ref1v1) ADMUX &= ~(1 << REFS0);  // restore reference voltage AREF (1V1)
+  else ADMUX = (1 << REFS0);  // restore reference voltage AREF (5V)
   delay(1);  // settle
   int val = analogRead(pin);
   ADCSRA = adcsra;
@@ -3021,6 +3159,22 @@ int analogSafeRead(uint8_t pin)
   interrupts();
   return val;
 }
+/*
+uint16_t analogSafeRead(uint8_t adcpin, bool ref1v1 = false)
+{
+  uint16_t adc;
+  noInterrupts();
+  uint8_t oldmux = ADMUX;
+  for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
+  ADMUX = (adcpin & 0x0f);    // set analog input pin
+  ADMUX |= ((ref1v1) ? (1 << REFS1) : 0) | (1 << REFS0);  // If reflvl == true, set AREF=1.1V (Internal ref); otherwise AREF=AVCC=(5V)
+  ADCSRA |= (1 << ADSC);    // start next ADC conversion
+  for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
+  ADMUX = oldmux;
+  adc = ADC;
+  interrupts();
+  return adc;
+}*/
 
 uint16_t analogSampleMic()
 {
@@ -3031,8 +3185,8 @@ uint16_t analogSampleMic()
   if((dsp_cap == SDR) && (vox_thresh >= 32)) digitalWrite(RX, LOW);  // disable RF input, only for SDR mod and with low VOX threshold
   //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
   uint8_t oldmux = ADMUX;
-  ADMUX = admux[2];  // set MUX for next conversion
   for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
+  ADMUX = admux[2];  // set MUX for next conversion
   ADCSRA |= (1 << ADSC);    // start next ADC conversion
   for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
   ADMUX = oldmux;
@@ -3059,12 +3213,14 @@ uint8_t smode = 1;
 uint32_t max_absavg256 = 0;
 float dbm;
 
+#define VSS   1 // Support Vss measurement
+static int16_t smeter_cnt = 0;
+
 float smeter(float ref = 0)
 {
   max_absavg256 = max(_absavg256, max_absavg256); // peak
 
-  static uint16_t cnt;
-  if((smode) && ((++cnt % 2048) == 0)){   // slowed down display slightly
+  if((smode) && ((++smeter_cnt % 2048) == 0)){   // slowed down display slightly
     float rms;
     if(dsp_cap == SDR) rms = (float)max_absavg256 * 1.1 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 8.0 * 500.0 * 1.414 / 0.707);   // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
     else               rms = (float)max_absavg256 * 5.0 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
@@ -3085,9 +3241,14 @@ float smeter(float ref = 0)
       lcd.setCursor(12, 0); lcd.print(tmp);
     }
     if(smode == 4){ // wpm-indicator
-      lcd.setCursor(14, 0); if(mode == CW) lcd.print(wpm); lcd.print(' '); lcd.print(' ');
+      lcd.setCursor(14, 0); if(mode == CW) lcd.print(wpm); lcd.print("  ");
     }
-
+#ifdef VSS
+    if(smode == 5){ // Supply-voltage indicator; add 120k resistor between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
+      uint16_t vss = analogSafeRead(BUTTONS, true) * (120/10) * 11 / 1024;
+      lcd.setCursor(10, 0); lcd.print(vss/10); lcd.print('.'); lcd.print(vss%10); lcd.print("V ");
+    }
+#endif
     stepsize_showcursor();
     max_absavg256 /= 2;  // Implement peak hold/decay for all meter types    
   }
@@ -3128,6 +3289,7 @@ uint32_t semi_qsk_timeout = 0;
 void switch_rxtx(uint8_t tx_enable){
   TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
   //delay(1);
+  delayMicroseconds(20); // wait until potential RX interrupt is finalized
   noInterrupts();
 #ifdef TX_DELAY
 #ifdef SEMI_QSK
@@ -3218,6 +3380,14 @@ void switch_rxtx(uint8_t tx_enable){
 #endif
     }
   } else {  // rx
+#ifdef KEY_CLICK
+      if(OCR1BL != 0) {
+       for(uint16_t i = 0; i != 31; i++) {   // ramp down of amplitude: soft falling edge to prevent key clicks
+         OCR1BL = lut[ramp[i]];
+          delayMicroseconds(60);
+       }
+      }
+#endif //KEY_CLICK
       TCCR1A |= (1 << COM1A1);  // enable SIDETONE (was disabled to prevent interference during ssb tx)
       TCCR1A &= ~(1 << COM1B1); digitalWrite(KEY_OUT, LOW); // disable KEY_OUT PWM, prevents interference during RX
       OCR1BL = 0; // make sure PWM (KEY_OUT) is set to 0%
@@ -3291,16 +3461,16 @@ void calibrate_iq()
 #endif
 #endif //QCX
 
-uint8_t prev_bandval = 2;
-uint8_t bandval = 2;
-#define N_BANDS 10
+uint8_t prev_bandval = 3;
+uint8_t bandval = 3;
+#define N_BANDS 11
 
 //#define CW_FREQS  1
 #ifdef CW_FREQS
-uint32_t band[N_BANDS] = { /*472000, 1810000,*/ 3560000, 5351500, 7030000, 10106000, 14060000, 18096000, 21060000, 24906000, 28060000, 50096000/*, 70160000, 144060000*/ };  // CW QRP freqs
-//uint32_t band[N_BANDS] = { /*472000, 1818000,*/ 3558000, 5351500, 7028000, 10118000, 14058000, 18085000, 21058000, 24908000, 28058000, 50058000/*, 70158000, 144058000*/ };  // CW FISTS freqs
+uint32_t band[N_BANDS] = { /*472000,*/ 1810000, 3560000, 5351500, 7030000, 10106000, 14060000, 18096000, 21060000, 24906000, 28060000, 50096000/*, 70160000, 144060000*/ };  // CW QRP freqs
+//uint32_t band[N_BANDS] = { /*472000,*/ 1818000, 3558000, 5351500, 7028000, 10118000, 14058000, 18085000, 21058000, 24908000, 28058000, 50058000/*, 70158000, 144058000*/ };  // CW FISTS freqs
 #else
-uint32_t band[N_BANDS] = { /*472000, 1840000,*/ 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };  // FT8 freqs
+uint32_t band[N_BANDS] = { /*472000,*/ 1840000, 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };  // FT8 freqs
 #endif
 
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
@@ -3518,7 +3688,7 @@ static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:   
 
 const char* offon_label[2] = {"OFF", "ON"};
 const char* filt_label[N_FILT+1] = { "Full", "3000", "2400", "1800", "500", "200", "100", "50" };
-const char* band_label[N_BANDS] = { "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
+const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
@@ -3538,7 +3708,11 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   
   const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
   const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
+#ifdef VSS
+  const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss" };
+#else
   const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm" };
+#endif
   const char* cw_tone_label[] = { "700", "600" };
 #ifdef KEYER
   const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
@@ -3567,13 +3741,13 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SEMIQSK: paramAction(action, semi_qsk,  0x24, F("Semi QSK"), offon_label, 0, 1, false); break;
 #endif
 #ifdef KEYER
-    case KEY_WPM:  paramAction(action, keyer_speed,   0x25, F("Keyer Speed"), NULL, 0, 35, false); break;
+    case KEY_WPM:  paramAction(action, keyer_speed,   0x25, F("Keyer Speed"), NULL, 1, 35, false); break;
     case KEY_MODE: paramAction(action, keyer_mode, 0x26, F("Keyer Mode"), keyer_mode_label, 0, 2, false); break;
     case KEY_PIN:  paramAction(action, keyer_swap,   0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
     case KEY_TX:   paramAction(action, practice,   0x28, F("Practice"), offon_label, 0, 1, false); break;
 #endif
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
-    case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("VOX Level"), NULL, 0, 255, false); break;
+    case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("Noise Gate"), NULL, 0, 255, false); break;
 #ifdef MOX_ENABLE
     case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
 #endif
@@ -3721,6 +3895,19 @@ void analyseCATcmd()
   else if((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
     Command_VX(CATcmd[2]);
 
+#ifdef CAT_EXT
+  else if((CATcmd[0] == 'U') && (CATcmd[1] == 'K') && (CATcmd[3] == ';'))  // remote key press
+    Command_UK(CATcmd[2]);
+
+  else if((CATcmd[0] == 'U') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))  // display contents
+    Command_UD();
+#endif //CAT_EXT
+
+#ifdef CAT_STREAMING
+  else if((CATcmd[0] == 'U') && (CATcmd[1] == 'A') && (CATcmd[3] == ';'))  // audio streaming enable/disable
+    Command_UA(CATcmd[2]);
+#endif //CAT_STREAMING
+
   else {
     Serial.print("?;");
 #ifdef DEBUG
@@ -3731,21 +3918,55 @@ void analyseCATcmd()
   }
 }
 
+#ifdef CAT
 volatile uint8_t cat_ptr = 0;
-void rxCATcmd(){ /*if(Serial.available());*/ }
 void serialEvent(){
-  rxend_event = millis() + 10;  // block display until this moment, to prevent CAT cmds that initiate display changes to interfere with the next CAT cmd e.g. Hamlib: FA00007071000;ID;
-  char data = Serial.read();
-  CATcmd[cat_ptr++] = data;
-  if(data == ';'){
-    CATcmd[cat_ptr] = '\0'; // terminate the array
-    cat_ptr = 0;            // reset for next CAT command
+  if(Serial.available()){
+    rxend_event = millis() + 10;  // block display until this moment, to prevent CAT cmds that initiate display changes to interfere with the next CAT cmd e.g. Hamlib: FA00007071000;ID;
+    char data = Serial.read();
+    CATcmd[cat_ptr++] = data;
+    if(data == ';'){
+      CATcmd[cat_ptr] = '\0'; // terminate the array
+      cat_ptr = 0;            // reset for next CAT command
 #ifdef _SERIAL
-    if(!cat_active){ cat_active = 1; smode = 0;} // disable smeter to reduce display activity
+      if(!cat_active){ cat_active = 1; smode = 0;} // disable smeter to reduce display activity
 #endif
-    analyseCATcmd(); delay(10);
-  } else if(cat_ptr > (CATCMD_SIZE - 1)){ Serial.print("E;"); cat_ptr = 0; } // overrun
+#ifdef CAT_STREAMING
+      if(cat_streaming){ cat_streaming = false; Serial.print(';'); }   // terminate CAT stream
+      analyseCATcmd();   // process CAT cmd
+      if(_cat_streaming){ Serial.print("US"); cat_streaming = true; }  // resume CAT stream
+#else
+      analyseCATcmd();
+#endif // CAT_STREAMING
+      delay(10);
+    } else if(cat_ptr > (CATCMD_SIZE - 1)){ Serial.print("E;"); cat_ptr = 0; } // overrun
+  }
 }
+#endif //CAT
+
+#ifdef CAT_EXT
+void Command_UK(char key)
+{
+  char Catbuffer[16];
+  sprintf(Catbuffer, "UK%c;", key);
+  Serial.print(Catbuffer);
+}
+
+void Command_UD()
+{
+  char Catbuffer[40];
+  sprintf(Catbuffer, "UD%02u%s;", (lcd.curs) ? lcd.y*16+lcd.x : 16*2+1, lcd.text);
+  Serial.print(Catbuffer);
+}
+
+void Command_UA(char en)
+{
+  char Catbuffer[16];
+  sprintf(Catbuffer, "UA%01u;", (_cat_streaming = (en == '1')));
+  Serial.print(Catbuffer);
+  if(_cat_streaming){ Serial.print("US"); cat_streaming = true; }
+}
+#endif // CAT_EXT
 
 void Command_GETFreqA()
 {
@@ -3908,7 +4129,6 @@ void Command_PS()
 void Command_PS1()
 {
 }
-// END CAT support
 #endif //CAT
 
 void fatal(const __FlashStringHelper* msg, int value = 0, char unit = '\0') {
@@ -3936,6 +4156,7 @@ void build_lut()
 void setup()
 {
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
+  si5351.powerDown();  // disable all CLK outputs (especially needed for si5351 variants that has CLK2 enabled by default, such as Si5351A-B04486-GT)
 
   uint8_t mcusr = MCUSR;
   MCUSR = 0;
@@ -3983,16 +4204,15 @@ void setup()
 
   delay(100);           // at least 40ms after power rises above 2.7V before sending commands
   lcd.begin(16, 2);  // Init LCD
+#ifndef OLED
   for(i = 0; i != N_FONTS; i++){  // Init fonts
     pgm_cache_item(fonts[i], 8);
     lcd.createChar(0x01 + i, /*fonts[i]*/_item);
   }
+#endif
 
   show_banner();
   lcd.setCursor(7, 0); lcd.print(F(" R")); lcd.print(F(VERSION)); lcd_blanks();
-
-  //Init si5351
-  si5351.powerDown();  // Disable all (used) outputs
 
 #ifdef QCX
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
@@ -4198,7 +4418,11 @@ void setup()
   start_rx();
 
 #if defined(CAT) || defined(TESTBENCH)
+#ifdef CAT_STREAMING
+  #define BAUD   115200           //Baudrate used for serial communications
+#else
   #define BAUD   38400            //38400 //115200 //4800 //Baudrate used for serial communications (CAT, TESTBENCH)
+#endif
   Serial.begin(BAUD*4/5); // corrected for F_CPU=20M
   Command_IF();
 #if !defined(OLED) && defined(TESTBENCH)
@@ -4227,9 +4451,6 @@ static int32_t _step = 0;
 
 void loop()
 {
-#ifdef CAT
-  rxCATcmd();
-#endif
   if((vox) && ((mode == LSB) || (mode == USB))){  // If VOX enabled (and in LSB/USB mode), then take mic samples and feed ssb processing function, to derive amplitude, and potentially detect cross vox_threshold to detect a TX or RX event: this is expressed in tx variable
     if(!vox_tx){ // VOX not active
 #ifdef MULTI_ADC
@@ -4265,19 +4486,21 @@ void loop()
   //if((mode == CW) && cwdec) cw_decode();  // if(!(semi_qsk_timeout)) cw_decode(); else dec2();
   if((mode == CW) && cwdec && ((!tx) && (!semi_qsk_timeout))) cw_decode();  // CW decoder only active during RX
 
-  if(menumode == 0){ // in main    
-    if((cw_event) && (cwdec)){
-      cw_event = false;
-      uint8_t offset = (smode) ? (smode == 1) ? 7 : (smode == 2) ? 3 : (smode == 3) ? 5 : 3 : 0;  // depending on smeter more/less cw-text
-      lcd.noCursor(); lcd.setCursor(0, 0);
+  if(menumode == 0){ // in main
+    if(cw_event){
+      uint8_t offset = (uint8_t[]){ 0, 7, 3, 5, 3, 7 }[smode]; // depending on smeter more/less cw-text
+      lcd.noCursor();
 #ifdef OLED
-      for(int i = 0; out[offset + i] != '\0'; i++){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); if((!tx) && (!semi_qsk_timeout)) cw_decode(); }   // like 'lcd.print(out + offset);' but then in parallel calling cw_decoding() to handle long OLED writes
+      //cw_event = false; for(int i = 0; out[offset + i] != '\0'; i++){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); if((!tx) && (!semi_qsk_timeout)) cw_decode(); }   // like 'lcd.print(out + offset);' but then in parallel calling cw_decoding() to handle long OLED writes
+      uint8_t i = cw_event - 1; if(out[offset + i]){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); cw_event++; } else cw_event = false;  // since an oled string write would hold-up reliable decoding/keying, write only a single char each time and continue
 #else
-      lcd.print(out + offset);
+      cw_event = false;
+      lcd.setCursor(0, 0); lcd.print(out + offset);
 #endif
       stepsize_showcursor();
     }
-    smeter();
+    else if(!semi_qsk_timeout)
+      smeter();
   }
 
 #ifdef ONEBUTTON
@@ -4519,7 +4742,8 @@ void loop()
       case BE|DC:
         //delay(100);
         bandval++;
-        if(bandval >= N_BANDS) bandval = 0;
+        //if(bandval >= N_BANDS) bandval = 0;
+        if(bandval >= (N_BANDS-1)) bandval = 1;  // excludes 6m, 160m
         stepsize = STEP_1k;
         change = true;
         break;
@@ -4546,7 +4770,7 @@ void loop()
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
       encoder_val = 0;
     }
-    if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, (menumode) ? menu : NULL);  // update param with encoder change and display
+    if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, (menumode) ? menu : 0);  // update param with encoder change and display
     prev_menumode = menumode;
     if(menumode == 2){
       if(encoder_change){
@@ -4563,6 +4787,7 @@ void loop()
         if(menu == BAND){
           change = true;
         }
+        //if(menu == NR){ if(mode == CW) nr = false; }
         if(menu == VFOSEL){
           freq = vfo[vfosel%2];
           mode = vfomode[vfosel%2];
@@ -4575,6 +4800,7 @@ void loop()
           stepsize = (rit) ?  STEP_10 : STEP_500;
           change = true;
         }
+        //if(menu == VOX){ if(vox){ vox_thresh-=1; } else { vox_thresh+=1; }; }
         if(menu == ATT){ // post-handling ATT parameter
           if(dsp_cap == SDR){
             noInterrupts();
@@ -4674,7 +4900,7 @@ void loop()
 
     uint8_t f = freq / 1000000UL;
     set_lpf(f);
-    bandval = (f > 32) ? 9 : (f > 26) ? 8 : (f > 22) ? 7 : (f > 20) ? 6 : (f > 16) ? 5 : (f > 12) ? 4 : (f > 8) ? 3 : (f > 6) ? 2 : (f > 4) ? 1 : /*(f > 2)*/ 0;  prev_bandval = bandval; // align bandval with freq
+    bandval = (f > 32) ? 10 : (f > 26) ? 9 : (f > 22) ? 8 : (f > 20) ? 7 : (f > 16) ? 6 : (f > 12) ? 5 : (f > 8) ? 4 : (f > 6) ? 3 : (f > 4) ? 2 : (f > 2) ? 1 : 0;  prev_bandval = bandval; // align bandval with freq
 
     //noInterrupts();
     if(mode == CW){
