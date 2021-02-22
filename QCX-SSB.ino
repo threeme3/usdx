@@ -22,9 +22,16 @@
 #define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable 5-band filter bank switching: latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV1       1   // Enable 3-band filter bank switching: latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
-//#define CAT_EXT        1  // Extended CAT support: remote button and screen control commands over CAT
-//#define CAT_STREAMING  1  // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd. 
-#define KEY_CLICK 1         // Reduce key clicks by envelope shaping
+//#define CAT_EXT       1   // Extended CAT support: remote button and screen control commands over CAT
+//#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd. 
+#define VSS             1   // Supports Vss measurement (as s-meter option)
+#define TX_DELAY        1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
+#define KEY_CLICK       1   // Reduce key clicks by envelope shaping
+#define SEMI_QSK        1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
+//#define CW_FREQS_QRP  1   // Defaults to CW QRP   frequencies when changing bands
+//#define CW_FREQS_FISTS  1 // Defaults to CW FISTS frequencies when changing bands
+//#define ONEBUTTON     1   // Use single (encode) button to control full the rig
+//#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -82,6 +89,7 @@
 // In addition set:
 #define OLED  1
 #define ONEBUTTON  1
+#define ONEBUTTON_INV 1
 #undef DEBUG
 adjust I2C and I2C_ ports, 
 ssb_cap=1; dsp_cap=2;
@@ -101,6 +109,17 @@ ssb_cap=1; dsp_cap=2;
 
 extern char __bss_end;
 static int freeMemory(){ char* sp = reinterpret_cast<char*>(SP); return sp - &__bss_end; }  // see: http://www.nongnu.org/avr-libc/user-manual/malloc.html
+
+#ifdef CAT_EXT
+volatile uint8_t cat_key = 0;
+uint8_t _digitalRead(uint8_t pin){  // reads pin or (via CAT) artificially overriden pins
+  serialEvent();  // allows CAT update
+  if(cat_key){ return (pin == BUTTONS) ? ((cat_key&0x07) > 0) : (pin == DIT) ? ~cat_key&0x10 : (pin == DAH) ? ~cat_key&0x20 : 0; } // overrides digitalRead(DIT, DAH, BUTTONS);
+  return digitalRead(pin);
+}
+#else
+#define _digitalRead(x) digitalRead(x)
+#endif //CAT_EXT
 
 //#ifdef KEYER
 // Iambic Morse Code Keyer Sketch, Contribution by Uli, DL2DBG. Copyright (c) 2009 Steven T. Elliott Source: http://openqrp.org/?p=343,  Trimmed by Bill Bishop - wrb[at]wrbishop.com.  This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version. This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details: Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA.
@@ -129,10 +148,10 @@ enum KSTYPE {IDLE, CHK_DIT, CHK_DAH, KEYED_PREP, KEYED, INTER_ELEMENT }; // Stat
 
 void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 {
-    if(digitalRead(DIT) == LOW) {
+    if(_digitalRead(DIT) == LOW) {
         keyerControl |= keyer_swap ? DAH_L : DIT_L;
     }
-    if(digitalRead(DAH) == LOW) {
+    if(_digitalRead(DAH) == LOW) {
         keyerControl |= keyer_swap ? DIT_L : DAH_L;
     }
 }
@@ -942,7 +961,7 @@ static uint8_t last_state;
 ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
   //noInterrupts();
   //PCMSK2 &= ~((1 << PCINT22) | (1 << PCINT23));  // mask ROT_A, ROT_B interrupts
-  switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
+  switch(last_state = (last_state << 4) | (_digitalRead(ROT_B) << 1) | _digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
 //#define ENCODER_ENHANCED_RESOLUTION  1
 #ifdef ENCODER_ENHANCED_RESOLUTION // Option: enhance encoder from 24 to 96 steps/revolution, see: appendix 1, https://www.sdr-kits.net/documents/PA0KLT_Manual.pdf
     case 0x31: case 0x10: case 0x02: case 0x23: encoder_val++; break;
@@ -963,7 +982,7 @@ void encoder_setup()
   pinMode(ROT_B, INPUT_PULLUP);
   PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); // interrupt-enable for ROT_A, ROT_B pin changes; see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
   PCICR |= (1 << PCIE2); 
-  last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
+  last_state = (_digitalRead(ROT_B) << 1) | _digitalRead(ROT_A);
   interrupts();
 }
 /*
@@ -977,11 +996,11 @@ public:
     pinMode(ROT_B, INPUT_PULLUP);
     PCMSK2 |= (1 << PCINT22) | (1 << PCINT23); // interrupt-enable for ROT_A, ROT_B pin changes; see https://github.com/EnviroDIY/Arduino-SDI-12/wiki/2b.-Overview-of-Interrupts
     PCICR |= (1 << PCIE2);
-    last_state = (digitalRead(ROT_B) << 1) | digitalRead(ROT_A);
+    last_state = (_digitalRead(ROT_B) << 1) | _digitalRead(ROT_A);
     sei();    
   }
   void event(){
-    switch(last_state = (last_state << 4) | (digitalRead(ROT_B) << 1) | digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
+    switch(last_state = (last_state << 4) | (_digitalRead(ROT_B) << 1) | _digitalRead(ROT_A)){ //transition  (see: https://www.allaboutcircuits.com/projects/how-to-use-a-rotary-encoder-in-a-mcu-based-project/  )
       case 0x31: case 0x10: case 0x02: case 0x23: if(step < 0) step = 0; step++; if(step >  3){ step = 0; val++; } break;
       case 0x32: case 0x20: case 0x01: case 0x13: if(step > 0) step = 0; step--; if(step < -3){ step = 0; val--; } break;  
     }
@@ -1804,7 +1823,6 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 #endif //TX_CLK0_CLK1
 #endif
 
-//#define MOX_ENABLE   1   // Monitor-On-Xmit
 #ifdef MOX_ENABLE
   if(!mox) return;
   OCR1AL = (adc << (mox-1)) + 128;  // TX audio monitoring
@@ -3213,7 +3231,6 @@ uint8_t smode = 1;
 uint32_t max_absavg256 = 0;
 float dbm;
 
-#define VSS   1 // Support Vss measurement
 static int16_t smeter_cnt = 0;
 
 float smeter(float ref = 0)
@@ -3280,9 +3297,7 @@ void start_rx()
 
 int16_t _centiGain = 0;
 
-#define TX_DELAY    1     // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
 uint8_t txdelay = 0;
-#define SEMI_QSK    1     // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
 uint8_t semi_qsk = false;
 uint32_t semi_qsk_timeout = 0;
 
@@ -3441,17 +3456,17 @@ void calibrate_iq()
   dbc = smeter();
   si5351.freqb(freq-700); delay(100);
   lcd.setCursor(0, 1); lcd.print("I-Q bal. 700Hz"); lcd_blanks();
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  for(; !_digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; _digitalRead(BUTTONS);) wdt_reset();
   si5351.freqb(freq+600); delay(100);
   dbc = smeter();
   si5351.freqb(freq-600); delay(100);
   lcd.setCursor(0, 1); lcd.print("Phase Lo 600Hz"); lcd_blanks();
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  for(; !_digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; _digitalRead(BUTTONS);) wdt_reset();
   si5351.freqb(freq+800); delay(100);
   dbc = smeter();
   si5351.freqb(freq-800); delay(100);
   lcd.setCursor(0, 1); lcd.print("Phase Hi 800Hz"); lcd_blanks();
-  for(; !digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; digitalRead(BUTTONS);) wdt_reset();
+  for(; !_digitalRead(BUTTONS);){ wdt_reset(); smeter(dbc); } for(; _digitalRead(BUTTONS);) wdt_reset();
 
   lcd.setCursor(9, 0); lcd_blanks();  // cleanup dbmeter
   digitalWrite(SIG_OUT, false); // loopback off
@@ -3465,12 +3480,14 @@ uint8_t prev_bandval = 3;
 uint8_t bandval = 3;
 #define N_BANDS 11
 
-//#define CW_FREQS  1
-#ifdef CW_FREQS
+#ifdef CW_FREQS_QRP
 uint32_t band[N_BANDS] = { /*472000,*/ 1810000, 3560000, 5351500, 7030000, 10106000, 14060000, 18096000, 21060000, 24906000, 28060000, 50096000/*, 70160000, 144060000*/ };  // CW QRP freqs
-//uint32_t band[N_BANDS] = { /*472000,*/ 1818000, 3558000, 5351500, 7028000, 10118000, 14058000, 18085000, 21058000, 24908000, 28058000, 50058000/*, 70158000, 144058000*/ };  // CW FISTS freqs
+#else
+#ifdef CW_FREQS_FISTS
+uint32_t band[N_BANDS] = { /*472000,*/ 1818000, 3558000, 5351500, 7028000, 10118000, 14058000, 18085000, 21058000, 24908000, 28058000, 50058000/*, 70158000, 144058000*/ };  // CW FISTS freqs
 #else
 uint32_t band[N_BANDS] = { /*472000,*/ 1840000, 3573000, 5357000, 7074000, 10136000, 14074000, 18100000, 21074000, 24915000, 28074000, 50313000/*, 70101000, 144125000*/ };  // FT8 freqs
+#endif
 #endif
 
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
@@ -3796,7 +3813,6 @@ void initPins(){
   pinMode(SIG_OUT, OUTPUT);
   pinMode(RX, OUTPUT);
   pinMode(KEY_OUT, OUTPUT);
-//#define ONEBUTTON  1
 #ifdef ONEBUTTON
   pinMode(BUTTONS, INPUT_PULLUP);  // rotary button
 #else
@@ -3896,12 +3912,21 @@ void analyseCATcmd()
     Command_VX(CATcmd[2]);
 
 #ifdef CAT_EXT
-  else if((CATcmd[0] == 'U') && (CATcmd[1] == 'K') && (CATcmd[3] == ';'))  // remote key press
-    Command_UK(CATcmd[2]);
+  else if((CATcmd[0] == 'U') && (CATcmd[1] == 'K') && (CATcmd[4] == ';'))  // remote key press
+    Command_UK(CATcmd[2], CATcmd[3]);
 
   else if((CATcmd[0] == 'U') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))  // display contents
     Command_UD();
 #endif //CAT_EXT
+
+/*
+The following CAT extensions are available remote operatons. Use a baudrate of 115200:
+
+UA1;  disable audio streaming
+UA0;  disable audio streaming
+UD;   request display contents
+UKnn; control keys, where nn is a sum of the following hexadecimal values: 0x80 encoder left, 0x40 encoder right, 0x20 DIT/PTT, 0x10 DAH, 0x04 left-button, 0x02 encoder button, 0x01 right button
+ */
 
 #ifdef CAT_STREAMING
   else if((CATcmd[0] == 'U') && (CATcmd[1] == 'A') && (CATcmd[3] == ';'))  // audio streaming enable/disable
@@ -3945,10 +3970,13 @@ void serialEvent(){
 #endif //CAT
 
 #ifdef CAT_EXT
-void Command_UK(char key)
+void Command_UK(char k1, char k2)
 {
+  cat_key = ((k1 - '0') << 4) | (k2 - '0');
+  if(cat_key&0x40) encoder_val--;
+  if(cat_key&0x80) encoder_val++;
   char Catbuffer[16];
-  sprintf(Catbuffer, "UK%c;", key);
+  sprintf(Catbuffer, "UK%c%c;", k1, k2);
   Serial.print(Catbuffer);
 }
 
@@ -4324,7 +4352,7 @@ void setup()
   }
 
   // Test microphone polarity
-  /*if((ssb_cap) && (!digitalRead(DAH))){
+  /*if((ssb_cap) && (!_digitalRead(DAH))){
     fatal(F("MIC in rev.pol"));
   }*/
 
@@ -4392,7 +4420,7 @@ void setup()
   
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
-  if((eeprom_version != get_version_id()) || digitalRead(BUTTONS) ){  // EEPROM clean: if rotary-key pressed or version signature in EEPROM does NOT corresponds with this firmware
+  if((eeprom_version != get_version_id()) || _digitalRead(BUTTONS) ){  // EEPROM clean: if rotary-key pressed or version signature in EEPROM does NOT corresponds with this firmware
     eeprom_version = get_version_id();
     //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
     //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
@@ -4438,7 +4466,7 @@ void setup()
   loadWPM(keyer_speed);                 // Fix speed at 15 WPM
 #endif //KEYER
 
-  for(; !digitalRead(DIT) || ((mode == CW) && (!digitalRead(DAH)));){ // wait until DIH/DAH/PTT is released to prevent TX on startup
+  for(; !_digitalRead(DIT) || ((mode == CW) && (!_digitalRead(DAH)));){ // wait until DIH/DAH/PTT is released to prevent TX on startup
     lcd.setCursor(15, 1); lcd.print('T');
     delay(1000);
     lcd.setCursor(15, 1); lcd.print(' ');
@@ -4503,7 +4531,8 @@ void loop()
       smeter();
   }
 
-#ifdef ONEBUTTON
+//#define ONEBUTTON_INV 1 // Encoder button goes from PC3 to GND (instead PC3 to 5V, with 10k pull down)
+#ifdef ONEBUTTON_INV
   uint8_t inv = 1;
 #else
   uint8_t inv = 0;
@@ -4514,8 +4543,8 @@ void loop()
 
     switch(keyerState){ // Basic Iambic Keyer, keyerControl contains processing flags and keyer mode bits, Supports Iambic A and B, State machine based, uses calls to millis() for timing.
     case IDLE: // Wait for direct or latched paddle press
-        if((digitalRead(DAH) == LOW) ||
-            (digitalRead(DIT) == LOW) ||
+        if((_digitalRead(DAH) == LOW) ||
+            (_digitalRead(DIT) == LOW) ||
             (keyerControl & 0x03))
         {
             update_PaddleLatch();
@@ -4576,18 +4605,18 @@ void loop()
 
 //  #define DAH_AS_KEY  1
 #ifdef DAH_AS_KEY
-  if(!digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
+  if(!_digitalRead(DIT)  || ((mode == CW) && (!_digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
 #else
-  if(!digitalRead(DIT) ){  // PTT/DIT keys transmitter
+  if(!_digitalRead(DIT) ){  // PTT/DIT keys transmitter
 #endif
     switch_rxtx(1);
 #ifdef DAH_AS_KEY
-    for(; !digitalRead(DIT)  || ((mode == CW) && (!digitalRead(DAH)));){ // until released
+    for(; !_digitalRead(DIT)  || ((mode == CW) && (!_digitalRead(DAH)));){ // until released
 #else
-    for(; !digitalRead(DIT) ;){ // until released
+    for(; !_digitalRead(DIT) ;){ // until released
 #endif
       wdt_reset();
-      if(inv ^ digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
+      if(inv ^ _digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
     }
     switch_rxtx(0);
    }
@@ -4598,21 +4627,24 @@ void loop()
   if((semi_qsk_timeout) && (millis() > semi_qsk_timeout)){ switch_rxtx(0); }  // delayed QSK RX
 #endif
   enum event_t { BL=0x10, BR=0x20, BE=0x30, SC=0x01, DC=0x02, PL=0x04, PLC=0x05, PT=0x0C }; // button-left, button-right and button-encoder; single-click, double-click, push-long, push-and-turn
-  if(inv ^ digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
+  if(inv ^ _digitalRead(BUTTONS)){   // Left-/Right-/Rotary-button (while not already pressed)
     if(!((event & PL) || (event & PLC))){  // hack: if there was long-push before, then fast forward
       uint16_t v = analogSafeRead(BUTTONS);
+#ifdef CAT_EXT
+      if(cat_key){ v = (cat_key&0x04) ? 512 : (cat_key&0x01) ? 870 : (cat_key&0x02) ? 1024 : 0; }  // override analog value exercised by BUTTONS press
+#endif //CAT_EXT
       event = SC;
       int32_t t0 = millis();
-      for(; inv ^ digitalRead(BUTTONS);){ // until released or long-press
+      for(; inv ^ _digitalRead(BUTTONS);){ // until released or long-press
         if((millis() - t0) > 300){ event = PL; break; }
         wdt_reset();
       }
       delay(10); //debounce
       for(; (event != PL) && ((millis() - t0) < 500);){ // until 2nd press or timeout
-        if(inv ^ digitalRead(BUTTONS)){ event = DC; break; }
+        if(inv ^ _digitalRead(BUTTONS)){ event = DC; break; }
         wdt_reset();
       }
-      for(; inv ^ digitalRead(BUTTONS);){ // until released, or encoder is turned while longpress
+      for(; inv ^ _digitalRead(BUTTONS);){ // until released, or encoder is turned while longpress
         if(encoder_val && event == PL){ event = PT; break; }
         wdt_reset();
       }  // Max. voltages at ADC3 for buttons L,R,E: 3.76V;4.55V;5V, thresholds are in center
@@ -4621,6 +4653,7 @@ void loop()
       event = (event&0xf0) | ((encoder_val) ? PT : PLC/*PL*/);  // only alternate bewteen push-long/turn when applicable
     }
     switch(event){
+#ifndef ONEBUTTON
       case BL|PL:  // Called when menu button pressed
       case BL|PLC: // or kept pressed
         menumode = 2;
@@ -4660,7 +4693,7 @@ void loop()
           //paramAction(UPDATE, MODE);
           vfomode[vfosel%2] = mode;
           paramAction(SAVE, (vfosel%2) ? MODEB : MODEA);  // save vfoa/b changes
-          paramAction(SAVE, MODE); 
+          paramAction(SAVE, MODE);
           paramAction(SAVE, FILTER);
           si5351.iqmsa = 0;  // enforce PLL reset
           if((prev_mode == CW) && (cwdec)) show_banner();
@@ -4721,6 +4754,8 @@ void loop()
         }
         change = true;
         break;
+//#define TUNING_DIAL  1
+#ifdef TUNING_DIAL
       case BR|PLC:  // while pressed long continues
       case BE|PLC:
         freq = freq + ((_step > 0) ? 1 : -1) * pow(2, abs(_step)); change=true;
@@ -4729,10 +4764,11 @@ void loop()
         _step += encoder_val; encoder_val = 0;
         lcd.setCursor(0, 0); lcd.print(_step); lcd_blanks();
         break;
+#endif //TUNING_DIAL
       case BE|SC:
-        if(!menumode)
+        if(!menumode){
           stepsize_change(+1);
-        else {
+        } else {
           int8_t _menumode;
           if(menumode == 1){ _menumode = 2; }  // short encoder-click while in menu: enter value selection screen
           if(menumode == 2){ _menumode = 1; change = true; paramAction(SAVE, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
@@ -4749,7 +4785,7 @@ void loop()
         break;
       case BE|PL: stepsize_change(-1); break;
       case BE|PT:
-          for(; digitalRead(BUTTONS);){ // process encoder changes until released
+          for(; _digitalRead(BUTTONS);){ // process encoder changes until released
           wdt_reset();
           if(encoder_val){
             paramAction(UPDATE, VOLUME);
@@ -4759,6 +4795,61 @@ void loop()
         }
         change = true; // refresh display
         break;
+#else //ONEBUTTON
+      case BE|SC:
+        int8_t _menumode;
+        if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short enc-click while in default screen: enter menu mode
+        if(menumode == 1){ _menumode = 2; }                          // short enc-click while in menu: enter value selection screen
+        if(menumode == 2){ _menumode = 0; paramAction(SAVE, menu); } // short enc-click while in value selection screen: save, and return to default screen
+        menumode = _menumode;
+        break;
+      case BE|DC:
+        if(!menumode){
+          int8_t prev_mode = mode;
+          if(rit){ rit = 0; stepsize = prev_stepsize[mode == CW]; change = true;  break; }
+          mode += 1;
+          //encoder_val = 1;
+          //paramAction(UPDATE, MODE); // Mode param //paramAction(UPDATE, mode, NULL, F("Mode"), mode_label, 0, _N(mode_label), true);
+//#define MODE_CHANGE_RESETS  1
+#ifdef MODE_CHANGE_RESETS
+          if(mode != CW) stepsize = STEP_1k; else stepsize = STEP_500; // sets suitable stepsize
+#endif
+          if(mode > CW) mode = LSB;  // skip all other modes (only LSB, USB, CW)
+#ifdef MODE_CHANGE_RESETS
+          if(mode == CW) { filt = 4; nr  = 0; } else filt = 0;  // resets filter (to most BW) and NR on mode change
+#else
+          if(mode == CW) { nr  = 0; }
+          prev_stepsize[prev_mode == CW] = stepsize; stepsize = prev_stepsize[mode == CW]; // backup stepsize setting for previous mode, restore previous stepsize setting for current selected mode; filter settings captured for either CQ or other modes.
+          prev_filt[prev_mode == CW] = filt; filt = prev_filt[mode == CW];  // backup filter setting for previous mode, restore previous filter setting for current selected mode; filter settings captured for either CQ or other modes.
+#endif
+          //paramAction(UPDATE, MODE);
+          vfomode[vfosel%2] = mode;
+          paramAction(SAVE, (vfosel%2) ? MODEB : MODEA);  // save vfoa/b changes
+          paramAction(SAVE, MODE);
+          paramAction(SAVE, FILTER);
+          si5351.iqmsa = 0;  // enforce PLL reset
+          if((prev_mode == CW) && (cwdec)) show_banner();
+          change = true;
+        } else {
+          if(menumode == 1){ menumode = 0; }  // short right-click while in menu: enter value selection screen
+          if(menumode == 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
+        }
+        break;
+      case BE|PL:
+        stepsize += 1;
+        if(stepsize < STEP_1k) stepsize = STEP_10;
+        if(stepsize > STEP_10) stepsize = STEP_1k;
+        stepsize_showcursor();
+        break;
+      case BE|PLC: // or kept pressed
+        menumode = 2;
+        break;
+      case BE|PT:
+        menumode = 1;
+        //if(menu == 0) menu = 1;
+        break;
+#endif //ONEBUTTON
+
     }
   } else event = 0;  // no button pressed: reset event
 
@@ -4766,7 +4857,11 @@ void loop()
     int8_t encoder_change = encoder_val;
     if((menumode == 1) && encoder_change){
       menu += encoder_val;   // Navigate through menu
+#ifdef ONEBUTTON
+      menu = max(0, min(menu, N_PARAMS));
+#else
       menu = max(1 /* 0 */, min(menu, N_PARAMS));
+#endif
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
       encoder_val = 0;
     }

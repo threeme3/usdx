@@ -117,7 +117,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 2.2 CW Tone         | CW Filter+Side-tone (600, 700) | |
 | 2.3 CW Offset       | CW RX filter offset alignment (QCX only) | |
 | 2.4 Semi QSK        | On TX silents RX on CW sign and word spaces | | 
-| 2.5 Keyer speed     | CW Keyer speed in Paris-WPM (0..35) | |
+| 2.5 Keyer speed     | CW Keyer speed in Paris-WPM (1..35) | |
 | 2.6 Keyer mode      | Type of keyer (Iambic-A, -B, Straight) | |
 | 2.7 Keyer swap      | to swap keyer DIH, DAH inputs (ON, OFF) | |
 | 2.8 Practice        | to disable TX for practice purposes (ON, OFF) | |
