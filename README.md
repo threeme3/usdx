@@ -42,6 +42,8 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
+| [R1.02o] | 2020-03-03 | TX quality improvements, single encoder/button-only control option, 16MHz Arduino Uno/Nano support |
+| [R1.02n] | 2020-02-22 | Key click reduction, TX bandwidth control, OLED fixes, CAT remote control features including RX audio streaming. |
 | [R1.02m] | 2020-01-27 | CW support, TS480 CAT support, RX quality improvments, semi-QSK, PA PTT out with TX-delay, VFO-A/B/RIT, LPF switching, backlight saving, 160m. |
 | [R1.02j] | 2020-10-10 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix, selectable CW pitch. |
 | [R1.01d] | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. (Original QCX-SSB mod is described here [R1.01d]) |
@@ -123,12 +125,12 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 2.8 Practice        | to disable TX for practice purposes (ON, OFF) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | | |
 | 3.2 Noise Gate      | Audio threshold for SSB TX and VOX (0-255) | |
-| 3.3 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
-| 3.4 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
-| 3.5 TX Delay        | Delays TX to allow PA relay to be fully switched on before TX (0-255 ms) | |
-| 8.1 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
-| 8.2 PA Bias min     | KEY_OUT PWM level (0-255) for representing   0% RF output | |
-| 8.3 PA Bias max     | KEY_OUT PWM level (0-255) for representing 100% RF output | |
+| 3.3 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
+| 3.4 TX Delay        | Delays TX to allow PA relay to be fully switched on before TX (0-255 ms) | |
+| 3.5 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
+| 8.1 PA Bias min     | PA amplitude PWM level (0-255) for representing   0% RF output | |
+| 8.2 PA Bias max     | PA amplitude PWM level (0-255) for representing 100% RF output | |
+| 8.3 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
 | 8.4 IQ Phase        | RX I/Q phase offset in degrees (0..180 degrees) | |
 | 8.5 IQ Test/Cal.    | CW-filter alignment (QCX only) | |
 | 9.1 Sample rate     | for debugging, testing and experimental purpose | |
@@ -316,11 +318,15 @@ Linear Data Manual, 1988.
 
 [QCX Rev 5 modification]: https://github.com/threeme3/QCX-SSB/blob/faa4447d61c32efebadd9413b78c4a0094815611/QCX-SSB_assembly_Rev-5.pdf
 
-[QCX+ modification]: https://groups.io/g/ucx/files/QCX+%20SSB%20Mods/Modifying%20the%20QCX+%20for%20SSB%20v2.pdf
+[QCX+ modification]: https://groups.io/g/ucx/files/QCX+%20SSB%20Mods/Modifying%20the%20QCX+%20for%20SSB%20v3.pdf
 
 [Ghetto-class-E]: https://www.ncqrpp.org/files/qrpp_volume_10.pdf
 
 [Ghetto-class-E-later-publication]: http://www.iw3sgt.it/IW3SGT_PRJ/IW3SGT_AMP_LF/ClassDEF1.pdf
+
+[R1.02o]:
+
+[R1.02n]: https://github.com/threeme3/QCX-SSB/tree/5ac4204fd00c18e3b8cca13e32249dda6aeb6629
 
 [R1.02m]: https://github.com/threeme3/QCX-SSB/tree/860e73f28e91a30eb37cc951219c4e360c2c7e5d
 

@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02n"
+#define VERSION   "1.02o"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. DEBUG, CAT, DIAG, KEYER
 #define DIAG            1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -23,15 +23,16 @@
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable 5-band filter bank switching: latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV1       1   // Enable 3-band filter bank switching: latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
 //#define CAT_EXT       1   // Extended CAT support: remote button and screen control commands over CAT
-//#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd. 
+//#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812sps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
 #define VSS             1   // Supports Vss measurement (as s-meter option)
 #define TX_DELAY        1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
 #define KEY_CLICK       1   // Reduce key clicks by envelope shaping
 #define SEMI_QSK        1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
 //#define CW_FREQS_QRP  1   // Defaults to CW QRP   frequencies when changing bands
 //#define CW_FREQS_FISTS  1 // Defaults to CW FISTS frequencies when changing bands
-//#define ONEBUTTON     1   // Use single (encode) button to control full the rig
+//#define ONEBUTTON     1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
 //#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
+//#define F_MCU_16MHZ   1   // 16MHz ATMEGA328P crystal  (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal)
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -67,6 +68,19 @@
 
 #if (defined(CAT) || defined(TESTBENCH)) && !(OLED)
 #define _SERIAL  1       // Coexistence support for serial port and LCD on the same pins
+#endif
+
+#if(F_CPU != 16000000)
+   #error "Unsupported CPU clock frequency, use 16 MHz only."
+#endif
+#undef F_CPU
+#define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
+#ifdef F_MCU_16MHZ
+#define T_COR 1         // A 16MHz crystal is used: Arduino timing functions are NOT compensated; signal-processing functions below are running at degraded speed hence are compensated to deal with this degradation
+#define F_COR 1
+#else
+#define T_COR 5/4       // A 20MHz crystal is used: Arduino timing functions are compensated; signal-processing functions below are running at designed speed hence are NOT compensated
+#define F_COR 4/5
 #endif
 
 /*
@@ -158,7 +172,7 @@ void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 
 void loadWPM (int wpm) // Calculate new time constants based on wpm value
 {
-    ditTime = 1200/wpm * 5/4;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
+    ditTime = 1200/wpm * T_COR;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
 }
 //#endif //KEYER
 static uint8_t practice = false;  // Practice mode
@@ -1262,7 +1276,7 @@ public:
       ms(MS2,  fvcoa, fout, PLLA, 0, 0, rdiv);
       reset();
       ms(MS0,  fvcoa, fout, PLLA, 0, 0, rdiv);
-      delayMicroseconds(1000000UL/F_DEV * 5/4);  // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
+      delayMicroseconds(1000000UL/F_DEV * T_COR);  // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
       ms(MS1,  fvcoa, fout, PLLA, 0, 0, rdiv);
       oe(0b00000011);  // output enable CLK0, CLK1
 #endif
@@ -1640,13 +1654,6 @@ inline void set_lpf(uint8_t f){
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
-#if(F_CPU != 16000000)
-   #error "Unsupported CPU clock frequency, use 16 MHz only."
-#endif
-#undef F_CPU
-#define F_CPU 20007000   // myqcx1:20008440, myqcx2:20006000   // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
-//#define F_CPU F_XTAL   // in case ATMEGA328P clock is the same as SI5351 clock (ATMEGA clock tapped from SI crystal)
-
 #ifdef DEBUG
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
@@ -1684,7 +1691,12 @@ inline void _vox(bool trigger)
 
 //#define F_SAMP_TX 4402
 #define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
-#define _UA  (F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
+#ifdef F_MCU_16MHZ
+#define _F_SAMP_TX  3848  //(F_SAMP_TX * F_COR) =   // 3848
+#else
+#define _F_SAMP_TX  F_SAMP_TX
+#endif
+#define _UA  (_F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
 #define MAX_DP  ((filt == 0) ? _UA : (filt == 3) ? _UA/4 : _UA/2)     //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 #define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
@@ -1766,9 +1778,9 @@ inline int16_t ssb(int16_t in)
   }
 #endif
   if(mode == USB)
-    return dp * ( F_SAMP_TX / _UA); // calculate frequency-difference based on phase-difference
+    return dp * ( _F_SAMP_TX / _UA); // calculate frequency-difference based on phase-difference
   else
-    return dp * (-F_SAMP_TX / _UA);
+    return dp * (-_F_SAMP_TX / _UA);
 }
 
 #define MIC_ATTEN  0  // 0*6dB attenuation (note that the LSB bits are quite noisy)
@@ -1803,7 +1815,9 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
   si5351.freq_calc_fast(df);           // calculate SI5351 registers based on frequency shift and carrier frequency
   adc += ADC;
   ADCSRA |= (1 << ADSC);
-  _adc = (adc/4 - 512);
+  //_adc = (adc/4 - 512);
+#define AF_BIAS   32
+  _adc = (adc/4 - (512 - AF_BIAS));        // now make sure that we keep a postive bias offset (to prevent the phase swapping 180 degrees and potentially causing negative feedback (RFI)
 #else  // SSB with single ADC conversion:
   ADCSRA |= (1 << ADSC);    // start next ADC conversion (trigger ADC interrupt if ADIE flag is set)
   //OCR1BL = amp;                        // submit amplitude to PWM register (actually this is done in advance (about 140us) of phase-change, so that phase-delays in key-shaping circuit filter can settle)
@@ -1844,7 +1858,7 @@ inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam
 }
 
 // CW Key-click shaping, ramping up/down amplitude with sample-interval of 60us. Tnx: Yves HB9EWY https://groups.io/g/ucx/message/5107
-const uint8_t ramp[] = { 255, 254, 252, 249, 245, 239, 233, 226, 217, 208, 198, 187, 176, 164, 152, 139, 127, 115, 102, 90, 78, 67, 56, 46, 37, 28, 21, 15, 9, 5, 2 }; // raised-cosine(i) = 255 * sq(cos(HALF_PI * i/32))
+const uint8_t ramp[] PROGMEM = { 255, 254, 252, 249, 245, 239, 233, 226, 217, 208, 198, 187, 176, 164, 152, 139, 127, 115, 102, 90, 78, 67, 56, 46, 37, 28, 21, 15, 9, 5, 2 }; // raised-cosine(i) = 255 * sq(cos(HALF_PI * i/32))
 
 void dummy()
 {
@@ -1855,7 +1869,7 @@ void dsp_tx_cw()
 #ifdef KEY_CLICK
   if(OCR1BL < lut[255]) { //check if already ramped up: ramp up of amplitude 
      for(uint16_t i = 31; i != 0; i--) {   // soft rising slope against key-clicks
-        OCR1BL = lut[ramp[i]];
+        OCR1BL = lut[pgm_read_byte_near(ramp[i])];
         delayMicroseconds(60);
      }
   }
@@ -2532,6 +2546,7 @@ out=s2
 
 #define NEW_RX  1   // Faster (3rd-order) CIC stage, with simultanuous processing capability
 #ifdef NEW_RX
+#define AF_OUT  1   // Enables audio output stage (can be disabled in conjunction with CAT_STREAMING to safe memory)
 
 static uint8_t tc = 0;
 void process(int16_t i_ac2, int16_t q_ac2)
@@ -2540,24 +2555,25 @@ void process(int16_t i_ac2, int16_t q_ac2)
 #ifdef CAT_STREAMING
   //UCSR0B &= ~(TXCIE0);  // disable USART TX interrupts
   //while (!( UCSR0A & (1<<UDRE0)));  // wait for empty buffer
-  if(cat_streaming){ uint8_t out = ac3 + 128; if(out == ';') out++; Serial.write(out); } //UDR0 = (uint8_t)(ac3 + 128);   // from:  https://www.xanthium.in/how-to-avr-atmega328p-microcontroller-usart-uart-embedded-programming-avrgcc
-  // stty -F /dev/ttyUSB1 raw -echo -echoe -echoctl -echoke 115200;  cat /dev/ttyUSB1| aplay -r 7812 -c 1 -f U8 -B 1
-#else // CAT_STREAMING
+  if(cat_streaming){ uint8_t out = ac3 + 128; if(out == ';') out++; Serial.write(out); }  //UDR0 = (uint8_t)(ac3 + 128);   // from:  https://www.xanthium.in/how-to-avr-atmega328p-microcontroller-usart-uart-embedded-programming-avrgcc
+  // stty -F /dev/ttyUSB1 raw -echo -echoe -echoctl -echoke 115200; echo ";UA1;" > /dev/ttyUSB1; cat /dev/ttyUSB1| aplay -r 7812 -c 1 -f U8    (optionally to reduce latency with -B 1)
+#endif // CAT_STREAMING
+#ifdef AF_OUT
   static int16_t ozd1, ozd2;  // Output stage
   if(_init){ ac3 = 0; ozd1 = 0; ozd2 = 0; _init = 0; } // hack: on first sample init accumlators of further stages (to prevent instability)
   int16_t od1 = ac3 - ozd1; // Comb section
   ocomb = od1 - ozd2;
-#endif
+#endif //AF_OUT
 #define OUTLET  1
 #ifdef OUTLET
   if(tc++ == 0)   // prevent recursion
   //if(tc++ > 16)   // prevent recursion
 #endif
   interrupts();  // hack, since slow_dsp process exceeds rx sample-time, allow subsequent 7 interrupts for further rx sampling while processing, prevent nested interrupts with tc
-#ifndef CAT_STREAMING
+#ifdef AF_OUT
   ozd2 = od1;
   ozd1 = ac3;
-#endif
+#endif  //AF_OUT
   int16_t qh;
   {
     q_ac2 >>= att2;  // digital gain control
@@ -2617,14 +2633,14 @@ inline int16_t sdr_rx_common_q(){
 inline int16_t sdr_rx_common_i()
 {
   ADMUX = admux[1]; ADCSRA |= (1 << ADSC); int16_t adc = ADC - 511; 
-#ifndef CAT_STREAMING
+  static int16_t prev_adc;
+  int16_t ac = (prev_adc + adc) / 2; prev_adc = adc;
+#ifdef AF_OUT
   if(_init){ ocomb=0; ozi1 = 0; ozi2 = 0; } // hack
   ozi2 = ozi1 + ozi2;          // Integrator section
   ozi1 = ocomb + ozi1;
   OCR1AL = min(max((ozi2>>5) + 128, 0), 255);
-#endif
-  static int16_t prev_adc;
-  int16_t ac = (prev_adc + adc) / 2; prev_adc = adc;
+#endif // AF_OUT
   return ac;
 }
 
@@ -3177,6 +3193,7 @@ int analogSafeRead(uint8_t pin, bool ref1v1 = false)
   interrupts();
   return val;
 }
+
 /*
 uint16_t analogSafeRead(uint8_t adcpin, bool ref1v1 = false)
 {
@@ -3219,7 +3236,6 @@ volatile bool change = true;
 volatile int32_t freq = 7074000;
 static int32_t vfo[] = { 7074000, 14074000 };
 static uint8_t vfomode[] = { USB, USB };
-const char* vfosel_label[] = { "A", "B"/*, "Split"*/ };
 enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 volatile uint8_t vfosel = VFOA;
 volatile int16_t rit = 0;
@@ -3261,8 +3277,10 @@ float smeter(float ref = 0)
       lcd.setCursor(14, 0); if(mode == CW) lcd.print(wpm); lcd.print("  ");
     }
 #ifdef VSS
-    if(smode == 5){ // Supply-voltage indicator; add 120k resistor between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
-      uint16_t vss = analogSafeRead(BUTTONS, true) * (120/10) * 11 / 1024;
+    if(smode == 5){ // Supply-voltage indicator; add resistor Rvss (see below) between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
+#define Rgnd 10   //kOhm (PC3 to GND)
+#define Rvss 1000 //kOhm (PC3 to VSS)
+      uint16_t vss = analogSafeRead(BUTTONS, true) * (Rvss+Rgnd) * 11 / (Rgnd * 1024);
       lcd.setCursor(10, 0); lcd.print(vss/10); lcd.print('.'); lcd.print(vss%10); lcd.print("V ");
     }
 #endif
@@ -3320,7 +3338,7 @@ void switch_rxtx(uint8_t tx_enable){
 #endif //PTX
       lcd.setCursor(15, 1); lcd.print('D');  // note that this enables interrupts again.
       interrupts();    //hack.. to allow delay()
-      delay(txdelay * 5/4);
+      delay(txdelay * T_COR);
       noInterrupts();  //end of hack
     }
 #endif //TX_DELAY
@@ -3398,7 +3416,7 @@ void switch_rxtx(uint8_t tx_enable){
 #ifdef KEY_CLICK
       if(OCR1BL != 0) {
        for(uint16_t i = 0; i != 31; i++) {   // ramp down of amplitude: soft falling edge to prevent key clicks
-         OCR1BL = lut[ramp[i]];
+         OCR1BL = lut[pgm_read_byte_near(ramp[i])];
           delayMicroseconds(60);
        }
       }
@@ -3584,6 +3602,7 @@ void show_banner(){
   lcd.print('\x01'); lcd_blanks(); lcd_blanks();
 }
 
+const char* vfosel_label[] = { "A", "B"/*, "Split"*/ };
 const char* mode_label[5] = { "LSB", "USB", "CW ", "FM ", "AM " };
 
 inline void display_vfo(int32_t f){
@@ -3603,7 +3622,7 @@ inline void display_vfo(int32_t f){
     if(scale == (int32_t)1e3 || scale == (int32_t)1e6) lcd.print(',');  // Thousands separator
   }
   
-  lcd.print(' '); lcd.print(mode_label[mode]); lcd_blanks();
+  lcd.print(' '); lcd.print(mode_label[mode]); lcd.print(' ');
   lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 }
 
@@ -3704,8 +3723,23 @@ static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:   
 #endif
 
 const char* offon_label[2] = {"OFF", "ON"};
+#ifdef F_MCU_16MHZ
 const char* filt_label[N_FILT+1] = { "Full", "3000", "2400", "1800", "500", "200", "100", "50" };
+#else
+const char* filt_label[N_FILT+1] = { "Full", "2400", "2000", "1500", "500", "200", "100", "50" };
+#endif
 const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
+const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
+const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
+#ifdef VSS
+const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss" };
+#else
+const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm" };
+#endif
+const char* cw_tone_label[] = { "700", "600" };
+#ifdef KEYER
+const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
+#endif
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
@@ -3713,7 +3747,7 @@ const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, TXDELAY, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3723,17 +3757,6 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   }
   if(id == ALL) for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
   
-  const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
-  const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
-#ifdef VSS
-  const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss" };
-#else
-  const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm" };
-#endif
-  const char* cw_tone_label[] = { "700", "600" };
-#ifdef KEYER
-  const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
-#endif
   switch(id){    // Visible parameters
     case VOLUME:  paramAction(action, volume, 0x11, F("Volume"), NULL, -1, 16, false); break;
     case MODE:    paramAction(action, mode, 0x12, F("Mode"), mode_label, 0, _N(mode_label) - 1, false); break;
@@ -3765,16 +3788,16 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #endif
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("Noise Gate"), NULL, 0, 255, false); break;
-#ifdef MOX_ENABLE
-    case MOX:     paramAction(action, mox, 0x33, F("MOX"), NULL, 0, 2, false); break;
-#endif
-    case DRIVE:   paramAction(action, drive, 0x34, F("TX Drive"), NULL, 0, 8, false); break;
+    case DRIVE:   paramAction(action, drive, 0x33, F("TX Drive"), NULL, 0, 8, false); break;
 #ifdef TX_DELAY
-    case TXDELAY: paramAction(action, txdelay, 0x35, F("TX Delay"), NULL, 0, 255, false); break;
+    case TXDELAY: paramAction(action, txdelay, 0x34, F("TX Delay"), NULL, 0, 255, false); break;
 #endif
-    case SIFXTAL: paramAction(action, si5351.fxtal, 0x81, F("Ref freq"), NULL, 14000000, 28000000, false); break;
-    case PWM_MIN: paramAction(action, pwm_min, 0x82, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
-    case PWM_MAX: paramAction(action, pwm_max, 0x83, F("PA Bias max"), NULL, pwm_min, 255, false); break;
+#ifdef MOX_ENABLE
+    case MOX:     paramAction(action, mox, 0x35, F("MOX"), NULL, 0, 2, false); break;
+#endif
+    case PWM_MIN: paramAction(action, pwm_min, 0x81, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
+    case PWM_MAX: paramAction(action, pwm_max, 0x82, F("PA Bias max"), NULL, pwm_min, 255, false); break;
+    case SIFXTAL: paramAction(action, si5351.fxtal, 0x83, F("Ref freq"), NULL, 14000000, 28000000, false); break;
     case IQ_ADJ:  paramAction(action, rx_ph_q, 0x84, F("IQ Phase"), NULL, 0, 180, false); break;
 #ifdef CAL_IQ
     case CALIB:   if(dsp_cap != SDR) paramAction(action, cal_iq_dummy, 0x85, F("IQ Test/Cal."), NULL, 0, 0, false); break;
@@ -3819,8 +3842,8 @@ void initPins(){
   pinMode(BUTTONS, INPUT);  // L/R/rotary button
 #endif
   pinMode(DIT, INPUT_PULLUP);
-  //pinMode(DAH, INPUT);  
-  pinMode(DAH, INPUT_PULLUP); // Could this replace D4?
+  pinMode(DAH, INPUT);  // pull-up DAH 10k via AVCC
+  //pinMode(DAH, INPUT_PULLUP); // Could this replace D4? But leaks noisy VCC into mic input!
 
   digitalWrite(AUDIO1, LOW);  // when used as output, help can mute RX leakage into AREF
   digitalWrite(AUDIO2, LOW);
@@ -3835,6 +3858,10 @@ void initPins(){
   digitalWrite(PTX, LOW);
   pinMode(PTX, OUTPUT);
 #endif //PTX
+#ifdef OLED  // assign unused LCD pins
+  pinMode(PD4, OUTPUT);
+  pinMode(PD5, OUTPUT);
+#endif
 }
 
 #ifdef CAT
@@ -3911,6 +3938,14 @@ void analyseCATcmd()
   else if((CATcmd[0] == 'V') && (CATcmd[1] == 'X') && (CATcmd[2] != ';'))
     Command_VX(CATcmd[2]);
 
+/*
+The following CAT extensions are available to support remote operatons. Use a baudrate of 115200 when enabling CAT_STREAMING config switch:
+
+UA1;  enable audio streaming; an 8-bit audio stream nnn at 4812 samples/s is then sent within CAT response USnnn; here nnn is of undefined length, it will end as soon other CAT requests are processed and resume with a new USnnn; response
+UA0;  disable audio streaming
+UD;   requests display contents
+UKnn; control keys, where nn is a sum of the following hexadecimal values: 0x80 encoder left, 0x40 encoder right, 0x20 DIT/PTT, 0x10 DAH, 0x04 left-button, 0x02 encoder button, 0x01 right button
+*/
 #ifdef CAT_EXT
   else if((CATcmd[0] == 'U') && (CATcmd[1] == 'K') && (CATcmd[4] == ';'))  // remote key press
     Command_UK(CATcmd[2], CATcmd[3]);
@@ -3918,15 +3953,6 @@ void analyseCATcmd()
   else if((CATcmd[0] == 'U') && (CATcmd[1] == 'D') && (CATcmd[2] == ';'))  // display contents
     Command_UD();
 #endif //CAT_EXT
-
-/*
-The following CAT extensions are available remote operatons. Use a baudrate of 115200:
-
-UA1;  disable audio streaming
-UA0;  disable audio streaming
-UD;   request display contents
-UKnn; control keys, where nn is a sum of the following hexadecimal values: 0x80 encoder left, 0x40 encoder right, 0x20 DIT/PTT, 0x10 DAH, 0x04 left-button, 0x02 encoder button, 0x01 right button
- */
 
 #ifdef CAT_STREAMING
   else if((CATcmd[0] == 'U') && (CATcmd[1] == 'A') && (CATcmd[3] == ';'))  // audio streaming enable/disable
@@ -3973,8 +3999,8 @@ void serialEvent(){
 void Command_UK(char k1, char k2)
 {
   cat_key = ((k1 - '0') << 4) | (k2 - '0');
-  if(cat_key&0x40) encoder_val--;
-  if(cat_key&0x80) encoder_val++;
+  if(cat_key & 0x40){ encoder_val--; cat_key &= 0x3f; }
+  if(cat_key & 0x80){ encoder_val++; cat_key &= 0x3f; }
   char Catbuffer[16];
   sprintf(Catbuffer, "UK%c%c;", k1, k2);
   Serial.print(Catbuffer);
@@ -4274,7 +4300,8 @@ void setup()
   digitalWrite(DAH, HIGH);
   v2 = analogRead(DVM);
   digitalWrite(DAH, LOW);
-  pinMode(DAH, INPUT_PULLUP);
+  //pinMode(DAH, INPUT_PULLUP);
+  pinMode(DAH, INPUT);
   ssb_cap = (abs(v2 - v1) > (0.05 * 1024.0 / 5.0));  // SSB capability?
 
   //ssb_cap = 0; dsp_cap = ANALOG;  // force standard QCX capability
@@ -4415,7 +4442,7 @@ void setup()
   if(dsp_cap == DSP) volume = 10;
   if(!dsp_cap) cw_tone = 2;   // use internal 700Hz QCX filter, so use same offset and keyer tone
 #endif //QCX
-  cw_offset = tones[cw_tone];
+  cw_offset = tones[cw_tone] * F_COR;
   //freq = bands[band];
   
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
@@ -4451,7 +4478,7 @@ void setup()
 #else
   #define BAUD   38400            //38400 //115200 //4800 //Baudrate used for serial communications (CAT, TESTBENCH)
 #endif
-  Serial.begin(BAUD*4/5); // corrected for F_CPU=20M
+  Serial.begin(BAUD * F_COR); // corrected for F_CPU=20M
   Command_IF();
 #if !defined(OLED) && defined(TESTBENCH)
    smode = 0;  // In case of LCD, turn of smeter
@@ -4483,7 +4510,7 @@ void loop()
     if(!vox_tx){ // VOX not active
 #ifdef MULTI_ADC
       if(vox_sample++ == 16){  // take N sample, then process
-        ssb(((int16_t)(vox_adc/16) - 512) >> MIC_ATTEN);   // sampling mic
+        ssb(((int16_t)(vox_adc/16) - (512 - AF_BIAS)) >> MIC_ATTEN);   // sampling mic
         vox_sample = 0;
         vox_adc = 0;
       } else {
@@ -4646,11 +4673,14 @@ void loop()
       }
       for(; inv ^ _digitalRead(BUTTONS);){ // until released, or encoder is turned while longpress
         if(encoder_val && event == PL){ event = PT; break; }
+#ifdef ONEBUTTON
+        if(event == PL) break;  // do not lock on longpress, so that L and R buttons can be used for tuning
+#endif
         wdt_reset();
       }  // Max. voltages at ADC3 for buttons L,R,E: 3.76V;4.55V;5V, thresholds are in center
       event |= (v < (4.2 * 1024.0 / 5.0)) ? BL : (v < (4.8 * 1024.0 / 5.0)) ? BR : BE; // determine which button pressed based on threshold levels
     } else {  // hack: fast forward handling
-      event = (event&0xf0) | ((encoder_val) ? PT : PLC/*PL*/);  // only alternate bewteen push-long/turn when applicable
+      event = (event&0xf0) | ((encoder_val) ? PT : PLC/*PL*/);  // only alternate between push-long/turn when applicable
     }
     switch(event){
 #ifndef ONEBUTTON
@@ -4848,8 +4878,19 @@ void loop()
         menumode = 1;
         //if(menu == 0) menu = 1;
         break;
+      case BL|SC:
+      case BL|DC:
+      case BL|PL:
+      case BL|PLC:
+        encoder_val++;
+        break;
+      case BR|SC:
+      case BR|DC:
+      case BR|PL:
+      case BR|PLC:
+        encoder_val--;
+        break;
 #endif //ONEBUTTON
-
     }
   } else event = 0;  // no button pressed: reset event
 
@@ -4919,7 +4960,7 @@ void loop()
           build_lut();
         }
         if(menu == CWTONE){
-          if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] : tones[1]; paramAction(SAVE, CWOFF); }
+          if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] * F_COR : tones[1] * F_COR; paramAction(SAVE, CWOFF); }
         }
         if(menu == IQ_ADJ){
           change = true;
@@ -4948,7 +4989,7 @@ void loop()
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate
         numSamples = 0;
-        delay(500 * 5/4);     // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply wqith 1.25)
+        delay(500 * T_COR);     // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
         sr = numSamples * 2;   // samples per second
         paramAction(UPDATE_MENU, menu); // refresh
       }
@@ -5080,5 +5121,53 @@ block ptt while in vox mode
 
 adc bias error and potential error correction
 noise burst on tx
+
+---
+https://groups.io/g/ucx/topic/81030243#6265  :
+line 12: //#define CAT             1   // GNI blocked, CAT-interface
+line 15: #define F_XTAL 25000373   // GNI changed, 25MHz SI5351 crystal  (enable for 25MHz TCXO)
+line 38: #define SIG_OUT 13        //GNI swaped PB3    (pin 17)   (pin 15 nano D11) nc
+line 40: #define DIT     11        //GNI swaped PB5    (pin 19)   (pin 17 nano D13) PTT
+(because of resistor with LED connected to D13 on Nano module)
+remove unnecessary menu options (2.4, 2.5, 2.6, 2.7, 2.8, 3.1, 3.4, 3.5, 8.2, 8.3).
+
+---
+https://groups.io/g/ucx/message/6262
+
+#ifdef SWR_METER
+if(mode == CW && tx) readSWR();
+#endif
+
+#ifdef SWR_METER
+void readSWR()
+{
+float v_FWD = 0;
+float v_REV = 0;
+for (int i = 0; i <= 7; i++) {
+v_FWD = v_FWD + (ref_V / 1023) * analogSafeRead(vin_FWD);
+v_REV = v_REV + (ref_V / 1023) * analogSafeRead(vin_REV);
+delay(5);
+}
+v_FWD = v_FWD / 8;
+v_REV = v_REV / 8;
+float p_FWD = sq(v_FWD);
+float p_REV = sq(v_REV);
+
+float vRatio = v_REV / v_FWD;
+float VSWR = (1 + vRatio) / (1 - vRatio);
+
+if ((VSWR > 9.99) || (VSWR < 1) )VSWR = 9.99;
+
+//if (1) {
+if (p_FWD != FWD || VSWR != SWR) {
+lcd.noCursor();
+lcd.setCursor(0,0);
+lcd.print(floor(100*p_FWD)/100); lcd.print("W SWR:"); lcd.print(floor(100*VSWR)/100);
+FWD = p_FWD;
+SWR = VSWR;
+}
+}
+#endif
+
 
 */
