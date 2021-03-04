@@ -75,13 +75,6 @@
 #endif
 #undef F_CPU
 #define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
-#ifdef F_MCU_16MHZ
-#define T_COR 1         // A 16MHz crystal is used: Arduino timing functions are NOT compensated; signal-processing functions below are running at degraded speed hence are compensated to deal with this degradation
-#define F_COR 1
-#else
-#define T_COR 5/4       // A 20MHz crystal is used: Arduino timing functions are compensated; signal-processing functions below are running at designed speed hence are NOT compensated
-#define F_COR 4/5
-#endif
 
 /*
 // UCX installation: On blank chip, use (standard Arduino Uno) fuse settings (E:FD, H:DE, L:FF), and use customized Optiboot bootloader for 20MHz clock, then upload via serial interface (with RX, TX and DTR lines connected to pin 1, 2, 3 respectively)
@@ -172,7 +165,11 @@ void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 
 void loadWPM (int wpm) // Calculate new time constants based on wpm value
 {
-    ditTime = 1200/wpm * T_COR;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
+#ifdef F_MCU_16MHZ
+  ditTime = 1200/wpm;         //ditTime = 1200/wpm;
+#else
+  ditTime = 1200/wpm * 5/4;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
+#endif
 }
 //#endif //KEYER
 static uint8_t practice = false;  // Practice mode
@@ -1276,7 +1273,11 @@ public:
       ms(MS2,  fvcoa, fout, PLLA, 0, 0, rdiv);
       reset();
       ms(MS0,  fvcoa, fout, PLLA, 0, 0, rdiv);
-      delayMicroseconds(1000000UL/F_DEV * T_COR);  // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
+#ifdef F_MCU_16MHZ
+      delayMicroseconds(1000000UL/F_DEV);        // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
+#else
+      delayMicroseconds(1000000UL/F_DEV * 5/4);  // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
+#endif
       ms(MS1,  fvcoa, fout, PLLA, 0, 0, rdiv);
       oe(0b00000011);  // output enable CLK0, CLK1
 #endif
@@ -1692,7 +1693,7 @@ inline void _vox(bool trigger)
 //#define F_SAMP_TX 4402
 #define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #ifdef F_MCU_16MHZ
-#define _F_SAMP_TX  3848  //(F_SAMP_TX * F_COR) =   // 3848
+#define _F_SAMP_TX  3848  //(F_SAMP_TX * 4/5) =   // 3848
 #else
 #define _F_SAMP_TX  F_SAMP_TX
 #endif
@@ -1846,13 +1847,17 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 volatile uint16_t acc;
 volatile uint32_t cw_offset;
 volatile uint8_t cw_tone = 1;
+#ifdef F_MCU_16MHZ
+const uint32_t tones[] = {700 * 4/5, 600 * 4/5, 700 * 4/5};
+#else
 const uint32_t tones[] = {700, 600, 700};
+#endif
 
 volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
 volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
 inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam.ac.uk/~am21/hakmemc.html, ITEM 149]: p_sin+=n_cos*2*PI*f/fs; n_cos-=p_sin*2*PI*f/fs;
 {
-  uint8_t alpha100 = tones[cw_tone]/*cw_offset*/ * 628 / F_SAMP_TX;  // alpha = f_tone * 2 * pi / fs
+  uint8_t alpha100 = tones[cw_tone]/*cw_offset*/ * 628 / _F_SAMP_TX;  // alpha = f_tone * 2 * pi / fs
   p_sin += alpha100 * n_cos / 100;
   n_cos -= alpha100 * p_sin / 100;
 }
@@ -3338,7 +3343,11 @@ void switch_rxtx(uint8_t tx_enable){
 #endif //PTX
       lcd.setCursor(15, 1); lcd.print('D');  // note that this enables interrupts again.
       interrupts();    //hack.. to allow delay()
-      delay(txdelay * T_COR);
+#ifdef F_MCU_16MHZ
+      delay(txdelay);
+#else
+      delay(txdelay * 5/4);
+#endif
       noInterrupts();  //end of hack
     }
 #endif //TX_DELAY
@@ -4442,7 +4451,7 @@ void setup()
   if(dsp_cap == DSP) volume = 10;
   if(!dsp_cap) cw_tone = 2;   // use internal 700Hz QCX filter, so use same offset and keyer tone
 #endif //QCX
-  cw_offset = tones[cw_tone] * F_COR;
+  cw_offset = tones[cw_tone];
   //freq = bands[band];
   
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
@@ -4478,7 +4487,11 @@ void setup()
 #else
   #define BAUD   38400            //38400 //115200 //4800 //Baudrate used for serial communications (CAT, TESTBENCH)
 #endif
-  Serial.begin(BAUD * F_COR); // corrected for F_CPU=20M
+#ifdef F_MCU_16MHZ
+  Serial.begin(BAUD);
+#else
+  Serial.begin(BAUD * 4/5); // corrected for F_CPU=20M
+#endif
   Command_IF();
 #if !defined(OLED) && defined(TESTBENCH)
    smode = 0;  // In case of LCD, turn of smeter
@@ -4960,7 +4973,7 @@ void loop()
           build_lut();
         }
         if(menu == CWTONE){
-          if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] * F_COR : tones[1] * F_COR; paramAction(SAVE, CWOFF); }
+          if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] : tones[1]; paramAction(SAVE, CWOFF); }
         }
         if(menu == IQ_ADJ){
           change = true;
@@ -4989,7 +5002,11 @@ void loop()
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate
         numSamples = 0;
-        delay(500 * T_COR);     // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
+#ifdef F_MCU_16MHZ
+        delay(500);         // delay 0.5s
+#else
+        delay(500 * 5/4); // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
+#endif
         sr = numSamples * 2;   // samples per second
         paramAction(UPDATE_MENU, menu); // refresh
       }
