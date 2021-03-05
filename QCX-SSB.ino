@@ -33,6 +33,7 @@
 //#define ONEBUTTON     1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
 //#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
 //#define F_MCU_16MHZ   1   // 16MHz ATMEGA328P crystal  (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal)
+//#define SWR_METER       1
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -75,6 +76,16 @@
 #endif
 #undef F_CPU
 #define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
+
+
+#ifdef SWR_METER
+float FWD;
+float SWR;
+float ref_V = 5 * 1.15;
+static uint32_t stimer;
+#define vin_FWD  A6
+#define vin_REF  A7
+#endif
 
 /*
 // UCX installation: On blank chip, use (standard Arduino Uno) fuse settings (E:FD, H:DE, L:FF), and use customized Optiboot bootloader for 20MHz clock, then upload via serial interface (with RX, TX and DTR lines connected to pin 1, 2, 3 respectively)
@@ -1916,6 +1927,9 @@ void dsp_tx_fm()
 #define MLEA(y, x, L, M)  (y)  = (y) + ((((x) - (y)) >> (L)) - (((x) - (y)) >> (M))); // multiplierless exponental averaging [Lyons 13.33.1], with alpha=1/2^L - 1/2^M
 
 volatile uint8_t cwdec = 1;
+#ifdef SWR_METER
+volatile uint8_t swrmeter = 1;
+#endif
 static int32_t avg = 256;
 static uint8_t sym;
 const char m2c[] PROGMEM = "~ ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
@@ -3455,6 +3469,9 @@ void switch_rxtx(uint8_t tx_enable){
 #endif //PTX
       }
       si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
+#ifdef SWR_METER
+      if(swrmeter > 0) { show_banner(); lcd.print("                "); }
+#endif
       lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 #ifdef _SERIAL
       if(!vox) if(cat_active){ DDRC |= (1<<2); } // enable PC2, so that ADC2 is pulled-down so that CAT TX is not disrupted via mic input
@@ -3745,6 +3762,9 @@ const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss" };
 #else
 const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm" };
 #endif
+#ifdef SWR_METER
+const char* swr_label[] = { "OFF", "FWD-SWR", "FWD-REF", "VFWD-VREF" };
+#endif
 const char* cw_tone_label[] = { "700", "600" };
 #ifdef KEYER
 const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
@@ -3756,7 +3776,7 @@ const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, MOX, DRIVE, TXDELAY, SIFXTAL, PWM_MIN, PWM_MAX, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3780,6 +3800,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case ATT2:    paramAction(action, att2, 0x1B, F("ATT2"), NULL, 0, 16, false); break;
     case SMETER:  paramAction(action, smode, 0x1C, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
+#ifdef SWR_METER
+    case SWRMETER:  paramAction(action, swrmeter, 0x1D, F("SWR Meter"), swr_label, 0, _N(swr_label) - 1, false); break;
+#endif
 #ifdef FILTER_700HZ
     case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
 #endif
@@ -3867,6 +3890,10 @@ void initPins(){
   digitalWrite(PTX, LOW);
   pinMode(PTX, OUTPUT);
 #endif //PTX
+#ifdef SWR_METER
+  pinMode(vin_FWD, INPUT);
+  pinMode(vin_REF, INPUT);
+#endif
 #ifdef OLED  // assign unused LCD pins
   pinMode(PD4, OUTPUT);
   pinMode(PD5, OUTPUT);
@@ -4216,6 +4243,48 @@ void build_lut()
     //lut[i] = min(pwm_max, (float)106*log(i) + pwm_min);  // compressed microphone output: drive=0, pwm_min=115, pwm_max=220
 }
 
+#ifdef SWR_METER
+void readSWR()
+// reads FWD / REF values from A6 and A7 and computes SWR
+// credit Duwayne, KV4QB
+{
+  float v_FWD = 0;
+  float v_REF = 0;
+  for (int i = 0; i <= 7; i++) {
+    v_FWD = v_FWD + (ref_V / 1023) * (int) analogRead(vin_FWD);
+    v_REF = v_REF + (ref_V / 1023) * (int) analogRead(vin_REF);
+    delay(5);
+  }
+  v_FWD = v_FWD / 8;
+  v_REF = v_REF / 8;
+
+  float p_FWD = sq(v_FWD);
+  float p_REV = sq(v_REF);
+
+  float vRatio = v_REF / v_FWD;
+  float VSWR = (1 + vRatio) / (1 - vRatio);
+
+  if ((VSWR > 9.99) || (VSWR < 1) )VSWR = 9.99;
+
+  if (p_FWD != FWD || VSWR != SWR) {
+      lcd.noCursor();
+      lcd.setCursor(0,0);
+      switch(swrmeter) {
+        case 1:
+          lcd.print(" "); lcd.print(floor(100*p_FWD)/100); lcd.print("W  SWR:"); lcd.print(floor(100*VSWR)/100);
+          break;
+        case 2:
+          lcd.print(" F:"); lcd.print(floor(100*p_FWD)/100); lcd.print("W R:"); lcd.print(floor(100*p_REV)/100); lcd.print("W");
+          break;
+        case 3:
+          lcd.print(" F:"); lcd.print(floor(100*v_FWD)/100); lcd.print("V R:"); lcd.print(floor(100*v_REF)/100); lcd.print("V");
+          break;
+      }
+    FWD = p_FWD;
+    SWR = VSWR;
+  }
+}
+#endif
 void setup()
 {
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
@@ -4656,6 +4725,9 @@ void loop()
     for(; !_digitalRead(DIT) ;){ // until released
 #endif
       wdt_reset();
+#ifdef SWR_METER
+      if(smeter > 0 && mode == CW && millis() >= stimer) { readSWR(); stimer = millis() + 500; }
+#endif
       if(inv ^ _digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
     }
     switch_rxtx(0);
