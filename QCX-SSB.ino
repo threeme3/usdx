@@ -77,7 +77,7 @@
 #endif
 
 #if(F_CPU != 16000000)
-   #error "Unsupported CPU clock frequency, use 16 MHz only."
+   #error "Compilation settings must specify a 16 MHz CPU clock setting only."
 #endif
 #undef F_CPU
 #define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
@@ -3367,9 +3367,9 @@ void switch_rxtx(uint8_t tx_enable){
   delayMicroseconds(20); // wait until potential RX interrupt is finalized
   noInterrupts();
 #ifdef TX_DELAY
-#ifdef SEMI_QSK
-  if(!(semi_qsk_timeout))
-#endif
+//#ifdef SEMI_QSK
+//  if(!(semi_qsk_timeout))
+//#endif
     if((txdelay) && (tx_enable) && (!(tx)) && (!(practice))){  // key-up TX relay in advance before actual transmission
       digitalWrite(RX, LOW); // TX (disable RX)
 #ifdef NTX
@@ -4012,6 +4012,43 @@ UA1;  enable audio streaming; an 8-bit audio stream nnn at 4812 samples/s is the
 UA0;  disable audio streaming
 UD;   requests display contents
 UKnn; control keys, where nn is a sum of the following hexadecimal values: 0x80 encoder left, 0x40 encoder right, 0x20 DIT/PTT, 0x10 DAH, 0x04 left-button, 0x02 encoder button, 0x01 right button
+
+
+The following Linux script may be useful to stream audio over CAT, play the audio and redirect CAT to /tmp/ttyS0:
+
+1. Pre-requisite installation: sudo apt-get install socat
+
+2. Insert USB serial converter (/dev/ttyUSB0) and start:
+
+stty -F /dev/ttyUSB0 raw -echo -echoe -echoctl -echoke 115200; echo ";UA1;" > /dev/ttyUSB0
+
+socat -d -d pty,link=/tmp/ttyS0,echo=0,ignoreeof,b115200,raw,perm=0777 pty,link=/tmp/ttyS1,echo=0,ignoreeof,b115200,raw,perm=0777 &
+
+cat /tmp/ttyS1 > /dev/ttyUSB0 &
+
+cat /dev/ttyUSB0 | while IFS= read -n1 c; do
+  case $state in
+  0) if [ "$c" = ";" ]; then state=1; fi; printf "%s" "$c">>/tmp/ttyS1;
+     ;;
+  1) if [ "$c" = "U" ]; then state=2; else printf "%s" "$c">>/tmp/ttyS1; state=0; fi;
+     ;;
+  2) if [ "$c" = "S" ]; then state=3; else printf "U%s" "$c">>/tmp/ttyS1; state=0; fi;
+     ;;
+  3) if [ "$c" = ";" ]; then state=1; else printf "%s" "$c"; fi;
+     ;;
+  *) state=3;
+     ;;
+  esac
+done | aplay -r 7812 -c 1 -f U8 -B0    # pacat --rate=7812 --channels=1 --format=u8
+
+3. Now audio should be audible, and your favorite digimode/logbook application can be started, use /tmp/ttyS0 as CAT port.
+
+4. Instead of step 3, you could visualize uSDX console:
+
+cat /tmp/ttyS0 | while IFS= read -d \; c; do echo "${c}" |sed -E  's/^UD..(.+)$|^[^U][^D](.*)$/\1/g'| sed -E 's/^(.{16})(.+)$/\x1B[;1H\x1B[1m\x1B[44m\x1B[97m\1\x1B[0m\x1B[K\n\x1B[1m\x1B[44m\x1B[97m\2\x1B[0m\x1B[K\n\x1B[K\n\x1B[K/g'; done
+
+watch -n1 'echo ";UD;UD;" > /dev/ttyUSB0'    # in another console
+
 */
 #ifdef CAT_EXT
   else if((CATcmd[0] == 'U') && (CATcmd[1] == 'K') && (CATcmd[4] == ';'))  // remote key press
@@ -4050,9 +4087,10 @@ void serialEvent(){
       if(!cat_active){ cat_active = 1; smode = 0;} // disable smeter to reduce display activity
 #endif
 #ifdef CAT_STREAMING
-      if(cat_streaming){ cat_streaming = false; Serial.print(';'); }   // terminate CAT stream
+      if(cat_streaming){ noInterrupts(); cat_streaming = false; Serial.print(';'); }   // terminate CAT stream
       analyseCATcmd();   // process CAT cmd
       if(_cat_streaming){ Serial.print("US"); cat_streaming = true; }  // resume CAT stream
+      interrupts();
 #else
       analyseCATcmd();
 #endif // CAT_STREAMING
@@ -4208,6 +4246,7 @@ void Command_RX()
 {
 #ifdef TX_ENABLE
   switch_rxtx(0);
+  semi_qsk_timeout = 0;  // hack: fix for multiple RX cmds
 #endif
   Serial.print("RX0;");
 }
