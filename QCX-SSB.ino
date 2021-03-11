@@ -6,7 +6,7 @@
 
 #define VERSION   "1.02o"
 
-// Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. DEBUG, CAT, DIAG, KEYER
+// Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG            1   // Hardware diagnostics on startup (only disable when your rig is working)
 #define KEYER           1   // CW keyer
 #define CAT             1   // CAT-interface
@@ -16,23 +16,28 @@
 //#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
 //#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
-//#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
-//#define TESTBENCH     1
-//#define LPF_SWITCHING_DL2MAN_USDX_REV3       1   // Enable 8-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
-#define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+#define LPF_SWITCHING_DL2MAN_USDX_REV3         1   // Enable 8-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
+//#define LPF_SWITCHING_DL2MAN_USDX_REV2       1   // Enable 5-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable 5-band filter bank switching: latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV1       1   // Enable 3-band filter bank switching: latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+
+// Advanced configuration switches
 //#define CAT_EXT       1   // Extended CAT support: remote button and screen control commands over CAT
 //#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812sps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
-#define VSS             1   // Supports Vss measurement (as s-meter option)
+#define TX_ENABLE       1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
 #define TX_DELAY        1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
 #define KEY_CLICK       1   // Reduce key clicks by envelope shaping
 #define SEMI_QSK        1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
+#define RIT_ENABLE      1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
+#define VOX_ENABLE      1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
+//#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
+//#define VSS_METER     1   // Supports Vss measurement (as s-meter option)
 //#define CW_FREQS_QRP  1   // Defaults to CW QRP   frequencies when changing bands
 //#define CW_FREQS_FISTS  1 // Defaults to CW FISTS frequencies when changing bands
 //#define ONEBUTTON     1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
-//#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
 //#define F_MCU_16MHZ   1   // 16MHz ATMEGA328P crystal  (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal)
+//#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
+//#define TESTBENCH     1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -75,6 +80,15 @@
 #endif
 #undef F_CPU
 #define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
+
+#ifndef TX_ENABLE
+#undef KEYER
+#undef TX_DELAY
+#undef SEMI_QSK
+#undef RIT_ENABLE
+#undef VOX_ENABLE
+#undef MOX_ENABLE
+#endif //!TX_ENABLE
 
 /*
 // UCX installation: On blank chip, use (standard Arduino Uno) fuse settings (E:FD, H:DE, L:FF), and use customized Optiboot bootloader for 20MHz clock, then upload via serial interface (with RX, TX and DTR lines connected to pin 1, 2, 3 respectively)
@@ -350,22 +364,27 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
   };
 };
 */
+
+//#define OLED_I2C_DIRECT_IO    1 // Enables I2C OLED communications that is not using the standard I/O pull-down approach with pull-up resistors, instead I/O is directly driven with 0V/5V
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
 class I2C_ {
 public:
   #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
   #define _I2C_SDA (1<<2) // PD2
   #define _I2C_SCL (1<<3) // PD3
-  //#define _I2C_INIT() _I2C_SDA_HI(); _I2C_SCL_HI(); DDRD |= (_I2C_SDA | _I2C_SCL);  // direct I/O (no need for pull-ups)
-  //#define _I2C_SDA_HI() PORTD |=  _I2C_SDA; _DELAY();
-  //#define _I2C_SDA_LO() PORTD &= ~_I2C_SDA; _DELAY();
-  //#define _I2C_SCL_HI() PORTD |=  _I2C_SCL; _DELAY();
-  //#define _I2C_SCL_LO() PORTD &= ~_I2C_SCL; _DELAY();
-  #define _I2C_INIT()   PORTD &= ~_I2C_SDA; PORTD &= ~_I2C_SCL;_I2C_SDA_HI(); _I2C_SCL_HI();  // open-drain
+#ifdef OLED_I2C_DIRECT_IO
+  #define _I2C_INIT() _I2C_SDA_HI(); _I2C_SCL_HI(); DDRD |= (_I2C_SDA | _I2C_SCL);  // direct I/O (no need for pull-ups)
+  #define _I2C_SDA_HI() PORTD |=  _I2C_SDA; _DELAY();
+  #define _I2C_SDA_LO() PORTD &= ~_I2C_SDA; _DELAY();
+  #define _I2C_SCL_HI() PORTD |=  _I2C_SCL; _DELAY();
+  #define _I2C_SCL_LO() PORTD &= ~_I2C_SCL; _DELAY();
+#else // !OLED_I2C_DIRECT_IO
+  #define _I2C_INIT()   PORTD &= ~_I2C_SDA; PORTD &= ~_I2C_SCL; _I2C_SDA_HI(); _I2C_SCL_HI();  // open-drain
   #define _I2C_SDA_HI() DDRD &= ~_I2C_SDA; _DELAY();
   #define _I2C_SDA_LO() DDRD |=  _I2C_SDA; _DELAY();
   #define _I2C_SCL_HI() DDRD &= ~_I2C_SCL; _DELAY();
   #define _I2C_SCL_LO() DDRD |=  _I2C_SCL; _DELAY();
+#endif // !OLED_I2C_DIRECT_IO
   #define _I2C_START() _I2C_SDA_LO(); _I2C_SCL_LO(); _I2C_SDA_HI();
   #define _I2C_STOP()  _I2C_SCL_HI(); _I2C_SDA_HI();
   #define _I2C_SUSPEND() //_I2C_SDA_LO(); // SDA_LO to allow re-use as output port
@@ -781,6 +800,7 @@ const uint8_t font[]PROGMEM = {
 
 #define BRIGHT  1
 //#define CONDENSED 1
+//#define INVERSE  1
 static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence
 //  0xAE,     // Display OFF (sleep mode)
     0x20, 0b10,   // Set Memory Addressing Mode
@@ -797,7 +817,11 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
   0x81, 32,   // Set contrast control register
 #endif
   0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
+#ifdef INVERSE 1
+   0xA7,     // Set display mode. A6=Normal; A7=Inverse
+#else
    0xA6,     // Set display mode. A6=Normal; A7=Inverse
+#endif
   0xA8, 0x1F,   // Set multiplex ratio(1 to 64)
    0xA4,     // Output RAM to Display
           // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
@@ -1693,7 +1717,7 @@ inline void _vox(bool trigger)
 //#define F_SAMP_TX 4402
 #define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #ifdef F_MCU_16MHZ
-#define _F_SAMP_TX  3848  //(F_SAMP_TX * 4/5) =   // 3848
+#define _F_SAMP_TX  3848      //(F_SAMP_TX * 4/5) = 3848
 #else
 #define _F_SAMP_TX  F_SAMP_TX
 #endif
@@ -1850,7 +1874,7 @@ volatile uint8_t cw_tone = 1;
 #ifdef F_MCU_16MHZ
 const uint32_t tones[] = {700 * 4/5, 600 * 4/5, 700 * 4/5};
 #else
-const uint32_t tones[] = {700, 600, 700};
+ const uint32_t tones[] = {700, 600, 700};
 #endif
 
 volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
@@ -3281,7 +3305,7 @@ float smeter(float ref = 0)
     if(smode == 4){ // wpm-indicator
       lcd.setCursor(14, 0); if(mode == CW) lcd.print(wpm); lcd.print("  ");
     }
-#ifdef VSS
+#ifdef VSS_METER
     if(smode == 5){ // Supply-voltage indicator; add resistor Rvss (see below) between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
 #define Rgnd 10   //kOhm (PC3 to GND)
 #define Rvss 1000 //kOhm (PC3 to VSS)
@@ -3408,7 +3432,9 @@ void switch_rxtx(uint8_t tx_enable){
 #endif //PTX
       lcd.setCursor(15, 1); lcd.print('T');
       if(mode == CW){ si5351.freq_calc_fast(-cw_offset); si5351.SendPLLRegisterBulk(); } // for CW, TX at freq
+#ifdef RIT_ENABLE
       else if(rit){ si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk(); }
+#endif //RIT_ENABLE
 #ifdef TX_CLK0_CLK1
       si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
 #else
@@ -3454,7 +3480,9 @@ void switch_rxtx(uint8_t tx_enable){
         digitalWrite(PTX, LOW);   // TX (disable TX)
 #endif //PTX
       }
+#ifdef RIT_ENABLE
       si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
+#endif //RIT_ENABLE
       lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 #ifdef _SERIAL
       if(!vox) if(cat_active){ DDRC |= (1<<2); } // enable PC2, so that ADC2 is pulled-down so that CAT TX is not disrupted via mic input
@@ -3740,7 +3768,7 @@ const char* filt_label[N_FILT+1] = { "Full", "2400", "2000", "1500", "500", "200
 const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
 const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
 const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
-#ifdef VSS
+#ifdef VSS_METER
 const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss" };
 #else
 const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm" };
@@ -3773,7 +3801,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case BAND:    paramAction(action, bandval, 0x14, F("Band"), band_label, 0, _N(band_label) - 1, false); break;
     case STEP:    paramAction(action, stepsize, 0x15, F("Tune Rate"), stepsize_label, 0, _N(stepsize_label) - 1, false); break;
     case VFOSEL:  paramAction(action, vfosel, 0x16, F("VFO Mode"), vfosel_label, 0, _N(vfosel_label) - 1, false); break;
+#ifdef RIT_ENABLE
     case RIT:     paramAction(action, rit, 0x17, F("RIT"), offon_label, 0, 1, false); break;    
+#endif
     case AGC:     paramAction(action, agc, 0x18, F("AGC"), offon_label, 0, 1, false); break;
     case NR:      paramAction(action, nr, 0x19, F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, 0x1A, F("ATT"), att_label, 0, 7, false); break;
@@ -3795,8 +3825,10 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case KEY_PIN:  paramAction(action, keyer_swap,   0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
     case KEY_TX:   paramAction(action, practice,   0x28, F("Practice"), offon_label, 0, 1, false); break;
 #endif
+#ifdef VOX_ENABLE
     case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("Noise Gate"), NULL, 0, 255, false); break;
+#endif
     case DRIVE:   paramAction(action, drive, 0x33, F("TX Drive"), NULL, 0, 8, false); break;
 #ifdef TX_DELAY
     case TXDELAY: paramAction(action, txdelay, 0x34, F("TX Delay"), NULL, 0, 255, false); break;
@@ -4148,23 +4180,31 @@ void Command_AI0()
 
 void Command_RX()
 {
+#ifdef TX_ENABLE
   switch_rxtx(0);
+#endif
   Serial.print("RX0;");
 }
 
 void Command_TX0()
 {
+#ifdef TX_ENABLE
   switch_rxtx(1);
+#endif
 }
 
 void Command_TX1()
 {
+#ifdef TX_ENABLE
   switch_rxtx(1);
+#endif
 }
 
 void Command_TX2()
 {
+#ifdef TX_ENABLE
   switch_rxtx(1);
+#endif
 }
 
 void Command_RS()
@@ -4399,10 +4439,12 @@ void setup()
     PORTD |= 1<<1; DDRD |= 1<<1;  // keep PD1 HIGH so that in case diode is installed to PC2 it is kept blocked (otherwise ADC2 input is pulled down!)
 #endif
   delay(10);
+#ifdef TX_ENABLE
   float dvm = (float)analogRead(DVM) * 5.0 / 1024.0;
   if((ssb_cap) && !(dvm > 1.8 && dvm < 3.2)){
     fatal(F("Vadc2"), dvm, 'V');
   }
+#endif
 
   // Measure AUDIO1, AUDIO2 bias; should be ~VAREF/2
   if(dsp_cap == SDR){
@@ -4416,6 +4458,7 @@ void setup()
     }
   }
   
+#ifdef TX_ENABLE
   // Measure I2C Bus speed for Bulk Transfers
   //si5351.freq(freq, 0, 90);
   wdt_reset();
@@ -4442,6 +4485,7 @@ void setup()
   if(i2c_error){
     fatal(F("BER_i2c"), i2c_error, ' ');
   }
+#endif //TX_ENABLE
 #endif  // DIAG
 
   drive = 4;  // Init settings
@@ -4475,7 +4519,9 @@ void setup()
   freq = vfo[vfosel%2];
   mode = vfomode[vfosel%2];
 
+#ifdef TX_ENABLE
   build_lut();
+#endif
 
   show_banner();  // remove release number
 
@@ -4519,6 +4565,7 @@ static int32_t _step = 0;
 
 void loop()
 {
+#ifdef VOX_ENABLE
   if((vox) && ((mode == LSB) || (mode == USB))){  // If VOX enabled (and in LSB/USB mode), then take mic samples and feed ssb processing function, to derive amplitude, and potentially detect cross vox_threshold to detect a TX or RX event: this is expressed in tx variable
     if(!vox_tx){ // VOX not active
 #ifdef MULTI_ADC
@@ -4546,6 +4593,7 @@ void loop()
       //tx = 0; // make sure tx is off (could have been triggered by rubbish in above statement)
     }
   }
+#endif //VOX_ENABLE
 
 //#ifndef SIMPLE_RX
 //  delay(1);
@@ -4644,10 +4692,11 @@ void loop()
 #endif //KEYER
 
 //  #define DAH_AS_KEY  1
+#ifdef TX_ENABLE
 #ifdef DAH_AS_KEY
-  if(!_digitalRead(DIT)  || ((mode == CW) && (!_digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
+   if(!_digitalRead(DIT)  || ((mode == CW) && (!_digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
 #else
-  if(!_digitalRead(DIT) ){  // PTT/DIT keys transmitter
+   if(!_digitalRead(DIT) ){  // PTT/DIT keys transmitter
 #endif
     switch_rxtx(1);
 #ifdef DAH_AS_KEY
@@ -4660,8 +4709,9 @@ void loop()
     }
     switch_rxtx(0);
    }
+#endif //TX_ENABLE
 #ifdef KEYER
-}
+  }
 #endif //KEYER
 #ifdef SEMI_QSK
   if((semi_qsk_timeout) && (millis() > semi_qsk_timeout)){ switch_rxtx(0); }  // delayed QSK RX
@@ -4785,6 +4835,7 @@ void loop()
           //for(;micros() < next;);  next = micros() + 16;   // sync every 1000000/62500=16ms (or later if missed)
         } //
         #endif //SIMPLE_RX
+#ifdef RIT_ENABLE
         rit = !rit;
         stepsize = (rit) ?  STEP_10 : prev_stepsize[mode == CW];
         if(!rit){  // after RIT comes VFO A/B swap
@@ -4796,6 +4847,7 @@ void loop()
           if(mode == CW) { filt = 4; nr = 0; } else filt = 0;
         }
         change = true;
+#endif //RIT_ENABLE
         break;
 //#define TUNING_DIAL  1
 #ifdef TUNING_DIAL
@@ -4945,10 +4997,12 @@ void loop()
           if(mode == CW) { filt = 4; nr = 0; } else filt = 0;
           change = true;
         }
+#ifdef RIT_ENABLE
         if(menu == RIT){
           stepsize = (rit) ?  STEP_10 : STEP_500;
           change = true;
         }
+#endif
         //if(menu == VOX){ if(vox){ vox_thresh-=1; } else { vox_thresh+=1; }; }
         if(menu == ATT){ // post-handling ATT parameter
           if(dsp_cap == SDR){
@@ -4969,9 +5023,11 @@ void loop()
         if(menu == SIFXTAL){
           change = true;
         }
+#ifdef TX_ENABLE
         if((menu == PWM_MIN) || (menu == PWM_MAX)){
           build_lut();
         }
+#endif
         if(menu == CWTONE){
           if(dsp_cap){ cw_offset = (cw_tone == 0) ? tones[0] : tones[1]; paramAction(SAVE, CWOFF); }
         }
@@ -5005,7 +5061,7 @@ void loop()
 #ifdef F_MCU_16MHZ
         delay(500);         // delay 0.5s
 #else
-        delay(500 * 5/4); // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
+        delay(500 * 5/4);   // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
 #endif
         sr = numSamples * 2;   // samples per second
         paramAction(UPDATE_MENU, menu); // refresh
@@ -5063,7 +5119,9 @@ void loop()
       si5351.freq(freq, rx_ph_q, 0/*90, 0*/);  // RX in LSB
     else
       si5351.freq(freq, 0, rx_ph_q/*0, 90*/);  // RX in USB, ...
+#ifdef RIT_ENABLE
     if(rit){ si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk(); }
+#endif //RIT_ENABLE
     //interrupts();
   }
   
