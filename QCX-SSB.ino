@@ -77,7 +77,7 @@
 #endif
 
 #if(F_CPU != 16000000)
-   #error "Compilation settings must specify a 16 MHz CPU clock setting only."
+   #error "Compilation must declare a 16 MHz CPU clock only. See F_MCU_16MHZ to adapt to alternate clock frequencies."
 #endif
 #undef F_CPU
 #define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
@@ -1253,8 +1253,8 @@ public:
   
   void ms(int8_t n, uint32_t div_nom, uint32_t div_denom, uint8_t pll = PLLA, uint8_t _int = 0, uint16_t phase = 0, uint8_t rdiv = 0){
     uint16_t msa; uint32_t msb, msc, msp1, msp2, msp3;
-    if(msa == 4) _int = 1;
     msa = div_nom / div_denom;     // integer part: msa must be in range 15..90 for PLL, 8+1/1048575..900 for MS
+    if(msa == 4) _int = 1;  // To satisfy the MSx_INT=1 requirement of AN619, section 4.1.3 which basically says that for MS divider a value of 4 and integer mode must be used
     msb = (_int) ? 0 : (((uint64_t)(div_nom % div_denom)*_MSC) / div_denom); // fractional part
     msc = (_int) ? 1 : _MSC;
     //lcd.setCursor(0, 0); lcd.print(n); lcd.print(":"); lcd.print(msa); lcd.print(" "); lcd.print(msb); lcd.print(" "); lcd.print(msc); lcd.print(F("    ")); delay(500);
@@ -2598,7 +2598,6 @@ void process(int16_t i_ac2, int16_t q_ac2)
   //UCSR0B &= ~(TXCIE0);  // disable USART TX interrupts
   //while (!( UCSR0A & (1<<UDRE0)));  // wait for empty buffer
   if(cat_streaming){ uint8_t out = ac3 + 128; if(out == ';') out++; Serial.write(out); }  //UDR0 = (uint8_t)(ac3 + 128);   // from:  https://www.xanthium.in/how-to-avr-atmega328p-microcontroller-usart-uart-embedded-programming-avrgcc
-  // stty -F /dev/ttyUSB1 raw -echo -echoe -echoctl -echoke 115200; echo ";UA1;" > /dev/ttyUSB1; cat /dev/ttyUSB1| aplay -r 7812 -c 1 -f U8    (optionally to reduce latency with -B 1)
 #endif // CAT_STREAMING
 #ifdef AF_OUT
   static int16_t ozd1, ozd2;  // Output stage
@@ -4020,11 +4019,11 @@ The following Linux script may be useful to stream audio over CAT, play the audi
 
 2. Insert USB serial converter (/dev/ttyUSB0) and start:
 
-stty -F /dev/ttyUSB0 raw -echo -echoe -echoctl -echoke 115200; echo ";UA1;" > /dev/ttyUSB0
+stty -F /dev/ttyUSB0 raw -echo -echoe -echoctl -echoke 115200;
 
 socat -d -d pty,link=/tmp/ttyS0,echo=0,ignoreeof,b115200,raw,perm=0777 pty,link=/tmp/ttyS1,echo=0,ignoreeof,b115200,raw,perm=0777 &
 
-cat /tmp/ttyS1 > /dev/ttyUSB0 &
+sleep 5; cat /tmp/ttyS1 > /dev/ttyUSB0 &
 
 cat /dev/ttyUSB0 | while IFS= read -n1 c; do
   case $state in
@@ -4039,15 +4038,15 @@ cat /dev/ttyUSB0 | while IFS= read -n1 c; do
   *) state=3;
      ;;
   esac
-done | aplay -r 7812 -c 1 -f U8 -B0    # pacat --rate=7812 --channels=1 --format=u8
+done | pacat --rate=7812 --channels=1 --format=u8 --latency-msec=30 --process-time-msec=30 &
 
-3. Now audio should be audible, and your favorite digimode/logbook application can be started, use /tmp/ttyS0 as CAT port.
+echo ";UA1;" > /tmp/ttyS0;
+
+3. You should now hear audio, use pavucontrol. Now start your favorite digimode/logbook application, and use /tmp/ttyS0 as CAT port.
 
 4. Instead of step 3, you could visualize uSDX console:
 
-cat /tmp/ttyS0 | while IFS= read -d \; c; do echo "${c}" |sed -E  's/^UD..(.+)$|^[^U][^D](.*)$/\1/g'| sed -E 's/^(.{16})(.+)$/\x1B[;1H\x1B[1m\x1B[44m\x1B[97m\1\x1B[0m\x1B[K\n\x1B[1m\x1B[44m\x1B[97m\2\x1B[0m\x1B[K\n\x1B[K\n\x1B[K/g'; done
-
-watch -n1 'echo ";UD;UD;" > /dev/ttyUSB0'    # in another console
+clear; echo ";UA1;UD;" > /tmp/ttyS0; cat /tmp/ttyS0 | while IFS= read -d \; c; do echo "${c}" |sed -E  's/^UD..(.+)$|^[^U][^D](.*)$/\1/g'| sed -E 's/^(.{16})(.+)$/\x1B[;1H\x1B[1m\x1B[44m\x1B[97m\1\x1B[0m\x1B[K\n\x1B[1m\x1B[44m\x1B[97m\2\x1B[0m\x1B[K\n\x1B[K\n\x1B[K/g'; echo ";UD;UD;" >> /tmp/ttyS0; sleep 1; done
 
 */
 #ifdef CAT_EXT
