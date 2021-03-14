@@ -24,6 +24,7 @@
 // Advanced configuration switches
 //#define CAT_EXT       1   // Extended CAT support: remote button and screen control commands over CAT
 //#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812sps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
+#define CW_DECODER      1   // CW decoder
 #define TX_ENABLE       1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
 #define TX_DELAY        1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
 #define KEY_CLICK       1   // Reduce key clicks by envelope shaping
@@ -1949,10 +1950,11 @@ void dsp_tx_fm()
 #define EA(y, x, one_over_alpha)  (y) = (y) + ((x) - (y)) / (one_over_alpha); // exponental averaging [Lyons 13.33.1]
 #define MLEA(y, x, L, M)  (y)  = (y) + ((((x) - (y)) >> (L)) - (((x) - (y)) >> (M))); // multiplierless exponental averaging [Lyons 13.33.1], with alpha=1/2^L - 1/2^M
 
-volatile uint8_t cwdec = 1;
 #ifdef SWR_METER
 volatile uint8_t swrmeter = 1;
 #endif
+#ifdef CW_DECODER
+volatile uint8_t cwdec = 1;
 static int32_t avg = 256;
 static uint8_t sym;
 const char m2c[] PROGMEM = "~ ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
@@ -2110,6 +2112,7 @@ void dec2()
  filteredstatebefore = filteredstate;
 }
 #endif //OLD_CW
+#endif  //CW_DECODER
 
 #define F_SAMP_PWM (78125/1)
 //#define F_SAMP_RX 78125  // overrun, do not use
@@ -2486,8 +2489,9 @@ inline int16_t slow_dsp(int16_t ac)
       }
     }
   }*/
+#ifdef CW_DECODER
   if(!(absavg256cnt % 64)){ _amp32 = amp32; amp32 = 0; } else amp32 += abs(ac);
-  
+#endif  //CW_DECODER  
   //if(!(absavg256cnt--)){ _absavg256 = absavg256; absavg256 = 0; } else absavg256 += abs(ac);  //hack
   
   //static int16_t dc;
@@ -3314,9 +3318,11 @@ float smeter(float ref = 0)
       for(uint8_t i = 0; i != 4; i++){ tmp[i] = max(2, min(5, s + 1)); s = s - 3; } tmp[4] = 0;
       lcd.setCursor(12, 0); lcd.print(tmp);
     }
+#ifdef CW_DECODER
     if(smode == 4){ // wpm-indicator
       lcd.setCursor(14, 0); if(mode == CW) lcd.print(wpm); lcd.print("  ");
     }
+#endif  //CW_DECODER
 #ifdef VSS_METER
     if(smode == 5){ // Supply-voltage indicator; add resistor Rvss (see below) between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
 #define Rgnd 10   //kOhm (PC3 to GND)
@@ -3423,7 +3429,9 @@ void switch_rxtx(uint8_t tx_enable){
   if(tx_enable) ADMUX = admux[2];
   else _init = 1;
   rx_state = 0;
+#ifdef CW_DECODER
   if((cwdec) && (mode == CW)){ filteredstate = tx_enable; dec2(); }
+#endif  //CW_DECODER
   
   if(tx_enable){ // tx
 #ifdef KEYER
@@ -3830,7 +3838,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef SWR_METER
     case SWRMETER:  paramAction(action, swrmeter, 0x1D, F("SWR Meter"), swr_label, 0, _N(swr_label) - 1, false); break;
 #endif
+#ifdef CW_DECODER
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
+#endif
 #ifdef FILTER_700HZ
     case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
 #endif
@@ -4705,10 +4715,13 @@ void loop()
 //  delay(1);
 //#endif
 
+#ifdef CW_DECODER
   //if((mode == CW) && cwdec) cw_decode();  // if(!(semi_qsk_timeout)) cw_decode(); else dec2();
   if((mode == CW) && cwdec && ((!tx) && (!semi_qsk_timeout))) cw_decode();  // CW decoder only active during RX
+#endif  //CW_DECODER
 
   if(menumode == 0){ // in main
+#ifdef CW_DECODER
     if(cw_event){
       uint8_t offset = (uint8_t[]){ 0, 7, 3, 5, 3, 7 }[smode]; // depending on smeter more/less cw-text
       lcd.noCursor();
@@ -4721,8 +4734,10 @@ void loop()
 #endif
       stepsize_showcursor();
     }
-    else if(!semi_qsk_timeout)
-      smeter();
+    else
+#endif  //CW_DECODER
+      if(!semi_qsk_timeout)
+        smeter();
   }
 
 //#define ONEBUTTON_INV 1 // Encoder button goes from PC3 to GND (instead PC3 to 5V, with 10k pull down)
@@ -4898,7 +4913,9 @@ void loop()
           paramAction(SAVE, MODE);
           paramAction(SAVE, FILTER);
           si5351.iqmsa = 0;  // enforce PLL reset
+#ifdef CW_DECODER
           if((prev_mode == CW) && (cwdec)) show_banner();
+#endif
           change = true;
         } else {
           if(menumode == 1){ menumode = 0; }  // short right-click while in menu: enter value selection screen
