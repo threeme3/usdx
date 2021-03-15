@@ -25,6 +25,8 @@
 //#define CAT_EXT       1   // Extended CAT support: remote button and screen control commands over CAT
 //#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812sps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
 #define CW_DECODER      1   // CW decoder
+#define CW_MESSAGE      1   // CW messages that can be transmitted on-demand (double-click left button)
+#define CW_MESSAGE_TEXT "CQ CQ DE UR0CAL UR0CAL K"  // CW message to be transmitted
 #define TX_ENABLE       1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
 #define TX_DELAY        1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
 #define KEY_CLICK       1   // Reduce key clicks by envelope shaping
@@ -32,6 +34,7 @@
 #define RIT_ENABLE      1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
 #define VOX_ENABLE      1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
 //#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
+#define FAST_AGC        1   // Adds fast AGC option
 //#define VSS_METER     1   // Supports Vss measurement (as s-meter option)
 //#define SWR_METER     1   // Support SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
 //#define CW_FREQS_QRP  1   // Defaults to CW QRP   frequencies when changing bands
@@ -1953,11 +1956,39 @@ void dsp_tx_fm()
 #ifdef SWR_METER
 volatile uint8_t swrmeter = 1;
 #endif
+
+const char m2c[] PROGMEM = "~ ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
+
+#ifdef CW_MESSAGE
+void cw_tx(char* msg){    // Transmit message in CW
+  char ch;
+  for(uint8_t i = 0; (msg[i]) /*&& !digitalRead(BUTTONS) && digitalRead(DAH) && digitalRead(DIH)*/; i++){  // loop over message, stop when button/key is pressed
+lcd.setCursor(0, 0); lcd.print(i); lcd.print("    ");
+    for(uint8_t j = 0; (ch = pgm_read_byte_near(m2c + j)); j++){  // lookup msg[i] in m2c, skip if not found
+      if(ch == msg[i]){  // found -> transmit CW character j
+        wdt_reset();
+        uint8_t k = 0x80; for(; !(j & k); k >>= 1); k >>= 1; // shift start of cw code to MSB
+        if(k == 0) delay(ditTime * 4); // space -> add word space
+        else {
+          for(; (k); k >>= 1){  // send dit/dah one by one, until everythng is sent
+            switch_rxtx(1);  // key-on  tx
+            delay(ditTime * ((j & k) ? 3 : 1)); // symbol: dah or dih length
+            switch_rxtx(0);  // key-off tx
+            delay(ditTime);  // add symbol space
+          }
+          delay(ditTime * 2); // add letter space
+        }
+        break; // next
+      }
+    }
+  }
+}
+#endif // CW_MESSAGE
+
 #ifdef CW_DECODER
 volatile uint8_t cwdec = 1;
 static int32_t avg = 256;
 static uint8_t sym;
-const char m2c[] PROGMEM = "~ ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
 static uint32_t amp32 = 0;
 volatile uint32_t _amp32 = 0;
 static char out[] = "                ";
@@ -2125,25 +2156,29 @@ void dec2()
 //#define F_SAMP_RX 28409
 #define F_ADC_CONV (192307/2)  //was 192307/1, but as noted this produces clicks in audio stream. Slower ADC clock cures this (but is a problem for VOX when sampling mic-input simulatanously).
 
-volatile bool agc = true;
+#ifdef FAST_AGC
+volatile uint8_t agc = 2;
+#else
+volatile uint8_t agc = 1;
+#endif
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
 volatile uint8_t att2 = 2;  // Minimum att2 increased, to prevent numeric overflow on strong signals
 volatile uint8_t _init = 0;
 
-/* Old AGC algorithm which only increases gain, but does not decrease it for very strong signals.
+// Old AGC algorithm which only increases gain, but does not decrease it for very strong signals.
 // Maximum possible gain is x32 (in practice, x31) so AGC range is x1 to x31 = 30dB approx.
 // Decay time is fine (about 1s) but attack time is much slower than I like. 
 // For weak/medium signals it aims to keep the sample value between 1024 and 2048. 
 static int16_t gain = 1024;
-inline int16_t process_agc(int16_t in)
+inline int16_t process_agc_fast(int16_t in)
 {
   int16_t out = (gain >= 1024) ? (gain >> 10) * in : in;
   int16_t accum = (1 - abs(out >> 10));
   if((INT16_MAX - gain) > accum) gain = gain + accum;
   if(gain < 1) gain = 1;
   return out;
-} */
+}
 
 // Contribution by Alan, M0PUB: Experimental new AGC algorithm.
 // ASSUMES: Input sample values are constrained to a maximum of +/-4096 to avoid integer overflow in earlier
@@ -2464,9 +2499,18 @@ inline int16_t slow_dsp(int16_t ac)
   }  // needs: p.12 https://www.veron.nl/wp-content/uploads/2014/01/FmDemodulator.pdf
   else { ; }  // USB, LSB, CW
 
-  if(agc) {
+#ifdef FAST_AGC
+  if(agc == 2) {
     ac = process_agc(ac);
     ac = ac >> (16-volume);
+  } else if(agc == 1){
+    ac = process_agc_fast(ac);
+    ac = ac >> (16-volume);
+#else
+  if(agc == 1){
+    ac = process_agc_fast(ac);
+    ac = ac >> (16-volume);
+#endif //!FAST_AGC
   } else {
     //ac = ac >> (16-volume);
     if(volume <= 13)    // if no AGC allow volume control to boost weak signals
@@ -2557,7 +2601,7 @@ volatile func_t func_ptr;
 //#define SIMPLE_RX  1
 #ifndef SIMPLE_RX
 volatile uint8_t admux[3];
-volatile int16_t ocomb, qh, q_ac2;
+volatile int16_t ocomb, qh;
 volatile uint8_t rx_state = 0;
 
 #pragma GCC push_options
@@ -2638,31 +2682,67 @@ void process(int16_t i_ac2, int16_t q_ac2)
 #endif
 }
 
-static int16_t i_s0za1, i_s0za2, i_s0zb0, i_s0zb1, i_s1za1, i_s1za2, i_s1zb0, i_s1zb1;
-static int16_t q_s0za1, q_s0za2, q_s0zb0, q_s0zb1, q_s1za1, q_s1za2, q_s1zb0, q_s1zb1;
+/*
+// # M=3 .. = i0 + 3*(i2 + i3) + i1
+int16_t i0, i1, i2, i3, i4, i5, i6, i7, i8;
+int16_t q0, q1, q2, q3, q4, q5, q6, q7, q8;
+#define M_SR  1
 
-///*
+//#define EXPANDED_CIC
+#ifdef EXPANDED_CIC
+void sdr_rx_00(){         i0 = sdr_rx_common_i(); func_ptr = sdr_rx_01;   i4 = (i0 + (i2 + i3) * 3 + i1) >> M_SR; }
+void sdr_rx_02(){         i1 = sdr_rx_common_i(); func_ptr = sdr_rx_03;   i8 = (i4 + (i6 + i7) * 3 + i5) >> M_SR; }
+void sdr_rx_04(){         i2 = sdr_rx_common_i(); func_ptr = sdr_rx_05;   i5 = (i2 + (i0 + i1) * 3 + i3) >> M_SR; }
+void sdr_rx_06(){         i3 = sdr_rx_common_i(); func_ptr = sdr_rx_07; }
+void sdr_rx_08(){         i0 = sdr_rx_common_i(); func_ptr = sdr_rx_09;   i6 = (i0 + (i2 + i3) * 3 + i1) >> M_SR; }
+void sdr_rx_10(){         i1 = sdr_rx_common_i(); func_ptr = sdr_rx_11;   i8 = (i6 + (i4 + i5) * 3 + i7) >> M_SR; }
+void sdr_rx_12(){         i2 = sdr_rx_common_i(); func_ptr = sdr_rx_13;   i7 = (i2 + (i0 + i1) * 3 + i3) >> M_SR; }
+void sdr_rx_14(){         i3 = sdr_rx_common_i(); func_ptr = sdr_rx_15; }
+void sdr_rx_15(){         q0 = sdr_rx_common_q(); func_ptr = sdr_rx_00;   q4 = (q0 + (q2 + q3) * 3 + q1) >> M_SR; }
+void sdr_rx_01(){         q1 = sdr_rx_common_q(); func_ptr = sdr_rx_02;   q8 = (q4 + (q6 + q7) * 3 + q5) >> M_SR; }
+void sdr_rx_03(){         q2 = sdr_rx_common_q(); func_ptr = sdr_rx_04;   q5 = (q2 + (q0 + q1) * 3 + q3) >> M_SR; }
+void sdr_rx_05(){         q3 = sdr_rx_common_q(); func_ptr = sdr_rx_06; process(i8, q8); }
+void sdr_rx_07(){         q0 = sdr_rx_common_q(); func_ptr = sdr_rx_08;   q6 = (q0 + (q2 + q3) * 3 + q1) >> M_SR; }
+void sdr_rx_09(){         q1 = sdr_rx_common_q(); func_ptr = sdr_rx_10;   q8 = (q6 + (q4 + q5) * 3 + q7) >> M_SR; }
+void sdr_rx_11(){         q2 = sdr_rx_common_q(); func_ptr = sdr_rx_12;   q7 = (q2 + (q0 + q1) * 3 + q3) >> M_SR; }
+void sdr_rx_13(){         q3 = sdr_rx_common_q(); func_ptr = sdr_rx_14; process(i8, q8); }
+#else
+void sdr_rx_00(){         i0 = sdr_rx_common_i(); func_ptr = sdr_rx_01;   i4 = (i0 + (i2 + i3) * 3 + i1) >> M_SR; }
+void sdr_rx_02(){         i1 = sdr_rx_common_i(); func_ptr = sdr_rx_03;   i8 = (i4 + (i6 + i7) * 3 + i5) >> M_SR; }
+void sdr_rx_04(){         i2 = sdr_rx_common_i(); func_ptr = sdr_rx_05;   i5 = (i2 + (i0 + i1) * 3 + i3) >> M_SR; }
+void sdr_rx_06(){         i3 = sdr_rx_common_i(); func_ptr = sdr_rx_07;   i6 = i4; i7 = i5; q6 = q4; q7 = q5; }
+void sdr_rx_07(){         q0 = sdr_rx_common_q(); func_ptr = sdr_rx_00;   q4 = (q0 + (q2 + q3) * 3 + q1) >> M_SR; }
+void sdr_rx_01(){         q1 = sdr_rx_common_q(); func_ptr = sdr_rx_02;   q8 = (q4 + (q6 + q7) * 3 + q5) >> M_SR; }
+void sdr_rx_03(){         q2 = sdr_rx_common_q(); func_ptr = sdr_rx_04;   q5 = (q2 + (q0 + q1) * 3 + q3) >> M_SR; }
+void sdr_rx_05(){         q3 = sdr_rx_common_q(); func_ptr = sdr_rx_06; process(i8, q8); }
+#endif
+*/
+
+// /*
+static int16_t i_s0za1, i_s0za2, i_s0zb0, i_s0zb1, i_s1za1, i_s1za2, i_s1zb0, i_s1zb1;
+static int16_t q_s0za1, q_s0za2, q_s0zb0, q_s0zb1, q_s1za1, q_s1za2, q_s1zb0, q_s1zb1, q_ac2;
+
 #define M_SR  1  // CIC N=3
-void sdr_rx  (){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_1;  int16_t i_s1za0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + (i_s1za1 + i_s1zb0) * 3 + i_s1zb1); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
-void sdr_rx_2(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_3;  i_s0zb1 = i_s0zb0; i_s0zb0 = ac; }
-void sdr_rx_4(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_5;  i_s1zb1 = i_s1zb0; i_s1zb0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; }
-void sdr_rx_6(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_7;  i_s0zb1 = i_s0zb0; i_s0zb0 = ac; }
-void sdr_rx_1(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_2;  q_s0zb1 = q_s0zb0; q_s0zb0 = ac; }
-void sdr_rx_3(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_4;  q_s1zb1 = q_s1zb0; q_s1zb0 = (ac + (q_s0za1 + q_s0zb0) * 3 + q_s0zb1) >> M_SR; q_s0za1 = ac; }
-void sdr_rx_5(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_6;  q_s0zb1 = q_s0zb0; q_s0zb0 = ac; }
-void sdr_rx_7(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx  ;  int16_t q_s1za0 = (ac + (q_s0za1 + q_s0zb0) * 3 + q_s0zb1) >> M_SR; q_s0za1 = ac; q_ac2 = (q_s1za0 + (q_s1za1 + q_s1zb0) * 3 + q_s1zb1); q_s1za1 = q_s1za0; }
-//*/
+void sdr_rx_00(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_01;  int16_t i_s1za0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + (i_s1za1 + i_s1zb0) * 3 + i_s1zb1); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
+void sdr_rx_02(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_03;  i_s0zb1 = i_s0zb0; i_s0zb0 = ac; }
+void sdr_rx_04(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_05;  i_s1zb1 = i_s1zb0; i_s1zb0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; }
+void sdr_rx_06(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_07;  i_s0zb1 = i_s0zb0; i_s0zb0 = ac; }
+void sdr_rx_01(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_02;  q_s0zb1 = q_s0zb0; q_s0zb0 = ac; }
+void sdr_rx_03(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_04;  q_s1zb1 = q_s1zb0; q_s1zb0 = (ac + (q_s0za1 + q_s0zb0) * 3 + q_s0zb1) >> M_SR; q_s0za1 = ac; }
+void sdr_rx_05(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_06;  q_s0zb1 = q_s0zb0; q_s0zb0 = ac; }
+void sdr_rx_07(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_00;  int16_t q_s1za0 = (ac + (q_s0za1 + q_s0zb0) * 3 + q_s0zb1) >> M_SR; q_s0za1 = ac; q_ac2 = (q_s1za0 + (q_s1za1 + q_s1zb0) * 3 + q_s1zb1); q_s1za1 = q_s1za0; }
+// */
 
 /*
 #define M_SR  0  // CIC N=2
-void sdr_rx  (){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_1;  int16_t i_s1za0 = (ac + i_s0za1 + i_s0zb0 * 2 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + i_s1za1 + i_s1zb0 * 2); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
-void sdr_rx_2(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_3;  i_s0zb0 = ac; }
-void sdr_rx_4(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_5;  i_s1zb0 = (ac + i_s0za1 + i_s0zb0 * 2) >> M_SR; i_s0za1 = ac; }
-void sdr_rx_6(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_7;  i_s0zb0 = ac; }
-void sdr_rx_1(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_2;  q_s0zb0 = ac; }
-void sdr_rx_3(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_4;  q_s1zb0 = (ac + q_s0za1 + q_s0zb0 * 2) >> M_SR; q_s0za1 = ac; }
-void sdr_rx_5(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_6;  q_s0zb0 = ac; }
-void sdr_rx_7(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx  ;  int16_t q_s1za0 = (ac + q_s0za1 + q_s0zb0 * 2 + q_s0zb1) >> M_SR; q_s0za1 = ac; q_ac2 = (q_s1za0 + q_s1za1 + q_s1zb0 * 2); q_s1za1 = q_s1za0; }
+void sdr_rx_00(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_01;  int16_t i_s1za0 = (ac + i_s0za1 + i_s0zb0 * 2 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + i_s1za1 + i_s1zb0 * 2); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
+void sdr_rx_02(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_03;  i_s0zb0 = ac; }
+void sdr_rx_04(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_05;  i_s1zb0 = (ac + i_s0za1 + i_s0zb0 * 2) >> M_SR; i_s0za1 = ac; }
+void sdr_rx_06(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_07;  i_s0zb0 = ac; }
+void sdr_rx_01(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_02;  q_s0zb0 = ac; }
+void sdr_rx_03(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_04;  q_s1zb0 = (ac + q_s0za1 + q_s0zb0 * 2) >> M_SR; q_s0za1 = ac; }
+void sdr_rx_05(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_06;  q_s0zb0 = ac; }
+void sdr_rx_07(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_00;  int16_t q_s1za0 = (ac + q_s0za1 + q_s0zb0 * 2 + q_s0zb1) >> M_SR; q_s0za1 = ac; q_ac2 = (q_s1za0 + q_s1za1 + q_s1zb0 * 2); q_s1za1 = q_s1za0; }
 */
 
 static int16_t ozi1, ozi2;
@@ -3341,7 +3421,7 @@ void start_rx()
 {
   _init = 1;
   rx_state = 0;
-  func_ptr = sdr_rx;  //enable RX DSP/SDR
+  func_ptr = sdr_rx_00;  //enable RX DSP/SDR
   adc_start(2, true, F_ADC_CONV*4); admux[2] = ADMUX;  // Note that conversion-rate for TX is factors more
   if(dsp_cap == SDR){
 //#define SWAP_RX_IQ 1    // Swap I/Q ADC inputs, flips RX sideband
@@ -3415,13 +3495,13 @@ void switch_rxtx(uint8_t tx_enable){
       semi_qsk_timeout = millis() + 8 * 8;  // no keyer? assume dit-time of 20 WPM
 #endif //KEYER
 #endif //SEMI_QSK
-      if((mode == CW) && semi_qsk) func_ptr = dummy; else func_ptr = sdr_rx;
+      if((mode == CW) && semi_qsk) func_ptr = dummy; else func_ptr = sdr_rx_00;
     } else {
       centiGain = _centiGain;  // restore AGC setting
 #ifdef SEMI_QSK
       semi_qsk_timeout = 0;
 #endif
-      func_ptr = sdr_rx;
+      func_ptr = sdr_rx_00;
     }
   }
   if((!dsp_cap) && (!tx_enable) && vox) func_ptr = dummy; //hack: for SSB mode, disable dsp_rx during vox mode enabled as it slows down the vox loop too much!
@@ -3803,6 +3883,7 @@ const char* cw_tone_label[] = { "700", "600" };
 #ifdef KEYER
 const char* keyer_mode_label[] = { "Iambic A", "Iambic B","Straight" };
 #endif
+const char* agc_label[] = { "OFF", "Fast", "Slow" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
@@ -3830,7 +3911,11 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef RIT_ENABLE
     case RIT:     paramAction(action, rit, 0x17, F("RIT"), offon_label, 0, 1, false); break;    
 #endif
+#ifdef FAST_AGC
+    case AGC:     paramAction(action, agc, 0x18, F("AGC"), agc_label, 0, _N(agc_label) - 1, false); break;
+#else
     case AGC:     paramAction(action, agc, 0x18, F("AGC"), offon_label, 0, 1, false); break;
+#endif // FAST_AGC
     case NR:      paramAction(action, nr, 0x19, F("NR"), NULL, 0, 8, false); break;
     case ATT:     paramAction(action, att, 0x1A, F("ATT"), att_label, 0, 7, false); break;
     case ATT2:    paramAction(action, att2, 0x1B, F("ATT2"), NULL, 0, 16, false); break;
@@ -4390,7 +4475,7 @@ void setup()
   //func_ptr();
   t1 = micros();
   uint16_t load_tx = (float)(t1 - t0) * (float)F_SAMP_TX * 100.0 / 1000000.0 * 16000000.0/(float)F_CPU;
-  // benchmark sdr_rx() ISR
+  // benchmark sdr_rx_00() ISR
   func_ptr = sdr_rx;
   rx_state = 0;
   uint16_t load_rx[8];
@@ -4887,6 +4972,9 @@ void loop()
         menumode = _menumode;
         break;
       case BL|DC:
+#ifdef CW_MESSAGE
+        cw_tx(CW_MESSAGE_TEXT);
+#endif //CW_MESSAGE
         break;
       case BR|SC:
         if(!menumode){
@@ -4937,7 +5025,7 @@ void loop()
         change = true; // refresh display
         break;
       case BR|PL:
-        #ifdef SIMPLE_RX
+#ifdef SIMPLE_RX
         // Experiment: ISR-less sdr_rx():
         smode = 0;
         TIMSK2 &= ~(1 << OCIE2A);  // disable timer compare interrupt
@@ -4960,7 +5048,7 @@ void loop()
           }
           //for(;micros() < next;);  next = micros() + 16;   // sync every 1000000/62500=16ms (or later if missed)
         } //
-        #endif //SIMPLE_RX
+#endif //SIMPLE_RX
 #ifdef RIT_ENABLE
         rit = !rit;
         stepsize = (rit) ?  STEP_10 : prev_stepsize[mode == CW];
