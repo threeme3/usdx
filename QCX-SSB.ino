@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02o"
+#define VERSION   "1.02p"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG            1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -23,10 +23,9 @@
 
 // Advanced configuration switches
 //#define CAT_EXT       1   // Extended CAT support: remote button and screen control commands over CAT
-//#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7812sps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
+//#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7.812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
 #define CW_DECODER      1   // CW decoder
-#define CW_MESSAGE      1   // CW messages that can be transmitted on-demand (double-click left button)
-#define CW_MESSAGE_TEXT "CQ CQ DE UR0CAL UR0CAL K"  // CW message to be transmitted
+//#define CW_MESSAGE    1   // Transmits pre-defined CW messages on-demand (double-click left button)
 #define TX_ENABLE       1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
 #define TX_DELAY        1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
 #define KEY_CLICK       1   // Reduce key clicks by envelope shaping
@@ -155,6 +154,13 @@ uint8_t _digitalRead(uint8_t pin){  // reads pin or (via CAT) artificially overr
 #else
 #define _digitalRead(x) digitalRead(x)
 #endif //CAT_EXT
+
+//#define ONEBUTTON_INV 1 // Encoder button goes from PC3 to GND (instead PC3 to 5V, with 10k pull down)
+#ifdef ONEBUTTON_INV
+  uint8_t inv = 1;
+#else
+  uint8_t inv = 0;
+#endif
 
 //#ifdef KEYER
 // Iambic Morse Code Keyer Sketch, Contribution by Uli, DL2DBG. Copyright (c) 2009 Steven T. Elliott Source: http://openqrp.org/?p=343,  Trimmed by Bill Bishop - wrb[at]wrbishop.com.  This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version. This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details: Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA.
@@ -1693,6 +1699,11 @@ inline void set_lpf(uint8_t f){
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
+volatile uint8_t event;
+volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
+volatile uint8_t prev_menumode = 0;
+volatile int8_t menu = 0;  // current parameter id selected in menu
+
 #ifdef DEBUG
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
@@ -1960,28 +1971,49 @@ volatile uint8_t swrmeter = 1;
 const char m2c[] PROGMEM = "~ ETIANMSURWDKGOHVF*L*PJBXCYZQ**54S3***2**+***J16=/***H*7*G*8*90************?_****\"**.****@***'**-********;!*)*****,****:****";
 
 #ifdef CW_MESSAGE
+#define MENU_STR  1
+
+uint8_t delayWithKeySense(uint32_t ms){
+  uint32_t event = millis() + ms;
+  for(; millis() < event;){
+    wdt_reset();
+    if(inv ^ digitalRead(BUTTONS) || !digitalRead(DAH) || !digitalRead(DIT)){
+      for(; inv ^ digitalRead(BUTTONS);) wdt_reset();  // wait until buttons released  
+      return 1;  // stop when button/key pressed
+    }
+  }
+  return 0;
+}
+
+char cw_msg[64] = "CQ CQ DE U3SDX U3SDX K";
+uint8_t cw_msg_interval = 5; // number of seconds CW message is repeated
+
 void cw_tx(char* msg){    // Transmit message in CW
-  char ch;
-  for(uint8_t i = 0; (msg[i]) /*&& !digitalRead(BUTTONS) && digitalRead(DAH) && digitalRead(DIH)*/; i++){  // loop over message, stop when button/key is pressed
-lcd.setCursor(0, 0); lcd.print(i); lcd.print("    ");
-    for(uint8_t j = 0; (ch = pgm_read_byte_near(m2c + j)); j++){  // lookup msg[i] in m2c, skip if not found
-      if(ch == msg[i]){  // found -> transmit CW character j
+ for(;;){
+  char sym;
+  for(uint8_t i = 0; msg[i]; i++){  // loop over message
+    lcd.setCursor(0, 0); lcd.print(i); lcd.print("    ");
+    for(uint8_t j = 0; (sym = pgm_read_byte_near(m2c + j)); j++){  // lookup msg[i] in m2c, skip if not found
+      if(sym == msg[i]){  // found -> transmit CW character j
         wdt_reset();
         uint8_t k = 0x80; for(; !(j & k); k >>= 1); k >>= 1; // shift start of cw code to MSB
         if(k == 0) delay(ditTime * 4); // space -> add word space
         else {
-          for(; (k); k >>= 1){  // send dit/dah one by one, until everythng is sent
+          for(; k; k >>= 1){ // send dit/dah one by one, until everythng is sent
             switch_rxtx(1);  // key-on  tx
-            delay(ditTime * ((j & k) ? 3 : 1)); // symbol: dah or dih length
+            if(delayWithKeySense(ditTime * ((j & k) ? 3 : 1))){ switch_rxtx(0); return; } // symbol: dah or dih length
             switch_rxtx(0);  // key-off tx
-            delay(ditTime);  // add symbol space
+            if(delayWithKeySense(ditTime)) return;  // add symbol space
           }
-          delay(ditTime * 2); // add letter space
+          if(delayWithKeySense(ditTime * 2)) return; // add letter space
         }
-        break; // next
+        break; // next character
       }
     }
   }
+  if(cw_msg_interval == 0) return;
+  if(delayWithKeySense(1000 * cw_msg_interval)) return;
+ }  // loop forever
 }
 #endif // CW_MESSAGE
 
@@ -2040,7 +2072,7 @@ void dec2()
 {
  // Then we do want to have some durations on high and low
  if(filteredstate != filteredstatebefore){
- lcd.noCursor(); lcd.setCursor(15, 1); lcd.print((filteredstate) ? 'R' : ' '); stepsize_showcursor();
+ if(menumode == 0){ lcd.noCursor(); lcd.setCursor(15, 1); lcd.print((filteredstate) ? 'R' : ' '); stepsize_showcursor(); }
 
   if(filteredstate == HIGH){
     starttimehigh = millis();
@@ -2102,7 +2134,7 @@ void dec2()
 void dec2()
 {
  if(filteredstate != filteredstatebefore){ // then we do want to have some durations on high and low
-  lcd.noCursor(); lcd.setCursor(15, 1); lcd.print((filteredstate) ? 'R' : ' '); stepsize_showcursor();
+  if(menumode == 0){ lcd.noCursor(); lcd.setCursor(15, 1); lcd.print((filteredstate) ? 'R' : ' '); stepsize_showcursor(); }
 
   if(filteredstate == HIGH){
     starttimehigh = millis();
@@ -3514,14 +3546,12 @@ void switch_rxtx(uint8_t tx_enable){
 #endif  //CW_DECODER
   
   if(tx_enable){ // tx
-#ifdef KEYER
     if(practice){
       digitalWrite(RX, LOW); // TX (disable RX)
       lcd.setCursor(15, 1); lcd.print('P');
       si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN,CLK1_EN,CLK0_EN=0
       // Do not enable PWM (KEY_OUT), do not enble CLK2
     } else
-#endif
     {
       digitalWrite(RX, LOW); // TX (disable RX)
 #ifdef NTX
@@ -3766,11 +3796,6 @@ inline void display_vfo(int32_t f){
   lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 }
 
-volatile uint8_t event;
-volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
-volatile uint8_t prev_menumode = 0;
-volatile int8_t menu = 0;  // current parameter id selected in menu
-
 #define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
 #define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
 
@@ -3779,7 +3804,7 @@ uint8_t eeprom_version;
 int eeprom_addr;
 
 // Support functions for parameter and menu handling
-enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP };
+enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
 
 // output menuid in x.y format
 void printmenuid(uint8_t menuid){
@@ -3802,7 +3827,7 @@ void printlabel(uint8_t action, uint8_t menuid, const __FlashStringHelper* label
     printmenuid(menuid);
     lcd.print(label); lcd_blanks(); lcd_blanks();
     lcd.setCursor(0, 1); // value on next line
-    if(menumode == 2) lcd.print('>');
+    if(menumode >= 2) lcd.print('>');
   } else { // UPDATE (not in menu)
     lcd.setCursor(0, 1); lcd.print(label); lcd.print(F(": "));
   }
@@ -3850,6 +3875,42 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
   }
 }
 
+#ifdef MENU_STR
+static uint8_t pos = 0;
+void paramAction(uint8_t action, char* value, uint8_t menuid, const __FlashStringHelper* label, uint8_t size){
+  const uint8_t _min = ' '; const uint8_t _max = 'Z';
+  switch(action){
+    case NEXT_CH:
+      if(pos < size) pos++;  // allow to go to next character when string size allows and when current character is not string end
+      action = UPDATE_MENU; //fall-through next case
+    case UPDATE:
+    case UPDATE_MENU:
+      if(menumode != 3) pos = 0;
+      if(menumode == 2) menumode = 3; // hack: for strings enter in edit mode
+      if(((value[pos] + encoder_val) < _min) || ((value[pos] + encoder_val) == 0)) value[pos] = _min;
+      else if((value[pos] + encoder_val) > _max) value[pos] = _max;
+      else value[pos] = value[pos] + encoder_val;
+      encoder_val = 0;
+
+      printlabel(action, menuid, label);  // print normal/menu label
+      lcd.print(&value[(pos / 8) * 8]); // print value
+      lcd.print('\x01');  // print terminator
+      lcd_blanks();
+      lcd.setCursor((pos % 8) + (menumode >= 2), 1); lcd.cursor();
+      break;
+    case SAVE:
+      for(uint8_t i = size; i > 0; i--){
+        if((value[i-1] == ' ') || (value[i-1] == 0)) value[i-1] = 0;  // remove trailing spaces
+        else break; // stop once content found
+      }
+      //fall-through next case
+    default:
+      actionCommon(action, (uint8_t *)value, size);
+      break;
+  }
+}
+#endif //MENU_STR
+
 static uint32_t save_event_time = 0;
 static uint8_t vox_tx = 0;
 static uint8_t vox_sample = 0;
@@ -3887,11 +3948,11 @@ const char* agc_label[] = { "OFF", "Fast", "Slow" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 37  // number of (visible) parameters
+#define N_PARAMS 39  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, CWMSG, INTERVAL, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -3935,17 +3996,23 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef SEMI_QSK
     case SEMIQSK: paramAction(action, semi_qsk,  0x24, F("Semi QSK"), offon_label, 0, 1, false); break;
 #endif
+#if defined(KEYER) || defined(CW_MESSAGE)
+    case KEY_WPM:  paramAction(action, keyer_speed, 0x25, F("Keyer Speed"), NULL, 1, 60, false); break;
+#endif
 #ifdef KEYER
-    case KEY_WPM:  paramAction(action, keyer_speed,   0x25, F("Keyer Speed"), NULL, 1, 35, false); break;
-    case KEY_MODE: paramAction(action, keyer_mode, 0x26, F("Keyer Mode"), keyer_mode_label, 0, 2, false); break;
-    case KEY_PIN:  paramAction(action, keyer_swap,   0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
-    case KEY_TX:   paramAction(action, practice,   0x28, F("Practice"), offon_label, 0, 1, false); break;
+    case KEY_MODE: paramAction(action, keyer_mode,  0x26, F("Keyer Mode"), keyer_mode_label, 0, 2, false); break;
+    case KEY_PIN:  paramAction(action, keyer_swap,  0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
+#endif
+    case KEY_TX:   paramAction(action, practice,    0x28, F("Practice"), offon_label, 0, 1, false); break;
+#ifdef CW_MESSAGE
+    case CWMSG:    paramAction(action, cw_msg,      0x29, F("CW Message"), sizeof(cw_msg)); break;
+    case INTERVAL: paramAction(action, cw_msg_interval, 0x2a, F("Interval"), NULL, 0, 60, false); break;
 #endif
 #ifdef VOX_ENABLE
-    case VOX:     paramAction(action, vox, 0x31, F("VOX"), offon_label, 0, 1, false); break;
+    case VOX:     paramAction(action, vox,        0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("Noise Gate"), NULL, 0, 255, false); break;
 #endif
-    case DRIVE:   paramAction(action, drive, 0x33, F("TX Drive"), NULL, 0, 8, false); break;
+    case DRIVE:   paramAction(action, drive,   0x33, F("TX Drive"), NULL, 0, 8, false); break;
 #ifdef TX_DELAY
     case TXDELAY: paramAction(action, txdelay, 0x34, F("TX Delay"), NULL, 0, 255, false); break;
 #endif
@@ -3981,7 +4048,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   return id;
 }
 
-void initPins(){  
+void initPins(){
   // initialize
   digitalWrite(SIG_OUT, LOW);
   digitalWrite(RX, HIGH);
@@ -4748,9 +4815,7 @@ void setup()
 #ifdef KEYER
   keyerState = IDLE;
   keyerControl = IAMBICB;      // Or 0 for IAMBICA
-  paramAction(LOAD, KEY_MODE);
-  paramAction(LOAD, KEY_PIN);
-  loadWPM(keyer_speed);                 // Fix speed at 15 WPM
+  loadWPM(keyer_speed);        // Fix speed at 15 WPM
 #endif //KEYER
 
   for(; !_digitalRead(DIT) || ((mode == CW) && (!_digitalRead(DAH)));){ // wait until DIH/DAH/PTT is released to prevent TX on startup
@@ -4796,10 +4861,6 @@ void loop()
   }
 #endif //VOX_ENABLE
 
-//#ifndef SIMPLE_RX
-//  delay(1);
-//#endif
-
 #ifdef CW_DECODER
   //if((mode == CW) && cwdec) cw_decode();  // if(!(semi_qsk_timeout)) cw_decode(); else dec2();
   if((mode == CW) && cwdec && ((!tx) && (!semi_qsk_timeout))) cw_decode();  // CW decoder only active during RX
@@ -4824,13 +4885,6 @@ void loop()
       if(!semi_qsk_timeout)
         smeter();
   }
-
-//#define ONEBUTTON_INV 1 // Encoder button goes from PC3 to GND (instead PC3 to 5V, with 10k pull down)
-#ifdef ONEBUTTON_INV
-  uint8_t inv = 1;
-#else
-  uint8_t inv = 0;
-#endif
 
 #ifdef KEYER  //Keyer
   if(mode == CW && keyer_mode != SINGLE){  // check DIT/DAH keys for CW
@@ -4968,12 +5022,12 @@ void loop()
         int8_t _menumode;
         if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short left-click while in default screen: enter menu mode
         if(menumode == 1){ _menumode = 2; }                          // short left-click while in menu: enter value selection screen
-        if(menumode == 2){ _menumode = 0; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
+        if(menumode >= 2){ _menumode = 0; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
         menumode = _menumode;
         break;
       case BL|DC:
 #ifdef CW_MESSAGE
-        cw_tx(CW_MESSAGE_TEXT);
+        if(mode == CW) cw_tx(cw_msg);
 #endif //CW_MESSAGE
         break;
       case BR|SC:
@@ -5007,7 +5061,7 @@ void loop()
           change = true;
         } else {
           if(menumode == 1){ menumode = 0; }  // short right-click while in menu: enter value selection screen
-          if(menumode == 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
+          if(menumode >= 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
         }
         break;
       case BR|DC:
@@ -5081,6 +5135,9 @@ void loop()
           int8_t _menumode;
           if(menumode == 1){ _menumode = 2; }  // short encoder-click while in menu: enter value selection screen
           if(menumode == 2){ _menumode = 1; change = true; paramAction(SAVE, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
+#ifdef MENU_STR
+          if(menumode == 3){ _menumode = 3; paramAction(NEXT_CH, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
+#endif
           menumode = _menumode;
         }
         break;
@@ -5110,6 +5167,9 @@ void loop()
         if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short enc-click while in default screen: enter menu mode
         if(menumode == 1){ _menumode = 2; }                          // short enc-click while in menu: enter value selection screen
         if(menumode == 2){ _menumode = 0; paramAction(SAVE, menu); } // short enc-click while in value selection screen: save, and return to default screen
+#ifdef MENU_STR
+        if(menumode == 3){ _menumode = 3; paramAction(NEXT_CH, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
+#endif
         menumode = _menumode;
         break;
       case BE|DC:
@@ -5141,7 +5201,7 @@ void loop()
           change = true;
         } else {
           if(menumode == 1){ menumode = 0; }  // short right-click while in menu: enter value selection screen
-          if(menumode == 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
+          if(menumode >= 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
         }
         break;
       case BE|PL:
