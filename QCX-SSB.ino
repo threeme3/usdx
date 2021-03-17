@@ -33,15 +33,16 @@
 #define RIT_ENABLE      1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
 #define VOX_ENABLE      1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
 //#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
-#define FAST_AGC        1   // Adds fast AGC option
+#define FAST_AGC        1   // Adds fast AGC option (good for CW)
 //#define VSS_METER     1   // Supports Vss measurement (as s-meter option)
 //#define SWR_METER     1   // Support SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
-//#define CW_FREQS_QRP  1   // Defaults to CW QRP   frequencies when changing bands
-//#define CW_FREQS_FISTS  1 // Defaults to CW FISTS frequencies when changing bands
 //#define ONEBUTTON     1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
 //#define F_MCU_16MHZ   1   // 16MHz ATMEGA328P crystal  (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal)
 //#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH     1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
+//#define CW_FREQS_QRP  1   // Defaults to CW QRP   frequencies when changing bands
+//#define CW_FREQS_FISTS  1 // Defaults to CW FISTS frequencies when changing bands
+#define MYCALL          ""  // Enter your call (in caps)
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -1699,11 +1700,6 @@ inline void set_lpf(uint8_t f){
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
-volatile uint8_t event;
-volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
-volatile uint8_t prev_menumode = 0;
-volatile int8_t menu = 0;  // current parameter id selected in menu
-
 #ifdef DEBUG
 static uint32_t sr = 0;
 static uint32_t cpu_load = 0;
@@ -1985,11 +1981,11 @@ uint8_t delayWithKeySense(uint32_t ms){
   return 0;
 }
 
-char cw_msg[64] = "CQ CQ DE U3SDX U3SDX K";
+char cw_msg[64] = "CQ CQ DE " MYCALL " " MYCALL " K";
 uint8_t cw_msg_interval = 5; // number of seconds CW message is repeated
+uint32_t cw_msg_event = 0;
 
-void cw_tx(char* msg){    // Transmit message in CW
- for(;;){
+int cw_tx(char* msg){    // Transmit message in CW
   char sym;
   for(uint8_t i = 0; msg[i]; i++){  // loop over message
     lcd.setCursor(0, 0); lcd.print(i); lcd.print("    ");
@@ -2001,21 +1997,21 @@ void cw_tx(char* msg){    // Transmit message in CW
         else {
           for(; k; k >>= 1){ // send dit/dah one by one, until everythng is sent
             switch_rxtx(1);  // key-on  tx
-            if(delayWithKeySense(ditTime * ((j & k) ? 3 : 1))){ switch_rxtx(0); return; } // symbol: dah or dih length
+            if(delayWithKeySense(ditTime * ((j & k) ? 3 : 1))){ switch_rxtx(0); return 1; } // symbol: dah or dih length
             switch_rxtx(0);  // key-off tx
-            if(delayWithKeySense(ditTime)) return;  // add symbol space
+            if(delayWithKeySense(ditTime)) return 1;   // add symbol space
           }
-          if(delayWithKeySense(ditTime * 2)) return; // add letter space
+          if(delayWithKeySense(ditTime * 2)) return 1; // add letter space
         }
         break; // next character
       }
     }
   }
-  if(cw_msg_interval == 0) return;
-  if(delayWithKeySense(1000 * cw_msg_interval)) return;
- }  // loop forever
+  return 0;
 }
 #endif // CW_MESSAGE
+
+volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
 
 #ifdef CW_DECODER
 volatile uint8_t cwdec = 1;
@@ -3796,6 +3792,11 @@ inline void display_vfo(int32_t f){
   lcd.setCursor(15, 1); lcd.print((vox) ? 'V' : 'R');
 }
 
+volatile uint8_t event;
+//volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value
+volatile uint8_t prev_menumode = 0;
+volatile int8_t menu = 0;  // current parameter id selected in menu
+
 #define pgm_cache_item(addr, sz) byte _item[sz]; memcpy_P(_item, addr, sz);  // copy array item from PROGMEM to SRAM
 #define get_version_id() ((VERSION[0]-'1') * 2048 + ((VERSION[2]-'0')*10 + (VERSION[3]-'0')) * 32 +  ((VERSION[4]) ? (VERSION[4] - 'a' + 1) : 0) * 1)  // converts VERSION string with (fixed) format "9.99z" into uint16_t (max. values shown here, z may be removed) 
 
@@ -4895,6 +4896,9 @@ void loop()
             (_digitalRead(DIT) == LOW) ||
             (keyerControl & 0x03))
         {
+#ifdef CW_MESSAGE
+            cw_msg_event = 0;  // clear cw message event
+#endif //CW_MESSAGE
             update_PaddleLatch();
             keyerState = CHK_DIT;
         }
@@ -4958,6 +4962,9 @@ void loop()
 #else
    if(!_digitalRead(DIT) ){  // PTT/DIT keys transmitter
 #endif
+#ifdef CW_MESSAGE
+            cw_msg_event = 0;  // clear cw message event
+#endif //CW_MESSAGE
     switch_rxtx(1);
 #ifdef DAH_AS_KEY
     for(; !_digitalRead(DIT)  || ((mode == CW) && (!_digitalRead(DAH)));){ // until released
@@ -5027,7 +5034,7 @@ void loop()
         break;
       case BL|DC:
 #ifdef CW_MESSAGE
-        if(mode == CW) cw_tx(cw_msg);
+        cw_msg_event = millis();
 #endif //CW_MESSAGE
         break;
       case BR|SC:
@@ -5404,6 +5411,12 @@ void loop()
     save_event_time = 0;
     //lcd.setCursor(15, 1); lcd.print('S'); delay(100); lcd.setCursor(15, 1); lcd.print('R');
   }
+
+#ifdef CW_MESSAGE
+  if((mode == CW) && (cw_msg_event) && (millis() > cw_msg_event)){  // if it is time to send a CW message 
+    if(!(cw_tx(cw_msg)) && cw_msg_interval) cw_msg_event = millis() + 1000 * cw_msg_interval; else cw_msg_event = 0;  // then send message, if not interrupted and there is an interval set, then schedule new event
+  }
+#endif //CW_MESSAGE
 
   wdt_reset();
 
