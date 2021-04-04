@@ -4,45 +4,46 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02p"
+#define VERSION   "1.02q"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
-#define DIAG            1   // Hardware diagnostics on startup (only disable when your rig is working)
-#define KEYER           1   // CW keyer
-#define CAT             1   // CAT-interface
-#define F_XTAL 27005000     // 27MHz SI5351 crystal
-//#define F_XTAL 25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or SI5351 break-out board)
-//#define F_XTAL 25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
-//#define SWAP_ROTARY   1   // Swap rotary direction (enable for WB2CBA-uSDX)
-//#define QCX           1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
-//#define OLED          1   // OLED display, connect SDA (PD2), SCL (PD3)
+#define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
+#define KEYER            1   // CW keyer
+#define CAT              1   // CAT-interface
+#define F_XTAL    27005000   // 27MHz SI5351 crystal
+//#define F_XTAL  25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or SI5351 break-out board)
+//#define F_XTAL  25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
+//#define SWAP_ROTARY    1   // Swap rotary direction (enable for WB2CBA-uSDX)
+//#define QCX            1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
+//#define OLED           1   // OLED display, connect SDA (PD2), SCL (PD3)
 #define LPF_SWITCHING_DL2MAN_USDX_REV3         1   // Enable 8-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2       1   // Enable 5-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable 5-band filter bank switching: latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV1       1   // Enable 3-band filter bank switching: latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+#define SI5351_ADDR   0x60   // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT, MS5351M; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
 // Advanced configuration switches
-//#define CAT_EXT       1   // Extended CAT support: remote button and screen control commands over CAT
-//#define CAT_STREAMING 1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7.812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
-#define CW_DECODER      1   // CW decoder
-//#define CW_MESSAGE    1   // Transmits pre-defined CW messages on-demand (double-click left button)
-#define TX_ENABLE       1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
-#define TX_DELAY        1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
-#define KEY_CLICK       1   // Reduce key clicks by envelope shaping
-#define SEMI_QSK        1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
-#define RIT_ENABLE      1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
-#define VOX_ENABLE      1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
-//#define MOX_ENABLE    1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
-#define FAST_AGC        1   // Adds fast AGC option (good for CW)
-//#define VSS_METER     1   // Supports Vss measurement (as s-meter option)
-//#define SWR_METER     1   // Support SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
-//#define ONEBUTTON     1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
-//#define F_MCU_16MHZ   1   // 16MHz ATMEGA328P crystal  (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal)
-//#define DEBUG         1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
-//#define TESTBENCH     1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
-//#define CW_FREQS_QRP  1   // Defaults to CW QRP   frequencies when changing bands
-//#define CW_FREQS_FISTS  1 // Defaults to CW FISTS frequencies when changing bands
-#define MYCALL          ""  // Enter your call (in caps)
+//#define CAT_EXT        1   // Extended CAT support: remote button and screen control commands over CAT
+//#define CAT_STREAMING  1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7.812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
+#define CW_DECODER       1   // CW decoder
+#define TX_ENABLE        1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
+#define TX_DELAY         1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
+#define KEY_CLICK        1   // Reduce key clicks by envelope shaping
+#define SEMI_QSK         1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
+#define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
+#define VOX_ENABLE       1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
+//#define MOX_ENABLE     1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
+#define FAST_AGC         1   // Adds fast AGC option (good for CW)
+//#define VSS_METER      1   // Supports Vss measurement (as s-meter option)
+//#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
+//#define ONEBUTTON      1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
+//#define F_MCU   16000000   // 16MHz ATMEGA328P crystal  (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal). You may change this value to any other crystal frequency (up to 28MHz may work)
+//#define DEBUG          1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
+//#define TESTBENCH      1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
+//#define CW_FREQS_QRP   1   // Defaults to CW QRP   frequencies when changing bands
+//#define CW_FREQS_FISTS 1   // Defaults to CW FISTS frequencies when changing bands
+//#define CW_MESSAGE     1   // Transmits pre-defined CW messages on-demand (double-click left button)
+//#define CW_MESSAGE_EXT 1   // Additional CW messages
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -79,12 +80,6 @@
 #if (defined(CAT) || defined(TESTBENCH)) && !(OLED)
 #define _SERIAL  1       // Coexistence support for serial port and LCD on the same pins
 #endif
-
-#if(F_CPU != 16000000)
-   #error "Compilation must declare a 16 MHz CPU clock only. See F_MCU_16MHZ to adapt to alternate clock frequencies."
-#endif
-#undef F_CPU
-#define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
 
 #ifndef TX_ENABLE
 #undef KEYER
@@ -133,14 +128,22 @@ ssb_cap=1; dsp_cap=2;
 #define F_CPU F_XTAL
 */
 
+//FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be set at programming (Arduino IDE > Tools > Burn bootloader)
+
 #if(ARDUINO < 10810)
    #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.10 or later from https://www.arduino.cc/en/software"
 #endif
 #if !(defined(ARDUINO_ARCH_AVR))
    #error "Unsupported architecture, select Arduino IDE > Tools > Board > Arduino AVR Boards > Arduino Uno."
 #endif
-
-//FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be set at programming (Arduino IDE > Tools > Burn bootloader)
+#if(F_CPU != 16000000)
+   #error "Unsupported clock frequency, Arduino IDE must specify 16MHz clock; alternate crystal frequencies may be specified with F_MCU."
+#endif
+#undef F_CPU
+#define F_CPU 20007000  // Actual crystal frequency of 20MHz XTAL1, note that this declaration is just informative and does not correct the timing in Arduino functions like delay(); hence a 1.25 factor needs to be added for correction.
+#ifndef F_MCU
+#define F_MCU 20000000  // 20MHz ATMEGA328P crystal
+#endif
 
 extern char __bss_end;
 static int freeMemory(){ char* sp = reinterpret_cast<char*>(SP); return sp - &__bss_end; }  // see: http://www.nongnu.org/avr-libc/user-manual/malloc.html
@@ -175,7 +178,7 @@ uint8_t _digitalRead(uint8_t pin){  // reads pin or (via CAT) artificially overr
 #define IAMBICA  0x00     // 0 for Iambic A, 1 for Iambic B
 #define SINGLE   2        // Keyer Mode 0 1 -> Iambic2  2 ->SINGLE
 
-int keyer_speed = 15;
+int keyer_speed = 25;
 static unsigned long ditTime;                    // No. milliseconds per dit
 static uint8_t keyerControl;
 static uint8_t keyerState;
@@ -200,10 +203,10 @@ void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 
 void loadWPM (int wpm) // Calculate new time constants based on wpm value
 {
-#ifdef F_MCU_16MHZ
-  ditTime = 1200/wpm;         //ditTime = 1200/wpm;
+#if(F_MCU != 20000000)
+  ditTime = F_MCU/16000000 * 1200ULL/wpm;   //ditTime = 1200/wpm;  compensated for F_CPU clock (running in a 16MHz Arduino environment)
 #else
-  ditTime = 1200/wpm * 5/4;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
+  ditTime = 5/4 * 1200/wpm;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
 #endif
 }
 //#endif //KEYER
@@ -390,7 +393,11 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
 class I2C_ {
 public:
+#if(F_MCU > 20000000)
+  #define _DELAY() for(uint8_t i = 0; i != 6; i++) asm("nop");
+#else
   #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
+#endif
   #define _I2C_SDA (1<<2) // PD2
   #define _I2C_SCL (1<<3) // PD3
 #ifdef OLED_I2C_DIRECT_IO
@@ -1069,7 +1076,11 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
 
 class I2C {
 public:
+#if(F_MCU > 20000000)
+  #define I2C_DELAY   6
+#else
   #define I2C_DELAY   4    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
+#endif
   #define I2C_DDR DDRC     // Pins for the I2C bit banging
   #define I2C_PIN PINC
   #define I2C_PORT PORTC
@@ -1205,6 +1216,38 @@ public:
 
   volatile uint32_t fxtal = F_XTAL;
 
+//#define NEW_TX 1
+#ifdef NEW_TX
+  inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
+  {
+    #define _MSC  0x10000
+    uint32_t msb128 = _msb128 + ((int64_t)(_div * (int32_t)df) * _MSC * 128) / fxtal;
+
+    uint16_t msp1 = _msa128min512 + msb128 / _MSC; // = 128 * _msa + msb128 / _MSC - 512;
+    uint16_t msp2 = msb128; // = msb128 % _MSC;  assuming MSC is covering exact uint16_t so the mod operation can dissapear (and the upper BB2 byte) // = msb128 - msb128/_MSC * _MSC;
+
+    //pll_regs[0] = BB1(msc);  // 3 regs are constant
+    //pll_regs[1] = BB0(msc);
+    //pll_regs[2] = BB2(msp1);
+    //pll_regs[3] = BB1(msp1);
+    pll_regs[4] = BB0(msp1);
+    pll_regs[5] = ((_MSC&0xF0000)>>(16-4))/*|BB2(msp2)*/; // top nibble MUST be same as top nibble of _MSC !  assuming that BB2(msp2) is always 0 -> so reg is constant
+    pll_regs[6] = BB1(msp2);
+    pll_regs[7] = BB0(msp2);
+  }
+
+  inline void SendPLLRegisterBulk(){
+    i2c.start();
+    i2c.SendByte(SI5351_ADDR << 1);
+    i2c.SendByte(26+0*8 + 4);  // Write to PLLA
+    //i2c.SendByte(26+1*8 + 4);  // Write to PLLB
+    i2c.SendByte(pll_regs[4]);
+    i2c.SendByte(pll_regs[5]);
+    i2c.SendByte(pll_regs[6]);
+    i2c.SendByte(pll_regs[7]);
+    i2c.stop();
+  }
+#else  // !NEW_TX
   inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
   { 
     #define _MSC  0x80000  //0x80000: 98% CPU load   0xFFFFF: 114% CPU load
@@ -1235,7 +1278,6 @@ public:
     pll_regs[6] = BB1(msp2);
     pll_regs[7] = BB0(msp2);
   }
-  #define SI5351_ADDR 0x60                // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
   inline void SendPLLRegisterBulk(){
     i2c.start();
@@ -1249,6 +1291,7 @@ public:
     i2c.SendByte(pll_regs[7]);
     i2c.stop();
   }
+#endif // !NEW_TX
   
   void SendRegister(uint8_t reg, uint8_t* data, uint8_t n){
     i2c.start();
@@ -1318,11 +1361,7 @@ public:
       ms(MS2,  fvcoa, fout, PLLA, 0, 0, rdiv);
       reset();
       ms(MS0,  fvcoa, fout, PLLA, 0, 0, rdiv);
-#ifdef F_MCU_16MHZ
-      delayMicroseconds(1000000UL/F_DEV);        // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
-#else
-      delayMicroseconds(1000000UL/F_DEV * 5/4);  // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
-#endif
+      delayMicroseconds(F_MCU/16000000 * 1000000UL/F_DEV);  // Td = 1/(4 * Fdev) phase-shift   https://tj-lab.org/2020/08/27/si5351%e5%8d%98%e4%bd%93%e3%81%a73mhz%e4%bb%a5%e4%b8%8b%e3%81%ae%e7%9b%b4%e4%ba%a4%e4%bf%a1%e5%8f%b7%e3%82%92%e5%87%ba%e5%8a%9b%e3%81%99%e3%82%8b/
       ms(MS1,  fvcoa, fout, PLLA, 0, 0, rdiv);
       oe(0b00000011);  // output enable CLK0, CLK1
 #endif
@@ -1411,6 +1450,9 @@ public:
     SendRegister(25, 0b00000000); // Disable state: LOW state when disabled
     for(int addr = 16; addr != 24; addr++) SendRegister(addr, 0b10000000);  // Conserve power when output is disabled
     SendRegister(187, 0);        // Disable fanout (power-safe)
+    // To initialise things as they should:
+    SendRegister(149, 0);        // Disable spread spectrum enable
+    SendRegister(183, 0b11010010);  // Internal CL = 10 pF (default)
   }
   #define SI_CLK_OE 3
 
@@ -1735,10 +1777,9 @@ inline void _vox(bool trigger)
   }
 }
 
-//#define F_SAMP_TX 4402
-#define F_SAMP_TX 4810        //4810 // ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
-#ifdef F_MCU_16MHZ
-#define _F_SAMP_TX  3848      //(F_SAMP_TX * 4/5) = 3848
+#define F_SAMP_TX 4810 //4805 // 4402 // (Design) ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
+#if(F_MCU != 20000000)
+const int16_t _F_SAMP_TX = (F_MCU * 4810LL / 20000000);  // Actual ADC sample-rate; used for phase calculations
 #else
 #define _F_SAMP_TX  F_SAMP_TX
 #endif
@@ -1892,11 +1933,7 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 volatile uint16_t acc;
 volatile uint32_t cw_offset;
 volatile uint8_t cw_tone = 1;
-#ifdef F_MCU_16MHZ
-const uint32_t tones[] = {700 * 4/5, 600 * 4/5, 700 * 4/5};
-#else
- const uint32_t tones[] = {700, 600, 700};
-#endif
+const uint32_t tones[] = { F_MCU * 700ULL / 20000000, F_MCU * 600ULL / 20000000, F_MCU * 700ULL / 20000000};
 
 volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
 volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
@@ -1980,32 +2017,41 @@ uint8_t delayWithKeySense(uint32_t ms){
   }
   return 0;
 }
-
-char cw_msg[64] = "CQ CQ DE " MYCALL " " MYCALL " K";
+#ifdef CW_MESSAGE_EXT
+char cw_msg[6][48] = { "CQ PE1NNN +", "CQ CQ DE PE1NNN PE1NNN +", "GE TKS 5NN 5NN NAME IS GUIDO GUIDO HW?", "FB RPTR TX 5W 5W ANT INV V 73 CUAGN", "73 TU E E", "PE1NNN" };
+#else
+char cw_msg[1][48] = { "CQ PE1NNN +" };
+#endif
 uint8_t cw_msg_interval = 5; // number of seconds CW message is repeated
 uint32_t cw_msg_event = 0;
+uint8_t cw_msg_id = 0; // selected message
 
-int cw_tx(char* msg){    // Transmit message in CW
+int cw_tx(char ch){    // Transmit message in CW
   char sym;
+  for(uint8_t j = 0; (sym = pgm_read_byte_near(m2c + j)); j++){  // lookup msg[i] in m2c, skip if not found
+    if(sym == ch){  // found -> transmit CW character j
+      wdt_reset();
+      uint8_t k = 0x80; for(; !(j & k); k >>= 1); k >>= 1; // shift start of cw code to MSB
+      if(k == 0) delay(ditTime * 4); // space -> add word space
+      else {
+        for(; k; k >>= 1){ // send dit/dah one by one, until everythng is sent
+          switch_rxtx(1);  // key-on  tx
+          if(delayWithKeySense(ditTime * ((j & k) ? 3 : 1))){ switch_rxtx(0); return 1; } // symbol: dah or dih length
+          switch_rxtx(0);  // key-off tx
+          if(delayWithKeySense(ditTime)) return 1;   // add symbol space
+        }
+        if(delayWithKeySense(ditTime * 2)) return 1; // add letter space
+      }
+      break; // next character
+    }
+  }
+  return 0;
+}
+
+int cw_tx(char* msg){
   for(uint8_t i = 0; msg[i]; i++){  // loop over message
     lcd.setCursor(0, 0); lcd.print(i); lcd.print("    ");
-    for(uint8_t j = 0; (sym = pgm_read_byte_near(m2c + j)); j++){  // lookup msg[i] in m2c, skip if not found
-      if(sym == msg[i]){  // found -> transmit CW character j
-        wdt_reset();
-        uint8_t k = 0x80; for(; !(j & k); k >>= 1); k >>= 1; // shift start of cw code to MSB
-        if(k == 0) delay(ditTime * 4); // space -> add word space
-        else {
-          for(; k; k >>= 1){ // send dit/dah one by one, until everythng is sent
-            switch_rxtx(1);  // key-on  tx
-            if(delayWithKeySense(ditTime * ((j & k) ? 3 : 1))){ switch_rxtx(0); return 1; } // symbol: dah or dih length
-            switch_rxtx(0);  // key-off tx
-            if(delayWithKeySense(ditTime)) return 1;   // add symbol space
-          }
-          if(delayWithKeySense(ditTime * 2)) return 1; // add letter space
-        }
-        break; // next character
-      }
-    }
+    if(cw_tx(msg[i])) return 1;
   }
   return 0;
 }
@@ -2039,7 +2085,7 @@ long lowtimesavg;
 long startttimelow;
 long lowduration;
 long laststarttime = 0;
-int wpm = 20;
+int wpm = 25;
 
 inline void cw_decode()
 {
@@ -3493,11 +3539,7 @@ void switch_rxtx(uint8_t tx_enable){
 #endif //PTX
       lcd.setCursor(15, 1); lcd.print('D');  // note that this enables interrupts again.
       interrupts();    //hack.. to allow delay()
-#ifdef F_MCU_16MHZ
-      delay(txdelay);
-#else
-      delay(txdelay * 5/4);
-#endif
+      delay(F_MCU * txdelay /16000000);
       noInterrupts();  //end of hack
     }
 #endif //TX_DELAY
@@ -3838,17 +3880,20 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
   uint8_t n;
   switch(action){
     case LOAD:
-      for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
+      //for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
+      eeprom_read_block((void *)ptr, (const void *)eeprom_addr, size);
       break;
     case SAVE:
       //noInterrupts();
-      for(n = size; n; --n){ wdt_reset(); eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++); }
+      //for(n = size; n; --n){ wdt_reset(); eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++); }
+      eeprom_write_block((const void *)ptr, (void *)eeprom_addr, size);
       //interrupts();
       break;
     case SKIP:
-      eeprom_addr += size;
+      //eeprom_addr += size;
       break;
   }
+  eeprom_addr += size;
 }
 
 template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const __FlashStringHelper* label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous){
@@ -3894,7 +3939,8 @@ void paramAction(uint8_t action, char* value, uint8_t menuid, const __FlashStrin
       encoder_val = 0;
 
       printlabel(action, menuid, label);  // print normal/menu label
-      lcd.print(&value[(pos / 8) * 8]); // print value
+      for(int i = 0; i != 13; i++){ char ch = value[(pos / 8) * 8 + i]; if(ch) lcd.print(ch); else break; } // print value
+      //lcd.print(&value[(pos / 8) * 8]); // print value
       lcd.print('\x01');  // print terminator
       lcd_blanks();
       lcd.setCursor((pos % 8) + (menumode >= 2), 1); lcd.cursor();
@@ -3925,7 +3971,7 @@ static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:   
 #endif
 
 const char* offon_label[2] = {"OFF", "ON"};
-#ifdef F_MCU_16MHZ
+#if(F_MCU > 16000000)
 const char* filt_label[N_FILT+1] = { "Full", "3000", "2400", "1800", "500", "200", "100", "50" };
 #else
 const char* filt_label[N_FILT+1] = { "Full", "2400", "2000", "1500", "500", "200", "100", "50" };
@@ -3949,11 +3995,11 @@ const char* agc_label[] = { "OFF", "Fast", "Slow" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 39  // number of (visible) parameters
+#define N_PARAMS 44  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, CWMSG, INTERVAL, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -4005,10 +4051,6 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case KEY_PIN:  paramAction(action, keyer_swap,  0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
 #endif
     case KEY_TX:   paramAction(action, practice,    0x28, F("Practice"), offon_label, 0, 1, false); break;
-#ifdef CW_MESSAGE
-    case CWMSG:    paramAction(action, cw_msg,      0x29, F("CW Message"), sizeof(cw_msg)); break;
-    case INTERVAL: paramAction(action, cw_msg_interval, 0x2a, F("Interval"), NULL, 0, 60, false); break;
-#endif
 #ifdef VOX_ENABLE
     case VOX:     paramAction(action, vox,        0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("Noise Gate"), NULL, 0, 255, false); break;
@@ -4019,6 +4061,17 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #endif
 #ifdef MOX_ENABLE
     case MOX:     paramAction(action, mox, 0x35, F("MOX"), NULL, 0, 2, false); break;
+#endif
+#ifdef CW_MESSAGE
+    case CWINTERVAL: paramAction(action, cw_msg_interval, 0x41, F("CQ Interval"), NULL, 0, 60, false); break;
+    case CWMSG1:    paramAction(action, cw_msg[0],   0x42, F("CQ Message"), sizeof(cw_msg)); break;
+#ifdef CW_MESSAGE_EXT
+    case CWMSG2:    paramAction(action, cw_msg[1],   0x43, F("CW Message 2"), sizeof(cw_msg)); break;
+    case CWMSG3:    paramAction(action, cw_msg[2],   0x44, F("CW Message 3"), sizeof(cw_msg)); break;
+    case CWMSG4:    paramAction(action, cw_msg[3],   0x45, F("CW Message 4"), sizeof(cw_msg)); break;
+    case CWMSG5:    paramAction(action, cw_msg[4],   0x46, F("CW Message 5"), sizeof(cw_msg)); break;
+    case CWMSG6:    paramAction(action, cw_msg[5],   0x47, F("CW Message 6"), sizeof(cw_msg)); break;
+#endif
 #endif
     case PWM_MIN: paramAction(action, pwm_min, 0x81, F("PA Bias min"), NULL, 0, pwm_max - 1, false); break;
     case PWM_MAX: paramAction(action, pwm_max, 0x82, F("PA Bias max"), NULL, pwm_min, 255, false); break;
@@ -4210,6 +4263,8 @@ echo ";UA1;" > /tmp/ttyS0;
 4. Instead of step 3, you could visualize uSDX console:
 
 clear; echo ";UA1;UD;" > /tmp/ttyS0; cat /tmp/ttyS0 | while IFS= read -d \; c; do echo "${c}" |sed -E  's/^UD..(.+)$|^[^U][^D](.*)$/\1/g'| sed -E 's/^(.{16})(.+)$/\x1B[;1H\x1B[1m\x1B[44m\x1B[97m\1\x1B[0m\x1B[K\n\x1B[1m\x1B[44m\x1B[97m\2\x1B[0m\x1B[K\n\x1B[K\n\x1B[K/g'; echo ";UD;UD;" >> /tmp/ttyS0; sleep 1; done
+
+Use pavumeter to set the correct mixer settings
 
 */
 #ifdef CAT_EXT
@@ -4544,7 +4599,7 @@ void setup()
   t1 = micros();
   uint16_t load_tx = (float)(t1 - t0) * (float)F_SAMP_TX * 100.0 / 1000000.0 * 16000000.0/(float)F_CPU;
   // benchmark sdr_rx_00() ISR
-  func_ptr = sdr_rx;
+  func_ptr = sdr_rx_00;
   rx_state = 0;
   uint16_t load_rx[8];
   uint16_t load_rx_avg = 0;
@@ -4802,11 +4857,7 @@ void setup()
 #else
   #define BAUD   38400            //38400 //115200 //4800 //Baudrate used for serial communications (CAT, TESTBENCH)
 #endif
-#ifdef F_MCU_16MHZ
-  Serial.begin(BAUD);
-#else
-  Serial.begin(BAUD * 4/5); // corrected for F_CPU=20M
-#endif
+  Serial.begin(16000000ULL * BAUD / F_MCU); // corrected for F_CPU=20M
   Command_IF();
 #if !defined(OLED) && defined(TESTBENCH)
    smode = 0;  // In case of LCD, turn of smeter
@@ -5026,6 +5077,14 @@ void loop()
         //if(menu == 0) menu = 1;
         break;
       case BL|SC:
+#ifdef CW_MESSAGE
+        if((menumode == 1) && (menu >= CWMSG1) && (menu <= CWMSG6)){
+          cw_msg_event = millis();
+          cw_msg_id = menu - CWMSG1;
+          menumode = 0;
+          break;
+        }
+#endif //CW_MESSAGE
         int8_t _menumode;
         if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short left-click while in default screen: enter menu mode
         if(menumode == 1){ _menumode = 2; }                          // short left-click while in menu: enter value selection screen
@@ -5033,9 +5092,6 @@ void loop()
         menumode = _menumode;
         break;
       case BL|DC:
-#ifdef CW_MESSAGE
-        cw_msg_event = millis();
-#endif //CW_MESSAGE
         break;
       case BR|SC:
         if(!menumode){
@@ -5143,7 +5199,7 @@ void loop()
           if(menumode == 1){ _menumode = 2; }  // short encoder-click while in menu: enter value selection screen
           if(menumode == 2){ _menumode = 1; change = true; paramAction(SAVE, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
 #ifdef MENU_STR
-          if(menumode == 3){ _menumode = 3; paramAction(NEXT_CH, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
+          if(menumode == 3){ _menumode = 3; paramAction(NEXT_CH, menu); } // short encoder-click while in string edit mode: change position to next character
 #endif
           menumode = _menumode;
         }
@@ -5175,7 +5231,7 @@ void loop()
         if(menumode == 1){ _menumode = 2; }                          // short enc-click while in menu: enter value selection screen
         if(menumode == 2){ _menumode = 0; paramAction(SAVE, menu); } // short enc-click while in value selection screen: save, and return to default screen
 #ifdef MENU_STR
-        if(menumode == 3){ _menumode = 3; paramAction(NEXT_CH, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
+        if(menumode == 3){ _menumode = 3; paramAction(NEXT_CH, menu); } // short encoder-click while in string edit mode: change position to next character
 #endif
         menumode = _menumode;
         break;
@@ -5339,11 +5395,7 @@ void loop()
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate
         numSamples = 0;
-#ifdef F_MCU_16MHZ
-        delay(500);         // delay 0.5s
-#else
-        delay(500 * 5/4);   // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
-#endif
+        delay(F_MCU * 500 / 16000000);   // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
         sr = numSamples * 2;   // samples per second
         paramAction(UPDATE_MENU, menu); // refresh
       }
@@ -5414,7 +5466,7 @@ void loop()
 
 #ifdef CW_MESSAGE
   if((mode == CW) && (cw_msg_event) && (millis() > cw_msg_event)){  // if it is time to send a CW message 
-    if(!(cw_tx(cw_msg)) && cw_msg_interval) cw_msg_event = millis() + 1000 * cw_msg_interval; else cw_msg_event = 0;  // then send message, if not interrupted and there is an interval set, then schedule new event
+    if((cw_tx(cw_msg[cw_msg_id]) == 0) && ((cw_msg[cw_msg_id][0] == 'C') && (cw_msg[cw_msg_id][1] == 'Q')) && cw_msg_interval) cw_msg_event = millis() + 1000 * cw_msg_interval; else cw_msg_event = 0;  // then send message, if not interrupted and its a CQ msg and there is an interval set, then schedule new event
   }
 #endif //CW_MESSAGE
 
@@ -5443,7 +5495,7 @@ faster RX-TX switch to support CW
 clock
 qcx API demo code
 scan
-move last bit of arrays into flash? https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_rom_array.html
+move last bit of arrays into flash? https://web.archive.org/web/20180324010832/https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_rom_array.html
 remove floats
 u-law in RX path?: http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
 Arduino library?
@@ -5483,14 +5535,6 @@ block ptt while in vox mode
 
 adc bias error and potential error correction
 noise burst on tx
-
----
-https://groups.io/g/ucx/topic/81030243#6265  :
-line 12: //#define CAT             1   // GNI blocked, CAT-interface
-line 15: #define F_XTAL 25000373   // GNI changed, 25MHz SI5351 crystal  (enable for 25MHz TCXO)
-line 38: #define SIG_OUT 13        //GNI swaped PB3    (pin 17)   (pin 15 nano D11) nc
-line 40: #define DIT     11        //GNI swaped PB5    (pin 19)   (pin 17 nano D13) PTT
-(because of resistor with LED connected to D13 on Nano module)
-remove unnecessary menu options (2.4, 2.5, 2.6, 2.7, 2.8, 3.1, 3.4, 3.5, 8.2, 8.3).
+https://groups.io/g/ucx/topic/81030243#6265
 
 */

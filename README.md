@@ -42,9 +42,9 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| [R1.02o] | 2020-03-03 | TX quality improvements, single encoder/button-only control option, 16MHz Arduino Uno/Nano support |
-| [R1.02n] | 2020-02-22 | Key click reduction, TX bandwidth control, OLED fixes, CAT remote control features including RX audio streaming. |
-| [R1.02m] | 2020-01-27 | CW support, TS480 CAT support, RX quality improvments, semi-QSK, PA PTT out with TX-delay, VFO-A/B/RIT, LPF switching, backlight saving, 160m. |
+| [R1.02q] | 2021-04-04 | TX quality improvements, single encoder/button-only control option, 16MHz Arduino Uno/Nano support, CW Messages. |
+| [R1.02n] | 2021-02-22 | Key click reduction, TX bandwidth control, OLED fixes, CAT remote control features including RX audio streaming. |
+| [R1.02m] | 2021-01-27 | CW support, TS480 CAT support, RX quality improvments, semi-QSK, PA PTT out with TX-delay, VFO-A/B/RIT, LPF switching, backlight saving, 160m. |
 | [R1.02j] | 2020-10-10 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix, selectable CW pitch. |
 | [R1.01d] | 2019-05-05 | Q6 now digitally switched (remove C31) - improving stability and IMD. Improved signal processing, audio quality, increased bandwidth, cosmetic changes and reduced RF feedback, reduced s-meter RFI, S-meter readings, self-test on startup. Receiver I/Q calibration, (experimental) amplitude pre-distortion and calibration. (Original QCX-SSB mod is described here [R1.01d]) |
 | [R1.00] | 2019-01-29 | Initial release of SSB transceiver prototype. |
@@ -64,11 +64,13 @@ There are many uSDX constructions possible, here are a few common implementation
 - QRP Labs [QCX+ modification] by Mike Dunstan, G8GYW
 - more designs see here: https://groups.io/g/ucx/wiki
 
-Kits, PCB's and pre-assembled PCBs can be sourced from:
-- Andrew (KD7NYQ), with shop: http://shop.offline.systems , serving the american continent;
+Suppliers from which complete kits, PCB's and pre-assembled PCBs can be sourced from:
+- Andrew (KD7NYQ), with shop: https://shop.offline.systems , serving the american continent;
+- Eduardo (W5EGM), with shop: https://diyhouston.myshopify.com , serving United States;
 - Sunil (VU3SUA), with shop: https://inkits.in , providing kits in India;
-- Ondra (OK1CDJ) and XYL Alexandra (OK1RS) with shop: https://www.hamshop.cz/ , provide kits in Europe;
-- Hans (G0UPL), with shop: http://qrp-labs.com , globally distribute QRP Labs products.
+- Ondra (OK1CDJ) and XYL Alexandra (OK1RS) with shop: https://www.hamshop.cz , provide kits in Europe;
+- Jiaming Li (BD5XM), with shop: https://elekitsorparts.com , providing kits globally;
+- Hans (G0UPL), with shop: http://qrp-labs.com , distributes globally QRP Labs products.
 
 
 Instruction for older QCX PCB revisions can be found here below:
@@ -128,6 +130,13 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 3.3 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
 | 3.4 TX Delay        | Delays TX to allow PA relay to be fully switched on before TX (0-255 ms) | |
 | 3.5 MOX             | Monitor on Xmit (audio unmuted during transmit) | |
+| 4.1 CQ Interval     | Idle time in seconds before new CQ Message is given (0-60) | |
+| 4.2 CQ Message      | CQ Message text, pressing left-button in menu will start sending | **L** |
+| 4.3 CW Message 2    | CW Message text, pressing left-button in menu will start sending | **L** |
+| 4.4 CW Message 3    | CW Message text, pressing left-button in menu will start sending | **L** |
+| 4.5 CW Message 4    | CW Message text, pressing left-button in menu will start sending | **L** |
+| 4.6 CW Message 5    | CW Message text, pressing left-button in menu will start sending | **L** |
+| 4.7 CW Message 6    | CW Message text, pressing left-button in menu will start sending | **L** |
 | 8.1 PA Bias min     | PA amplitude PWM level (0-255) for representing   0% RF output | |
 | 8.2 PA Bias max     | PA amplitude PWM level (0-255) for representing 100% RF output | |
 | 8.3 Ref freq        | Actual si5351 crystal frequency, used for frequency-calibration | |
@@ -324,7 +333,7 @@ Linear Data Manual, 1988.
 
 [Ghetto-class-E-later-publication]: http://www.iw3sgt.it/IW3SGT_PRJ/IW3SGT_AMP_LF/ClassDEF1.pdf
 
-[R1.02o]:
+[R1.02q]: https://github.com/threeme3/QCX-SSB/tree/ca3a66c178d7062aa337eb3ac6b892b6cec95740
 
 [R1.02n]: https://github.com/threeme3/QCX-SSB/tree/5ac4204fd00c18e3b8cca13e32249dda6aeb6629
 
