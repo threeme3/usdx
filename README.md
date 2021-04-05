@@ -42,7 +42,7 @@ pe1nnz@amsat.org
 ## Revision History:
 | Rev.  | Date       | Features                                                            |
 | ----- | ---------- | ------------------------------------------------------------------- |
-| [R1.02q] | 2021-04-04 | TX quality improvements, single encoder/button-only control option, 16MHz Arduino Uno/Nano support, CW Messages. |
+| [R1.02r] | 2021-04-05 | TX quality improvements, better robustness against RFI feedback, fix VOX issue, single encoder/button-only control option, 16MHz Arduino Uno/Nano support, CW Messages. |
 | [R1.02n] | 2021-02-22 | Key click reduction, TX bandwidth control, OLED fixes, CAT remote control features including RX audio streaming. |
 | [R1.02m] | 2021-01-27 | CW support, TS480 CAT support, RX quality improvments, semi-QSK, PA PTT out with TX-delay, VFO-A/B/RIT, LPF switching, backlight saving, 160m. |
 | [R1.02j] | 2020-10-10 | Integrated SDR receiver, CW decoder, DSP filters, AGC, NR, ATT, experimental modes CW, AM, FM, quick menu, persistent settings, improved SSB TX quality. LCD fix, selectable CW pitch. |
@@ -333,7 +333,7 @@ Linear Data Manual, 1988.
 
 [Ghetto-class-E-later-publication]: http://www.iw3sgt.it/IW3SGT_PRJ/IW3SGT_AMP_LF/ClassDEF1.pdf
 
-[R1.02q]: https://github.com/threeme3/QCX-SSB/tree/ca3a66c178d7062aa337eb3ac6b892b6cec95740
+[R1.02r]:
 
 [R1.02n]: https://github.com/threeme3/QCX-SSB/tree/5ac4204fd00c18e3b8cca13e32249dda6aeb6629
 

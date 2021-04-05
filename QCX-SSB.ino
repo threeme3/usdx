@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02q"
+#define VERSION   "1.02r"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -27,7 +27,6 @@
 //#define CAT_STREAMING  1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7.812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
 #define CW_DECODER       1   // CW decoder
 #define TX_ENABLE        1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
-#define TX_DELAY         1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied
 #define KEY_CLICK        1   // Reduce key clicks by envelope shaping
 #define SEMI_QSK         1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
 #define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
@@ -42,8 +41,9 @@
 //#define TESTBENCH      1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
 //#define CW_FREQS_QRP   1   // Defaults to CW QRP   frequencies when changing bands
 //#define CW_FREQS_FISTS 1   // Defaults to CW FISTS frequencies when changing bands
-//#define CW_MESSAGE     1   // Transmits pre-defined CW messages on-demand (double-click left button)
+#define CW_MESSAGE       1   // Transmits pre-defined CW messages on-demand (double-click left button)
 //#define CW_MESSAGE_EXT 1   // Additional CW messages
+//#define TX_DELAY       1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied (see also NTX, PTX definitions below for GPIO that can switch relay/PA)
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -214,6 +214,7 @@ static uint8_t practice = false;  // Practice mode
 
 volatile uint8_t cat_active = 0;
 volatile uint32_t rxend_event = 0;
+volatile uint8_t vox = 0;
 
 #include <avr/sleep.h>
 #include <avr/wdt.h>
@@ -270,15 +271,15 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   // There are two drawbacks when continuous LCD writes happen: 1. noise is leaking via the AREF pull-ups into the receiver 2. serial data cannot be received.
   void pre(){
 #ifdef _SERIAL
-    if(cat_active){ Serial.flush(); for(; millis() < rxend_event;)wdt_reset(); PORTC |= 1<<2; DDRC |= 1<<2; } UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); // Complete serial TX and RX; mask PD1 LCD data-exchange by pulling-up TXD via PC2 HIGH; enable PD0/PD1, disable serial port
+    if(!vox) if(cat_active){ Serial.flush(); for(; millis() < rxend_event;)wdt_reset(); PORTC |= 1<<2; DDRC |= 1<<2; } UCSR0B &= ~((1<<RXEN0)|(1<<TXEN0)); // Complete serial TX and RX; mask PD1 LCD data-exchange by pulling-up TXD via PC2 HIGH; enable PD0/PD1, disable serial port
 #endif
     noInterrupts();  // do not allow LCD tranfer to be interrupted, to prevent backlight to lighten-up
   }
   void post(){
     if(backlight) PORTD |= 0x08; else PORTD &= ~0x08;   // Backlight control
 #ifdef _SERIAL
-    //UCSR0B |= (1<<RXEN0)|(1<<TXEN0); if(cat_active){ DDRC &= ~(1<<2); } // Enable serial port, disable PD0, PD1; disable PC2
-    UCSR0B |= (1<<RXEN0)|(1<<TXEN0); if(cat_active){ PORTC &= ~(1<<2); } // Enable serial port, disable PD0, PD1; PC2 LOW to prevent CAT TX disruption via MIC input
+    //UCSR0B |= (1<<RXEN0)|(1<<TXEN0); if(!vox) if(cat_active){ DDRC &= ~(1<<2); } // Enable serial port, disable PD0, PD1; disable PC2
+    UCSR0B |= (1<<RXEN0)|(1<<TXEN0); if(!vox) if(cat_active){ PORTC &= ~(1<<2); } // Enable serial port, disable PD0, PD1; PC2 LOW to prevent CAT TX disruption via MIC input
 #endif
     interrupts();
   }
@@ -1216,7 +1217,7 @@ public:
 
   volatile uint32_t fxtal = F_XTAL;
 
-//#define NEW_TX 1
+#define NEW_TX 1
 #ifdef NEW_TX
   inline void FAST freq_calc_fast(int16_t df)  // note: relies on cached variables: _msb128, _msa128min512, _div, _fout, fxtal
   {
@@ -1765,7 +1766,6 @@ volatile uint8_t mode = USB;
 volatile uint16_t numSamples = 0;
 
 volatile uint8_t tx = 0;
-volatile uint8_t vox = 0;
 volatile uint8_t filt = 0;
 
 inline void _vox(bool trigger)
@@ -3526,9 +3526,9 @@ void switch_rxtx(uint8_t tx_enable){
   delayMicroseconds(20); // wait until potential RX interrupt is finalized
   noInterrupts();
 #ifdef TX_DELAY
-//#ifdef SEMI_QSK
-//  if(!(semi_qsk_timeout))
-//#endif
+#ifdef SEMI_QSK
+  if(!(semi_qsk_timeout))
+#endif
     if((txdelay) && (tx_enable) && (!(tx)) && (!(practice))){  // key-up TX relay in advance before actual transmission
       digitalWrite(RX, LOW); // TX (disable RX)
 #ifdef NTX
@@ -3557,7 +3557,7 @@ void switch_rxtx(uint8_t tx_enable){
       case FM:  func_ptr = dsp_tx_fm; break;
     }
   } else {  // rx
-    if((!(semi_qsk_timeout))){
+    if((mode == CW) && (!(semi_qsk_timeout))){
 #ifdef SEMI_QSK
 #ifdef KEYER
       semi_qsk_timeout = millis() + ditTime * 8;
@@ -3565,7 +3565,7 @@ void switch_rxtx(uint8_t tx_enable){
       semi_qsk_timeout = millis() + 8 * 8;  // no keyer? assume dit-time of 20 WPM
 #endif //KEYER
 #endif //SEMI_QSK
-      if((mode == CW) && semi_qsk) func_ptr = dummy; else func_ptr = sdr_rx_00;
+      if(semi_qsk) func_ptr = dummy; else func_ptr = sdr_rx_00;
     } else {
       centiGain = _centiGain;  // restore AGC setting
 #ifdef SEMI_QSK
@@ -4900,6 +4900,7 @@ void loop()
       if(tx){  // TX triggered by audio -> TX
         vox_tx = 1;
         switch_rxtx(255);
+        //for(;(tx);) wdt_reset();  // while in tx (workaround for RFI feedback related issue)
         //delay(100); tx = 255;
       }
     } else if(!tx){  // VOX activated, no audio detected -> RX
@@ -4934,7 +4935,7 @@ void loop()
     }
     else
 #endif  //CW_DECODER
-      if(!semi_qsk_timeout)
+      if((!semi_qsk_timeout) && (!vox_tx))
         smeter();
   }
 
@@ -5006,34 +5007,29 @@ void loop()
   } else {
 #endif //KEYER
 
-//  #define DAH_AS_KEY  1
 #ifdef TX_ENABLE
-#ifdef DAH_AS_KEY
-   if(!_digitalRead(DIT)  || ((mode == CW) && (!_digitalRead(DAH))) ){  // PTT/DIT keys transmitter,  for CW also DAH
-#else
-   if(!_digitalRead(DIT) ){  // PTT/DIT keys transmitter
-#endif
+  uint8_t pin = ((mode == CW) && (keyer_swap)) ? DAH : DIT;
+  if(!vox_tx)  //  ONLY if VOX not active, then check DIT/DAH (fix for VOX to prevent RFI feedback through EMI on DIT or DAH line)
+   if(!_digitalRead(pin)){  // PTT/DIT keys transmitter
 #ifdef CW_MESSAGE
-            cw_msg_event = 0;  // clear cw message event
+    cw_msg_event = 0;  // clear cw message event
 #endif //CW_MESSAGE
     switch_rxtx(1);
-#ifdef DAH_AS_KEY
-    for(; !_digitalRead(DIT)  || ((mode == CW) && (!_digitalRead(DAH)));){ // until released
-#else
-    for(; !_digitalRead(DIT) ;){ // until released
-#endif
+    do {
       wdt_reset();
+      delay((mode == CW) ? 10 : 100);  // keep the tx keyed for a while before sensing (helps against RFI issues on DAH/DAH line)
 #ifdef SWR_METER
       if(smeter > 0 && mode == CW && millis() >= stimer) { readSWR(); stimer = millis() + 500; }
 #endif
       if(inv ^ _digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
-    }
+    } while(!_digitalRead(pin)); // until released
     switch_rxtx(0);
    }
 #endif //TX_ENABLE
 #ifdef KEYER
   }
 #endif //KEYER
+
 #ifdef SEMI_QSK
   if((semi_qsk_timeout) && (millis() > semi_qsk_timeout)){ switch_rxtx(0); }  // delayed QSK RX
 #endif
