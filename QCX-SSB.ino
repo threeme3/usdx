@@ -44,6 +44,7 @@
 #define CW_MESSAGE       1   // Transmits pre-defined CW messages on-demand (left-click menu item 4.2)
 //#define CW_MESSAGE_EXT 1   // Additional CW messages
 //#define TX_DELAY       1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied (see also NTX, PTX definitions below for GPIO that can switch relay/PA)
+//#define CLOCK          1   // Enables clock
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -204,9 +205,9 @@ void update_PaddleLatch() // Latch dit and/or dah press, called by keyer routine
 void loadWPM (int wpm) // Calculate new time constants based on wpm value
 {
 #if(F_MCU != 20000000)
-  ditTime = F_MCU/16000000 * 1200ULL/wpm;   //ditTime = 1200/wpm;  compensated for F_CPU clock (running in a 16MHz Arduino environment)
+  ditTime = (1200ULL * F_MCU/16000000)/wpm;   //ditTime = 1200/wpm;  compensated for F_CPU clock (running in a 16MHz Arduino environment)
 #else
-  ditTime = 5/4 * 1200/wpm;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
+  ditTime = (1200 * 5/4)/wpm;   //ditTime = 1200/wpm;  compensated for 20MHz clock (running in a 16MHz Arduino environment)
 #endif
 }
 //#endif //KEYER
@@ -3484,7 +3485,16 @@ float smeter(float ref = 0)
       uint16_t vss = analogSafeRead(BUTTONS, true) * (Rvss+Rgnd) * 11 / (Rgnd * 1024);
       lcd.setCursor(10, 0); lcd.print(vss/10); lcd.print('.'); lcd.print(vss%10); lcd.print("V ");
     }
-#endif
+#endif //VSS_METER
+#ifdef CLOCK
+    if(smode == 6){ // clock-indicator
+      uint32_t _s = (millis() * 16000000ULL / F_MCU) / 1000;
+      uint8_t h = (_s / 3600) % 24;
+      uint8_t m = (_s / 60) % 60;
+      uint8_t s = (_s) % 60;
+      lcd.setCursor(8, 0); lcd.print(h / 10); lcd.print(h % 10); lcd.print(':'); lcd.print(m / 10); lcd.print(m % 10); lcd.print(':'); lcd.print(s / 10); lcd.print(s % 10); lcd.print("  ");
+    }
+#endif //CLOCK
     stepsize_showcursor();
     max_absavg256 /= 2;  // Implement peak hold/decay for all meter types    
   }
@@ -3979,10 +3989,14 @@ const char* filt_label[N_FILT+1] = { "Full", "2400", "2000", "1500", "500", "200
 const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
 const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
 const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
+#ifdef CLOCK
+const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss", "time" };
+#else
 #ifdef VSS_METER
 const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss" };
 #else
 const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm" };
+#endif
 #endif
 #ifdef SWR_METER
 const char* swr_label[] = { "OFF", "FWD-SWR", "FWD-REF", "VFWD-VREF" };
@@ -4922,7 +4936,7 @@ void loop()
   if(menumode == 0){ // in main
 #ifdef CW_DECODER
     if(cw_event){
-      uint8_t offset = (uint8_t[]){ 0, 7, 3, 5, 3, 7 }[smode]; // depending on smeter more/less cw-text
+      uint8_t offset = (uint8_t[]){ 0, 7, 3, 5, 3, 7, 8 }[smode]; // depending on smeter more/less cw-text
       lcd.noCursor();
 #ifdef OLED
       //cw_event = false; for(int i = 0; out[offset + i] != '\0'; i++){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); if((!tx) && (!semi_qsk_timeout)) cw_decode(); }   // like 'lcd.print(out + offset);' but then in parallel calling cw_decoding() to handle long OLED writes
