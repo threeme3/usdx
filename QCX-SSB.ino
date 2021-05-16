@@ -11,16 +11,18 @@
 #define KEYER            1   // CW keyer
 #define CAT              1   // CAT-interface
 #define F_XTAL    27005000   // 27MHz SI5351 crystal
-//#define F_XTAL  25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX or SI5351 break-out board)
+//#define F_XTAL  25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX, SI5351 break-out board or uSDXuNO)
 //#define F_XTAL  25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
 //#define SWAP_ROTARY    1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX            1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
 //#define OLED           1   // OLED display, connect SDA (PD2), SCL (PD3)
-#define LPF_SWITCHING_DL2MAN_USDX_REV3         1   // Enable 8-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
-//#define LPF_SWITCHING_DL2MAN_USDX_REV3_BUT_NONLATCHING_RELAYS    1 // Enable this if you are using 8-band non-latching version of the relays, the radio will draw extra 15mA current but will work ity any relay (Tnx OH2UDS/TA7W Baris)
-//#define LPF_SWITCHING_DL2MAN_USDX_REV2       1   // Enable 5-band filter bank switching: latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
-//#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA  1   // Enable 5-band filter bank switching: latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
-//#define LPF_SWITCHING_DL2MAN_USDX_REV1       1   // Enable 3-band filter bank switching: latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+#define LPF_SWITCHING_DL2MAN_USDX_REV3           1   // Enable 8-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
+//#define LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH 1   // Enable 8-band filter bank switching: non-latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m. Enable this if you are using 8-band non-latching version for the relays, the radio will draw extra 15mA current but will work ity any relay (Tnx OH2UDS/TA7W Baris)
+//#define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+//#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA    1   // Enable 5-band filter bank switching:     latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
+//#define LPF_SWITCHING_DL2MAN_USDX_REV1         1   // Enable 3-band filter bank switching:     latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+//#define LPF_SWITCHING_WB2CBA_USDX_OCTOBAND     1   // Enable 8-band filter bank switching: non-latching relays wired to a MCP23008    GPIO extender on the PC4/PC5 I2C bus; relays are using GND as common (ground), GP0..7 used by the individual latches K1-8 switching respectively LPFs for 80m, 60m, 40m, 30m, 20m, 17m, 15m, 10m
+//#define LPF_SWITCHING_PE1DDA_USDXDUNO          14  // Enable 2-band filter bank switching: non-latching relay  wired to pin PD5 (pin 11); specify as value the frequency in MHz for which (and above) the relay should be altered (e.g. put 14 to enable the relay at 14MHz and above to use the 20m LPF).
 #define SI5351_ADDR   0x60   // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT, MS5351M; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
 // Advanced configuration switches
@@ -30,7 +32,7 @@
 #define TX_ENABLE        1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
 #define KEY_CLICK        1   // Reduce key clicks by envelope shaping
 #define SEMI_QSK         1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
-//#define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
+#define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
 #define VOX_ENABLE       1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
 //#define MOX_ENABLE     1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
 #define FAST_AGC         1   // Adds fast AGC option (good for CW)
@@ -83,7 +85,7 @@
 #define _SERIAL  1       // Coexistence support for serial port and LCD on the same pins
 #endif
 
-#ifdef LPF_SWITCHING_DL2MAN_USDX_REV3_BUT_NONLATCHING_RELAYS
+#ifdef LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH
 #define LPF_SWITCHING_DL2MAN_USDX_REV3         1
 #endif
 
@@ -226,6 +228,7 @@ volatile uint8_t vox = 0;
 #include <avr/wdt.h>
 
 uint8_t backlight = 8;
+//#define RS_HIGH_ON_IDLE   1   // Experimental LCD support where RS line is high on idle periods to comply with SDA I2C standard.
 
 class LCD : public Print {  // inspired by: http://www.technoblogy.com/show?2BET
 public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle to prevent potential display RFI via RS line
@@ -260,16 +263,6 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     delay(3);                                      // Allow to execute Clear on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
     cmd(0x06);                                     // * Entrymode: left, shift-dec
   }
-  void nib(uint8_t b){                             // Send four bit nibble to display
-    pre();
-    PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
-    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns
-    delayMicroseconds(4);
-    LCD_EN_LO();
-    post();
-    //delayMicroseconds(52);                         // Execution time
-    delayMicroseconds(60);                         // Execution time
-  }
   // Since LCD is using PD0(RXD), PD1(TXD) pins in the data-path, some co-existence feature is required when using the serial port.
   // The following functions are temporarily dsiabling the serial port when LCD writes happen, and make sure that serial transmission is ended.
   // To prevent that LCD writes are received by the serial receiver, PC2 is made HIGH during writes to pull-up TXD via a diode.
@@ -288,6 +281,46 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     UCSR0B |= (1<<RXEN0)|(1<<TXEN0); if(!vox) if(cat_active){ PORTC &= ~(1<<2); } // Enable serial port, disable PD0, PD1; PC2 LOW to prevent CAT TX disruption via MIC input
 #endif
     interrupts();
+  }
+#ifdef RS_HIGH_ON_IDLE
+  void cmd(uint8_t b){
+    pre();
+    uint8_t nibh = LCD_PREP_NIBBLE(b >>  4);       // Prepare high nibble data and enable high
+    PORTD = nibh;                                  // Send high nibble data and enable high
+    uint8_t nibl = LCD_PREP_NIBBLE(b & 0xf);       // Prepare low nibble data and enable high
+    LCD_RS_LO();
+    LCD_EN_LO();
+    PORTD = nibl;                                  // Send low nibble data and enable high
+    asm("nop"); asm("nop");                        // Keep RS low, but complete enable cycle (should be 500ns)
+    LCD_EN_LO();
+    LCD_RS_HI();
+    post();
+    delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
+  }
+  size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
+    pre();
+    uint8_t nibh = LCD_PREP_NIBBLE(b >>  4);       // Prepare high nibble data and enable high
+    PORTD = nibh;                                  // Send high nibble data and enable high
+    uint8_t nibl = LCD_PREP_NIBBLE(b & 0xf);       // Prepare low nibble data and enable high
+    LCD_RS_HI();
+    LCD_EN_LO();
+    PORTD = nibl;                                  // Send low nibble data and enable high
+    asm("nop"); asm("nop");                        // Keep RS high, but complete enable cycle (should be 500ns)
+    LCD_EN_LO();
+    post();
+    delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
+    return 1;
+  }
+#else //!RS_HIGH_ON_IDLE
+  void nib(uint8_t b){                             // Send four bit nibble to display
+    pre();
+    PORTD = LCD_PREP_NIBBLE(b);                    // Send data and enable high
+    //asm("nop");                                    // Enable high pulse width must be at least 230ns high, data-setup time 80ns
+    delayMicroseconds(4);
+    LCD_EN_LO();
+    post();
+    //delayMicroseconds(52);                         // Execution time
+    delayMicroseconds(60);                         // Execution time
   }
   void cmd(uint8_t b){ nib(b >> 4); nib(b & 0xf); } // Write command: send nibbles while RS low
   size_t write(uint8_t b){                         // Write data:    send nibbles while RS high
@@ -311,6 +344,7 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     delayMicroseconds(60);                         // Execution time  (37+4)*1.25 us
     return 1;
   }
+#endif // RS_HIGH_ON_IDLE
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
   void cursor(){ cmd(0x0e); }
   void noCursor(){ cmd(0x0c); }
@@ -1105,14 +1139,20 @@ public:
     I2C_PORT &= ~( I2C_SDA | I2C_SCL );
     I2C_SCL_HI();
     I2C_SDA_HI();
+#ifndef RS_HIGH_ON_IDLE
     suspend();
+#endif
   }
   ~I2C(){
     I2C_PORT &= ~( I2C_SDA | I2C_SCL );
     I2C_DDR &= ~( I2C_SDA | I2C_SCL );
   }  
   inline void start(){
+#ifdef RS_HIGH_ON_IDLE
+    I2C_SDA_LO();
+#else
     resume();  //prepare for I2C
+#endif
     I2C_SCL_LO();
     I2C_SDA_HI();
   }
@@ -1120,7 +1160,9 @@ public:
     I2C_SCL_HI();
     I2C_SDA_HI();
     I2C_DDR &= ~(I2C_SDA | I2C_SCL); // prepare for a start: pull-up both SDA, SCL
+#ifndef RS_HIGH_ON_IDLE
     suspend();
+#endif
   }
   #define SendBit(data, mask) \
     if(data & mask){ \
@@ -1188,9 +1230,9 @@ public:
     return data;
   }
   inline void resume(){
-  #ifdef LCD_RS_PORTIO
+#ifdef LCD_RS_PORTIO
     I2C_PORT &= ~I2C_SDA; // pin sharing SDA/LCD_RS mitigation
-  #endif
+#endif
   }
   inline void suspend(){
     I2C_SDA_LO();         // pin sharing SDA/LCD_RS: pull-down LCD_RS; QCXLiquidCrystal require this for any operation
@@ -1692,8 +1734,9 @@ static SI5351 si5351;
 class PCA9536 {
 public:
   #define PCA9536_ADDR  0x41  // PCA9536   https://www.ti.com/lit/ds/symlink/pca9536.pdf
-  inline void init(){ i2c.begin(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x03); i2c.write(0x00); i2c.endTransmission(); } // configuration cmd: IO0-IO7 as output
-  inline void write(uint8_t data){ init(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(0x01); i2c.write(data); i2c.endTransmission(); }  // output port cmd: write bits D7-D0 to IO7-IO0
+  inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(PCA9536_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
+  inline void init(){ SendRegister(0x03, 0x00); } // configuration cmd: IO0-IO7 as output
+  inline void write(uint8_t data){ init(); SendRegister(0x01, data); }  // output port cmd: write bits D7-D0 to IO7-IO0
 };
 PCA9536 ioext;
 
@@ -1714,7 +1757,7 @@ inline void set_lpf(uint8_t f){
 class IOExpander16 {
 public:
 #ifdef LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
-  #define IOEXP16_ADDR  0x74  // PCA9539 with A1..A0 set to 0   https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
+  #define IOEXP16_ADDR  0x74  // PCA9539 with A1..A0 set to 0     https://www.nxp.com/docs/en/data-sheet/PCA9539_PCA9539R.pdf
 #endif
 #ifdef LPF_SWITCHING_DL2MAN_USDX_REV2
   #define IOEXP16_ADDR  0x24  // TCA/PCA9555 with A2=1 A1..A0=0   https://www.ti.com/lit/ds/symlink/tca9555.pdf
@@ -1743,11 +1786,11 @@ static uint8_t prev_lpf_io = 0xff; // inits and resets all latches
 inline void set_lpf(uint8_t f){
 #ifdef LPF_SWITCHING_DL2MAN_USDX_REV3
   uint8_t lpf_io = (f > 26) ? IO1_3 : (f > 20) ? IO1_4 : (f > 17) ? IO1_2 : (f > 12) ? IO1_5 : (f > 8) ? IO1_1 : (f > 5) ? IO1_6 : (f > 4) ? IO1_0 : /*(f <= 4)*/ IO1_7; // cut-off freq in MHz to IO port of LPF relay
-#ifndef LPF_SWITCHING_DL2MAN_USDX_REV3_BUT_NONLATCHING_RELAYS
+#ifndef LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH
   if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, IO0_0, false); set_latch(lpf_io, IO0_0); prev_lpf_io = lpf_io; };  // set relay (latched)
 #else
   if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); };  // set relay (non-latched)
-#endif //LPF_SWITCHING_DL2MAN_USDX_REV3_BUT_NONLATCHING_RELAYS
+#endif //LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH
 #else //LPF_SWITCHING_DL2MAN_USDX_REV2 LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
   uint8_t lpf_io = (f > 12) ? IO0_3 : (f > 8) ? IO0_5 : (f > 5) ? IO0_7 : (f > 4) ? IO1_1 : /*(f <= 4)*/ IO1_3; // cut-off freq in MHz to IO port of LPF relay
   if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, IO0_1, false); set_latch(lpf_io, IO0_1); prev_lpf_io = lpf_io; };  // set relay
@@ -1756,7 +1799,31 @@ inline void set_lpf(uint8_t f){
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV3 LPF_SWITCHING_DL2MAN_USDX_REV2 REV2_BETA
 
-#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV3)
+#if defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND)
+class MCP23008 {
+public:
+#define MCP23008_ADDR  0x20  // MCP23008 with A1..A0 set to 0   https://ww1.microchip.com/downloads/en/DeviceDoc/21919e.pdf
+  inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(MCP23008_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
+  inline void init(){ SendRegister(0x09, 0x00); SendRegister(0x00, 0x00); } //GP0-7 to 0, GP0-7 as output
+  inline void write(uint16_t data){ SendRegister(0x09, data); }  // output port cmd: write bits D7-D0 to GP7-GP0
+};
+MCP23008 ioext;
+
+static uint8_t prev_lpf_io = 0xff; // inits and resets all latches
+inline void set_lpf(uint8_t f){
+  uint8_t lpf_io = (f > 26) ? 7 : (f > 20) ? 6 : (f > 17) ? 5 : (f > 12) ? 4 : (f > 8) ? 3 : (f > 6) ? 2 : (f > 4) ? 1 : /*(f <= 4)*/ 0; // cut-off freq in MHz to IO port of LPF relay
+  if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); };  // set relay (non-latched)
+}
+#endif  //LPF_SWITCHING_WB2CBA_USDX_OCTOBAND
+
+#if defined(LPF_SWITCHING_PE1DDA_USDXDUNO)
+inline void set_lpf(uint8_t f){
+  pinMode(PD5, OUTPUT);
+  digitalWrite(PD5, (f >= LPF_SWITCHING_PE1DDA_USDXDUNO));
+}
+#endif  //LPF_SWITCHING_PE1DDA_USDXDUNO
+
+#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV3) && !defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND) && !defined(LPF_SWITCHING_PE1DDA_USDXDUNO)
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
