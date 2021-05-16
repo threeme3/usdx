@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02r"
+#define VERSION   "1.02s"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -847,7 +847,7 @@ static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Seq
   0x81, 32,   // Set contrast control register
 #endif
   0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
-#ifdef INVERSE 1
+#ifdef INVERSE
    0xA7,     // Set display mode. A6=Normal; A7=Inverse
 #else
    0xA6,     // Set display mode. A6=Normal; A7=Inverse
@@ -945,8 +945,8 @@ public:
         uint8_t b = pgm_read_byte(&(font[offset++]));
         if(FONT_STRETCHV){
           uint8_t b2 = 0;
-          if(line > 1) for(int i = 0; i!=4; i++) b2 |=/* ! */(b & (1<<i)) ? (1<<(i*2)) | (1<<(i*2)+1): 0x00;
-          else         for(int i = 0; i!=4; i++) b2 |=/* ! */(b & (1<<(i+4))) ? (1<<(i*2)) | (1<<(i*2)+1): 0x00;
+          if(line > 1) for(int i = 0; i!=4; i++) b2 |=/* ! */(b & (1<<i)) ? (1<<(i*2)) | (1<<((i*2)+1)): 0x00;
+          else         for(int i = 0; i!=4; i++) b2 |=/* ! */(b & (1<<(i+4))) ? (1<<(i*2)) | (1<<((i*2)+1)): 0x00;
           Wire.write(b2);
           if(FONT_STRETCHH) Wire.write(b2);
         } else { Wire.write(b); if(FONT_STRETCHH) Wire.write(b); }
@@ -1155,7 +1155,7 @@ public:
   inline uint8_t RecvBit(uint8_t mask){
     I2C_SCL_HI();
     uint16_t i = 60000;
-    for(;(!I2C_SCL_GET()) && i; i--);  // wait util slave release SCL to HIGH (meaning data valid), or timeout at 3ms
+    for(;!(I2C_SCL_GET()) && i; i--);  // wait util slave release SCL to HIGH (meaning data valid), or timeout at 3ms
     //if(!i){ lcd.setCursor(0, 1); lcd.print(F("E07 I2C timeout")); }
     uint8_t data = I2C_SDA_GET();
     I2C_SCL_LO();
@@ -1317,7 +1317,8 @@ public:
     msp1 = 128*msa + 128*msb/msc - 512;
     msp2 = 128*msb - 128*msb/msc * msc;
     msp3 = msc;
-    uint8_t ms_regs[8] = { BB1(msp3), BB0(msp3), BB2(msp1) | (rdiv<<4) | ((msa == 4)*0x0C), BB1(msp1), BB0(msp1), BB2(((msp3 & 0x0F0000)<<4) | msp2), BB1(msp2), BB0(msp2) };
+    uint8_t ms_reg2 = BB2(msp1) | (rdiv<<4) | ((msa == 4)*0x0C);
+    uint8_t ms_regs[8] = { BB1(msp3), BB0(msp3), ms_reg2, BB1(msp1), BB0(msp1), BB2(((msp3 & 0x0F0000)<<4) | msp2), BB1(msp2), BB0(msp2) };
     SendRegister(n*8+42, ms_regs, 8); // Write to MSx
     if(n < 0){
       SendRegister(n+16+8, 0x80|(0x40*_int)); // MSNx PLLn: 0x40=FBA_INT; 0x80=CLKn_PDN
@@ -1351,7 +1352,7 @@ public:
       ms(MS0,  fvcoa, fout, PLLA, 0, i, rdiv);  // Multisynth stage with integer divider but in frac mode due to phase setting
       ms(MS1,  fvcoa, fout, PLLA, 0, q, rdiv);
       ms(MS2,  fvcoa, fout, PLLA, 0, 0, rdiv);
-      if(iqmsa != ((i-q)*((uint16_t)(fvcoa/fout))/90)){ iqmsa = (i-q)*((uint16_t)(fvcoa/fout))/90; reset(); }
+      if(iqmsa != (((int8_t)i-(int8_t)q)*((int16_t)(fvcoa/fout))/90)){ iqmsa = ((int8_t)i-(int8_t)q)*((int16_t)(fvcoa/fout))/90; reset(); }
       oe(0b00000011);  // output enable CLK0, CLK1
 
 #ifdef x
@@ -2074,19 +2075,19 @@ void printsym(){
   sym=1;
 }
 
-int realstate = LOW;
-int realstatebefore = LOW;
-int filteredstate = LOW;
-int filteredstatebefore = LOW;
-int nbtime = 16;  // 6 // ms noise blanker         
-long starttimehigh;
-long highduration;
-long hightimesavg;
-long lowtimesavg;
-long startttimelow;
-long lowduration;
-long laststarttime = 0;
-int wpm = 25;
+bool realstate = LOW;
+bool realstatebefore = LOW;
+bool filteredstate = LOW;
+bool filteredstatebefore = LOW;
+uint8_t nbtime = 16;  // 6 // ms noise blanker         
+uint32_t starttimehigh;
+uint32_t highduration;
+uint32_t hightimesavg;
+uint32_t lowtimesavg;
+uint32_t startttimelow;
+uint32_t lowduration;
+uint32_t laststarttime = 0;
+uint8_t wpm = 25;
 
 inline void cw_decode()
 {
@@ -2316,7 +2317,6 @@ inline int16_t process_nr_old(int16_t ac)
 
 inline int16_t process_nr_old2(int16_t ac)
 {  
-  int16_t x = ac;
   static int16_t ea1;
   //ea1 = MLEA(ea1, ac, 5, 6); // alpha=0.0156
   ea1 = EA(ea1, ac, 64); // alpha=1/64=0.0156
@@ -2751,7 +2751,7 @@ void process(int16_t i_ac2, int16_t q_ac2)
   static int16_t v[7];  // Post processing I and Q (down-sampled) results
   i = i_ac2; q = q_ac2;   // tbd: this can be more efficient
   int16_t i = v[0]; v[0] = v[1]; v[1] = v[2]; v[2] = v[3]; v[3] = v[4]; v[4] = v[5]; v[5] = v[6]; v[6] = i_ac2;  // Delay to match Hilbert transform on Q branch
-  ac3 = ac3 = slow_dsp(-i - qh);  //inverting I and Q helps dampening a feedback-loop between PWM out and ADC inputs
+  ac3 = slow_dsp(-i - qh);  //inverting I and Q helps dampening a feedback-loop between PWM out and ADC inputs
 #ifdef OUTLET
   tc--;
 #endif
@@ -2794,8 +2794,8 @@ void sdr_rx_05(){         q3 = sdr_rx_common_q(); func_ptr = sdr_rx_06; process(
 */
 
 // /*
-static int16_t i_s0za1, i_s0za2, i_s0zb0, i_s0zb1, i_s1za1, i_s1za2, i_s1zb0, i_s1zb1;
-static int16_t q_s0za1, q_s0za2, q_s0zb0, q_s0zb1, q_s1za1, q_s1za2, q_s1zb0, q_s1zb1, q_ac2;
+static int16_t i_s0za1, i_s0zb0, i_s0zb1, i_s1za1, i_s1zb0, i_s1zb1;
+static int16_t q_s0za1, q_s0zb0, q_s0zb1, q_s1za1, q_s1zb0, q_s1zb1, q_ac2;
 
 #define M_SR  1  // CIC N=3
 void sdr_rx_00(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_01;  int16_t i_s1za0 = (ac + (i_s0za1 + i_s0zb0) * 3 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + (i_s1za1 + i_s1zb0) * 3 + i_s1zb1); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
@@ -2809,6 +2809,9 @@ void sdr_rx_07(){ int16_t ac = sdr_rx_common_q(); func_ptr = sdr_rx_00;  int16_t
 // */
 
 /*
+static int16_t i_s0za1, i_s0za2, i_s0zb0, i_s0zb1, i_s1za1, i_s1za2, i_s1zb0, i_s1zb1;
+static int16_t q_s0za1, q_s0za2, q_s0zb0, q_s0zb1, q_s1za1, q_s1za2, q_s1zb0, q_s1zb1, q_ac2;
+
 #define M_SR  0  // CIC N=2
 void sdr_rx_00(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_01;  int16_t i_s1za0 = (ac + i_s0za1 + i_s0zb0 * 2 + i_s0zb1) >> M_SR; i_s0za1 = ac; int16_t ac2 = (i_s1za0 + i_s1za1 + i_s1zb0 * 2); i_s1za1 = i_s1za0; process(ac2, q_ac2); }
 void sdr_rx_02(){ int16_t ac = sdr_rx_common_i(); func_ptr = sdr_rx_03;  i_s0zb0 = ac; }
@@ -3415,7 +3418,7 @@ uint16_t analogSampleMic()
 {
   uint16_t adc;
   noInterrupts();
-  ADCSRA = (1 << ADEN) | ((uint8_t)log2((uint8_t)(F_CPU / 13 / (192307/1)))) & 0x07;  // hack: faster conversion rate necessary for VOX
+  ADCSRA = (1 << ADEN) | (((uint8_t)log2((uint8_t)(F_CPU / 13 / (192307/1)))) & 0x07);  // hack: faster conversion rate necessary for VOX
 
   if((dsp_cap == SDR) && (vox_thresh >= 32)) digitalWrite(RX, LOW);  // disable RF input, only for SDR mod and with low VOX threshold
   //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
@@ -3660,6 +3663,8 @@ void switch_rxtx(uint8_t tx_enable){
       }
 #ifdef RIT_ENABLE
       si5351.freq_calc_fast(rit); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
+#else
+      si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk();  // restore original PLL RX frequency
 #endif //RIT_ENABLE
 #ifdef SWR_METER
       if(swrmeter > 0) { show_banner(); lcd.print("                "); }
@@ -3887,7 +3892,7 @@ void printlabel(uint8_t action, uint8_t menuid, const __FlashStringHelper* label
 }
 
 void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
-  uint8_t n;
+  //uint8_t n;
   switch(action){
     case LOAD:
       //for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
@@ -4599,7 +4604,7 @@ void setup()
   digitalWrite(KEY_OUT, LOW);  // for safety: to prevent exploding PA MOSFETs, in case there was something still biasing them.
   si5351.powerDown();  // disable all CLK outputs (especially needed for si5351 variants that has CLK2 enabled by default, such as Si5351A-B04486-GT)
 
-  uint8_t mcusr = MCUSR;
+  //uint8_t mcusr = MCUSR;
   MCUSR = 0;
   //wdt_disable();
   wdt_enable(WDTO_4S);  // Enable watchdog
