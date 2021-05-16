@@ -1197,7 +1197,12 @@ public:
   uint8_t endTransmission(){ stop(); return 0; };
 };
 
-#define log2(n) (log(n) / log(2))
+//#define log2(n) (log(n) / log(2))
+uint8_t log2(uint16_t x){
+  uint8_t y = 0;
+  for(; x>>=1;) y++;
+  return y;
+}
 
 // /*
 I2C i2c;
@@ -1936,13 +1941,13 @@ volatile uint32_t cw_offset;
 volatile uint8_t cw_tone = 1;
 const uint32_t tones[] = { F_MCU * 700ULL / 20000000, F_MCU * 600ULL / 20000000, F_MCU * 700ULL / 20000000};
 
-volatile int16_t p_sin = 0;   // initialized with A*sin(0) = 0
-volatile int16_t n_cos = 448/2; // initialized with A*cos(t) = A
+volatile int8_t p_sin = 0;     // initialized with A*sin(0) = 0
+volatile int8_t n_cos = 448/4; // initialized with A*cos(t) = A
 inline void process_minsky() // Minsky circle sample [source: https://www.cl.cam.ac.uk/~am21/hakmemc.html, ITEM 149]: p_sin+=n_cos*2*PI*f/fs; n_cos-=p_sin*2*PI*f/fs;
 {
-  uint8_t alpha100 = tones[cw_tone]/*cw_offset*/ * 628 / _F_SAMP_TX;  // alpha = f_tone * 2 * pi / fs
-  p_sin += alpha100 * n_cos / 100;
-  n_cos -= alpha100 * p_sin / 100;
+  int8_t alpha127 = tones[cw_tone]/*cw_offset*/ * 798 / _F_SAMP_TX;  // alpha = f_tone * 2 * pi / fs
+  p_sin += alpha127 * n_cos / 127;
+  n_cos -= alpha127 * p_sin / 127;
 }
 
 // CW Key-click shaping, ramping up/down amplitude with sample-interval of 60us. Tnx: Yves HB9EWY https://groups.io/g/ucx/message/5107
@@ -2138,7 +2143,7 @@ void dec2()
  // now we will check which kind of baud we have - dit or dah, and what kind of pause we do have 1 - 3 or 7 pause, we think that hightimeavg = 1 bit
  if(filteredstate != filteredstatebefore){
   if(filteredstate == LOW){  //// we did end a HIGH
-    if(highduration < (hightimesavg*2) && highduration > (hightimesavg*0.6)){ /// 0.6 filter out false dits
+    if(highduration < (hightimesavg*2) && highduration > (hightimesavg*6/10)){ /// 0.6 filter out false dits
       sym=(sym<<1)|(0);        // insert dit (0)
     }
     if(highduration > (hightimesavg*2) && highduration < (hightimesavg*6)){ 
@@ -2148,16 +2153,16 @@ void dec2()
   }
  
    if(filteredstate == HIGH){  // we did end a LOW 
-     float lacktime = 1;
-     if(wpm > 25)lacktime=1.0; // when high speeds we have to have a little more pause before new letter or new word 
-     if(wpm > 30)lacktime=1.2;
-     if(wpm > 35)lacktime=1.5;
+     uint16_t lacktime = 10;
+     if(wpm > 25)lacktime=10; // when high speeds we have to have a little more pause before new letter or new word 
+     if(wpm > 30)lacktime=12;
+     if(wpm > 35)lacktime=15;
 
-     if(lowduration > (hightimesavg*(1.75*lacktime)) && lowduration < hightimesavg*(5*lacktime)){ // letter space
-     //if(lowduration > (hightimesavg*(2*lacktime)) && lowduration < hightimesavg*(5*lacktime)){ // letter space
+     if(lowduration > (hightimesavg*(lacktime*7/80)) && lowduration < hightimesavg*(lacktime*5/10)){ // letter space
+     //if(lowduration > (hightimesavg*(2*lacktime/10)) && lowduration < hightimesavg*(5*lacktime/10)){ // letter space
        printsym();
    }
-   if(lowduration >= hightimesavg*(5*lacktime)){ // word space
+   if(lowduration >= hightimesavg*(lacktime*5/10)){ // word space
      printsym();
      printsym();  // print space
    }
@@ -3267,7 +3272,7 @@ void timer1_start(uint32_t fs)
   TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM11); // Clear OC1A/OC1B on compare match, set OC1A/OC1B at BOTTOM (non-inverting mode)
   TCCR1B |= (1 << CS10) | (1 << WGM13) | (1 << WGM12); // Mode 14 - Fast PWM;  CS10: clkI/O/1 (No prescaling)
   ICR1H = 0x00;
-  ICR1L = min(255, (float)F_CPU / (float)fs - 0.5);  // PWM value range (fs>78431):  Fpwm = F_CPU / [Prescaler * (1 + TOP)]
+  ICR1L = min(255, F_CPU / fs);  // PWM value range (fs>78431):  Fpwm = F_CPU / [Prescaler * (1 + TOP)]
   //TCCR1A |= (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10); // Clear OC1A/OC1B on compare match, set OC1A/OC1B at BOTTOM (non-inverting mode)
   //TCCR1B |= (1 << CS10) | (1 << WGM12); // Mode 5 - Fast PWM, 8-bit;  CS10: clkI/O/1 (No prescaling)
   OCR1AH = 0x00;
@@ -3291,7 +3296,7 @@ void timer2_start(uint32_t fs)
   TCCR2A |= (1 << WGM21); // WGM21: Mode 2 - CTC (Clear Timer on Compare Match)
   TCCR2B |= (1 << CS22);  // Set C22 bits for 64 prescaler
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
-  uint8_t ocr = (((float)F_CPU / (float)64) / (float)fs + 0.5) - 1;   // OCRn = (F_CPU / pre-scaler / fs) - 1;
+  uint8_t ocr = ((F_CPU / 64) / fs) - 1;   // OCRn = (F_CPU / pre-scaler / fs) - 1;
   OCR2A = ocr;
 }
 
@@ -3445,19 +3450,19 @@ volatile int16_t rit = 0;
 // is a sine wave
 uint8_t smode = 1;
 uint32_t max_absavg256 = 0;
-float dbm;
+int16_t dbm;
 
 static int16_t smeter_cnt = 0;
 
-float smeter(float ref = 0)
+int16_t smeter(int16_t ref = 0)
 {
   max_absavg256 = max(_absavg256, max_absavg256); // peak
 
   if((smode) && ((++smeter_cnt % 2048) == 0)){   // slowed down display slightly
-    float rms;
-    if(dsp_cap == SDR) rms = (float)max_absavg256 * 1.1 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 8.0 * 500.0 * 1.414 / 0.707);   // 1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
-    else               rms = (float)max_absavg256 * 5.0 * (float)(1 << att2) / (256.0 * 1024.0 * (float)R * 2.0 * 100.0 * 120.0 / 1.750);
-    dbm = (10.0 * log10((rms * rms) / 50.0) + 30.0) - ref; //from rmsV to dBm at 50R
+    float rms = (float)max_absavg256 * (float)(1 << att2);
+    if(dsp_cap == SDR) rms /= (256.0 * 1024.0 * (float)R * 8.0 * 500.0 * 1.414 / (0.707 * 1.1));   // = -98.8dB  1 rx gain stage: rmsV = ADC value * AREF / [ADC DR * processing gain * receiver gain * "RMS compensation"]
+    else               rms /= (256.0 * 1024.0 * (float)R * 2.0 * 100.0 * 120.0 / (1.750 * 5.0));   // = -94.6dB
+    dbm = 10 * log10((rms * rms) / 50) + 30 - ref; //from rmsV to dBm at 50R
 
     lcd.noCursor(); 
     if(smode == 1){ // dBm meter
@@ -3669,7 +3674,7 @@ void switch_rxtx(uint8_t tx_enable){
       if(!vox) if(cat_active){ DDRC |= (1<<2); } // enable PC2, so that ADC2 is pulled-down so that CAT TX is not disrupted via mic input
 #endif
   }
-  OCR2A = (((float)F_CPU / (float)64) / (float)((tx_enable) ? F_SAMP_TX : F_SAMP_RX) + 0.5) - 1;
+  OCR2A = ((F_CPU / 64) / ((tx_enable) ? F_SAMP_TX : F_SAMP_RX)) - 1;
   TIMSK2 |= (1 << OCIE2A);  // enable timer compare interrupt TIMER2_COMPA_vect
 }
 
