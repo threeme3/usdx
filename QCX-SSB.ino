@@ -30,7 +30,7 @@
 #define TX_ENABLE        1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
 #define KEY_CLICK        1   // Reduce key clicks by envelope shaping
 #define SEMI_QSK         1   // Just after keying the transmitter, keeps the RX muted for a short amount of time in the anticipation for continued keying
-#define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
+//#define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
 #define VOX_ENABLE       1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
 //#define MOX_ENABLE     1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
 #define FAST_AGC         1   // Adds fast AGC option (good for CW)
@@ -3451,7 +3451,7 @@ uint16_t analogSampleMic()
 }
 
 volatile bool change = true;
-volatile int32_t freq = 7074000;
+volatile int32_t freq = 14000000;
 static int32_t vfo[] = { 7074000, 14074000 };
 static uint8_t vfomode[] = { USB, USB };
 enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
@@ -4829,15 +4829,15 @@ void setup()
   }
 
   // Measure I2C Bit-Error Rate (BER); should be error free for a thousand random bulk PLLB writes
-  //si5351.freq(freq, 0, 90);
+  si5351.freq(freq, 0, 90);  // freq needs to be set in order to use freq_calc_fast()
   wdt_reset();
   uint16_t i2c_error = 0;  // number of I2C byte transfer errors
   for(i = 0; i != 1000; i++){
     si5351.freq_calc_fast(i);
-    //for(int j = 3; j != 8; j++) si5351.pll_regs[j] = rand();
+    //for(int j = 4; j != 8; j++) si5351.pll_regs[j] = rand();
     si5351.SendPLLRegisterBulk();
     #define SI_SYNTH_PLL_A 26
-    for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_A + j) != si5351.pll_regs[j]) i2c_error++;
+    for(int j = 4; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_A + j) != si5351.pll_regs[j]) i2c_error++;
   }
   wdt_reset();
   if(i2c_error){
@@ -5200,6 +5200,9 @@ void loop()
         rit = !rit;
         stepsize = (rit) ?  STEP_10 : prev_stepsize[mode == CW];
         if(!rit){  // after RIT comes VFO A/B swap
+#else
+        {
+#endif //RIT_ENABLE
           vfosel = !vfosel;
           freq = vfo[vfosel%2];  // todo: share code with menumode
           mode = vfomode[vfosel%2];
@@ -5208,7 +5211,6 @@ void loop()
           if(mode == CW) { filt = 4; nr = 0; } else filt = 0;
         }
         change = true;
-#endif //RIT_ENABLE
         break;
 //#define TUNING_DIAL  1
 #ifdef TUNING_DIAL
