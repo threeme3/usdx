@@ -4901,10 +4901,14 @@ void setup()
   uint16_t i2c_error = 0;  // number of I2C byte transfer errors
   for(i = 0; i != 1000; i++){
     si5351.freq_calc_fast(i);
-    //for(int j = 4; j != 8; j++) si5351.pll_regs[j] = rand();
+    //for(int j = 0; j != 8; j++) si5351.pll_regs[j] = rand();
     si5351.SendPLLRegisterBulk();
     #define SI_SYNTH_PLL_A 26
+#ifdef NEW_TX
     for(int j = 4; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_A + j) != si5351.pll_regs[j]) i2c_error++;
+#else
+    for(int j = 3; j != 8; j++) if(si5351.RecvRegister(SI_SYNTH_PLL_A + j) != si5351.pll_regs[j]) i2c_error++;
+#endif //NEW_TX
   }
   wdt_reset();
   if(i2c_error){
