@@ -1789,7 +1789,7 @@ inline void set_lpf(uint8_t f){
 #ifndef LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH
   if(prev_lpf_io != lpf_io){ set_latch(prev_lpf_io, IO0_0, false); set_latch(lpf_io, IO0_0); prev_lpf_io = lpf_io; };  // set relay (latched)
 #else
-  if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); };  // set relay (non-latched)
+  if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); prev_lpf_io = lpf_io; };  // set relay (non-latched)
 #endif //LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH
 #else //LPF_SWITCHING_DL2MAN_USDX_REV2 LPF_SWITCHING_DL2MAN_USDX_REV2_BETA
   uint8_t lpf_io = (f > 12) ? IO0_3 : (f > 8) ? IO0_5 : (f > 5) ? IO0_7 : (f > 4) ? IO1_1 : /*(f <= 4)*/ IO1_3; // cut-off freq in MHz to IO port of LPF relay
