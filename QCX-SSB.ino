@@ -434,7 +434,7 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
 // I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
 class I2C_ {
 public:
-#if(F_MCU > 20000000)
+#if(F_MCU > 20900000)
   #define _DELAY() for(uint8_t i = 0; i != 6; i++) asm("nop");
 #else
   #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
@@ -1117,7 +1117,7 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
 
 class I2C {
 public:
-#if(F_MCU > 20000000)
+#if(F_MCU > 20900000)
   #define I2C_DELAY   6
 #else
   #define I2C_DELAY   4    // Determines I2C Speed (2=939kb/s (too fast!!); 3=822kb/s; 4=731kb/s; 5=658kb/s; 6=598kb/s). Increase this value when you get I2C tx errors (E05); decrease this value when you get a CPU overload (E01). An increment eats ~3.5% CPU load; minimum value is 3 on my QCX, resulting in 84.5% CPU load
@@ -1812,7 +1812,8 @@ MCP23008 ioext;
 static uint8_t prev_lpf_io = 0xff; // inits and resets all latches
 inline void set_lpf(uint8_t f){
   uint8_t lpf_io = (f > 26) ? 7 : (f > 20) ? 6 : (f > 17) ? 5 : (f > 12) ? 4 : (f > 8) ? 3 : (f > 6) ? 2 : (f > 4) ? 1 : /*(f <= 4)*/ 0; // cut-off freq in MHz to IO port of LPF relay
-  if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); };  // set relay (non-latched)
+  if(prev_lpf_io == 0xff){ ioext.init(); }
+  if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); prev_lpf_io = lpf_io; };  // set relay (non-latched)
 }
 #endif  //LPF_SWITCHING_WB2CBA_USDX_OCTOBAND
 
