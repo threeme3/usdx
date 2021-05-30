@@ -1115,6 +1115,8 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
   enc.event();
 }*/
 
+// I2C communication starts with a START condition, multiple single byte-transfers (MSB first) followed by an ACK/NACK and stops with a STOP condition;
+// during data-transfer SDA may only change when SCL is LOW, during a START/STOP condition SCL is HIGH and SDA goes DOWN for a START and UP for a STOP.
 class I2C {
 public:
 #if(F_MCU > 20900000)
@@ -1194,10 +1196,11 @@ public:
     SendBit(data, 1 << 2);
     SendBit(data, 1 << 1);
     SendBit(data, 1 << 0);
-    I2C_SDA_HI();  // recv ACK
+    SendBit(   0, 1 << 0);  // ACK/NAK: instead of assuming slave will set SDA is LOW (ACK), force SDA is LOW so that at least STOP condition will succeed (in case ACK is delayed, e.g. with MCP23008).
+    /*I2C_SDA_HI();  // recv ACK
     DELAY(I2C_DELAY);
     I2C_SCL_HI();
-    I2C_SCL_LO();
+    I2C_SCL_LO();*/
   }
   inline uint8_t RecvBit(uint8_t mask){
     I2C_SCL_HI();
@@ -4367,6 +4370,12 @@ echo ";UA1;" > /tmp/ttyS0;
 clear; echo ";UA1;UD;" > /tmp/ttyS0; cat /tmp/ttyS0 | while IFS= read -d \; c; do echo "${c}" |sed -E  's/^UD..(.+)$|^[^U][^D](.*)$/\1/g'| sed -E 's/^(.{16})(.+)$/\x1B[;1H\x1B[1m\x1B[44m\x1B[97m\1\x1B[0m\x1B[K\n\x1B[1m\x1B[44m\x1B[97m\2\x1B[0m\x1B[K\n\x1B[K\n\x1B[K/g'; echo ";UD;UD;" >> /tmp/ttyS0; sleep 1; done
 
 Use pavumeter to set the correct mixer settings
+
+For an Arduino board at 16 MHz, the following simple script will start streaming audio:
+
+cat /dev/ttyACM0 | aplay -c 1 -r 6249 -f U8
+stty -F /dev/ttyACM0 raw -echo -echoe -echoctl -echoke 115200;
+echo ";UA1;" > /dev/ttyACM0
 
 */
 #ifdef CAT_EXT
