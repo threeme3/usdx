@@ -454,8 +454,8 @@ public:
   #define _I2C_SCL_HI() DDRD &= ~_I2C_SCL; _DELAY();
   #define _I2C_SCL_LO() DDRD |=  _I2C_SCL; _DELAY();
 #endif // !OLED_I2C_DIRECT_IO
-  #define _I2C_START() _I2C_SDA_LO(); _I2C_SCL_LO(); _I2C_SDA_HI();
-  #define _I2C_STOP()  _I2C_SCL_HI(); _I2C_SDA_HI();
+  #define _I2C_START() _I2C_SDA_LO(); _I2C_SCL_LO(); // _I2C_SDA_HI();
+  #define _I2C_STOP()  _I2C_SDA_LO(); _I2C_SCL_HI(); _I2C_SDA_HI();
   #define _I2C_SUSPEND() //_I2C_SDA_LO(); // SDA_LO to allow re-use as output port
   #define _SendBit(data, bit) \
     if(data & 1 << bit){ \
@@ -1117,6 +1117,7 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
 
 // I2C communication starts with a START condition, multiple single byte-transfers (MSB first) followed by an ACK/NACK and stops with a STOP condition;
 // during data-transfer SDA may only change when SCL is LOW, during a START/STOP condition SCL is HIGH and SDA goes DOWN for a START and UP for a STOP.
+// https://www.ti.com/lit/an/slva704/slva704.pdf
 class I2C {
 public:
 #if(F_MCU > 20900000)
@@ -1159,6 +1160,7 @@ public:
     I2C_SDA_HI();
   }
   inline void stop(){
+    I2C_SDA_LO();   // ensure SDA is LO so STOP-condition can be initiated by pulling SCL HI (in case of ACK it SDA was already LO, but for a delayed ACK or NACK it is not!)
     I2C_SCL_HI();
     I2C_SDA_HI();
     I2C_DDR &= ~(I2C_SDA | I2C_SCL); // prepare for a start: pull-up both SDA, SCL
@@ -1196,11 +1198,10 @@ public:
     SendBit(data, 1 << 2);
     SendBit(data, 1 << 1);
     SendBit(data, 1 << 0);
-    SendBit(   0, 1 << 0);  // ACK/NAK: instead of assuming slave will set SDA is LOW (ACK), force SDA is LOW so that at least STOP condition will succeed (in case ACK is delayed, e.g. with MCP23008).
-    /*I2C_SDA_HI();  // recv ACK
+    I2C_SDA_HI();  // recv ACK
     DELAY(I2C_DELAY);
     I2C_SCL_HI();
-    I2C_SCL_LO();*/
+    I2C_SCL_LO();
   }
   inline uint8_t RecvBit(uint8_t mask){
     I2C_SCL_HI();
