@@ -1897,7 +1897,7 @@ inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 
 uint8_t lut[256];
 volatile uint8_t amp;
-volatile uint8_t vox_thresh = (1 << 0); //(1 << 2);
+volatile uint8_t vox_thresh = (1 << 1); //(1 << 2);
 volatile uint8_t drive = 2;   // hmm.. drive>2 impacts cpu load..why?
 
 volatile uint8_t quad = 0;
@@ -1916,7 +1916,7 @@ inline int16_t ssb(int16_t in)
   dc = (in + dc) / 2;        // average
   int16_t ac = (in - dc);   // DC decoupling
   //v[15] = ac;// - z1;        // high-pass (emphasis) filter
-  v[15] = (ac + z1) / 2;           // low-pass filter with notch at Fs/2
+  v[15] = (ac + z1);// / 2;           // low-pass filter with notch at Fs/2
   z1 = ac;
 
   i = v[7];
