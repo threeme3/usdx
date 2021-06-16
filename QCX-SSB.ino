@@ -4,14 +4,14 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02s"
+#define VERSION   "1.02t"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
 #define KEYER            1   // CW keyer
 #define CAT              1   // CAT-interface
 #define F_XTAL    27005000   // 27MHz SI5351 crystal
-//#define F_XTAL  25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX, SI5351 break-out board or uSDXuNO)
+//#define F_XTAL  25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX, SI5351 break-out board or uSDXDuO)
 //#define F_XTAL  25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
 //#define SWAP_ROTARY    1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX            1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
@@ -21,8 +21,9 @@
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA    1   // Enable 5-band filter bank switching:     latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV1         1   // Enable 3-band filter bank switching:     latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
+//#define LPF_SWITCHING_WB2CBA_USDX_QUADBAND     1   // Enable 4-band filter bank switching: non-latching relays wired to a MCP23008    GPIO extender on the PC4/PC5 I2C bus; relays are using GND as common (ground), GP2..5 used by the individual latches K1-4 switching respectively LPFs for 40m, 30m, 20m, 17m
 //#define LPF_SWITCHING_WB2CBA_USDX_OCTOBAND     1   // Enable 8-band filter bank switching: non-latching relays wired to a MCP23008    GPIO extender on the PC4/PC5 I2C bus; relays are using GND as common (ground), GP0..7 used by the individual latches K1-8 switching respectively LPFs for 80m, 60m, 40m, 30m, 20m, 17m, 15m, 10m
-//#define LPF_SWITCHING_PE1DDA_USDXDUNO          14  // Enable 2-band filter bank switching: non-latching relay  wired to pin PD5 (pin 11); specify as value the frequency in MHz for which (and above) the relay should be altered (e.g. put 14 to enable the relay at 14MHz and above to use the 20m LPF).
+//#define LPF_SWITCHING_PE1DDA_USDXDUO           14  // Enable 2-band filter bank switching: non-latching relay  wired to pin PD5 (pin 11); specify as value the frequency in MHz for which (and above) the relay should be altered (e.g. put 14 to enable the relay at 14MHz and above to use the 20m LPF).
 #define SI5351_ADDR   0x60   // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT, MS5351M; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
 // Advanced configuration switches
@@ -39,7 +40,7 @@
 //#define VSS_METER      1   // Supports Vss measurement (as s-meter option)
 //#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
 //#define ONEBUTTON      1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
-//#define F_MCU   16000000   // 16MHz ATMEGA328P crystal  (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal). You may change this value to any other crystal frequency (up to 28MHz may work)
+//#define F_MCU   16000000   // 16MHz ATMEGA328P crystal (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal). You may change this value to any other crystal frequency (up to 28MHz may work)
 //#define DEBUG          1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH      1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
 //#define CW_FREQS_QRP   1   // Defaults to CW QRP   frequencies when changing bands
@@ -47,7 +48,11 @@
 #define CW_MESSAGE       1   // Transmits pre-defined CW messages on-demand (left-click menu item 4.2)
 //#define CW_MESSAGE_EXT 1   // Additional CW messages
 //#define TX_DELAY       1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied (see also NTX, PTX definitions below for GPIO that can switch relay/PA)
+//#define NTX            11  // Enables LOW  on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
+//#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define CLOCK          1   // Enables clock
+//#define TX_CLK0_CLK1   1   // Use CLK0, CLK1 for TX instead of CLK2 (enable this for uSDXDuO); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
+#define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -71,8 +76,8 @@
 #define LCD_RS  18        //PC4    (pin 27)
 #define SDA     18        //PC4    (pin 27)
 #define SCL     19        //PC5    (pin 28)
-//#define NTX     11        //PB3    (pin 17)  - experimental: LOW  on TX, used as PTT out to enable external PAs
-//#define PTX     11        //PB3    (pin 17)  - experimental: HIGH on TX, used as PTT out to enable external PAs
+//#define NTX   11        //PB3    (pin 17)
+//#define PTX   11        //PB3    (pin 17)
 
 #ifdef SWAP_ROTARY
 #undef ROT_A
@@ -1803,7 +1808,7 @@ inline void set_lpf(uint8_t f){
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV3 LPF_SWITCHING_DL2MAN_USDX_REV2 REV2_BETA
 
-#if defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND)
+#if defined(LPF_SWITCHING_WB2CBA_USDX_QUADBAND) || defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND)
 class MCP23008 {
 public:
 #define MCP23008_ADDR  0x20  // MCP23008 with A1..A0 set to 0   https://ww1.microchip.com/downloads/en/DeviceDoc/21919e.pdf
@@ -1819,16 +1824,16 @@ inline void set_lpf(uint8_t f){
   if(prev_lpf_io == 0xff){ ioext.init(); }
   if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); prev_lpf_io = lpf_io; };  // set relay (non-latched)
 }
-#endif  //LPF_SWITCHING_WB2CBA_USDX_OCTOBAND
+#endif  //LPF_SWITCHING_WB2CBA_USDX_QUADBAND, LPF_SWITCHING_WB2CBA_USDX_OCTOBAND
 
-#if defined(LPF_SWITCHING_PE1DDA_USDXDUNO)
+#if defined(LPF_SWITCHING_PE1DDA_USDXDUO)
 inline void set_lpf(uint8_t f){
   pinMode(PD5, OUTPUT);
-  digitalWrite(PD5, (f >= LPF_SWITCHING_PE1DDA_USDXDUNO));
+  digitalWrite(PD5, (f >= LPF_SWITCHING_PE1DDA_USDXDUO));
 }
-#endif  //LPF_SWITCHING_PE1DDA_USDXDUNO
+#endif  //LPF_SWITCHING_PE1DDA_USDXDUO
 
-#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV3) && !defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND) && !defined(LPF_SWITCHING_PE1DDA_USDXDUNO)
+#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV3) && !defined(LPF_SWITCHING_WB2CBA_USDX_QUADBAND) && !defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND) && !defined(LPF_SWITCHING_PE1DDA_USDXDUO)
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
@@ -1876,7 +1881,6 @@ const int16_t _F_SAMP_TX = (F_MCU * 4810LL / 20000000);  // Actual ADC sample-ra
 #define MAX_DP  ((filt == 0) ? _UA : (filt == 3) ? _UA/4 : _UA/2)     //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 #define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
-//#define TX_CLK0_CLK1  1   // use CLK0, CLK1 for TX (instead of CLK2), you may enable and use NTX pin for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
 //#define QUAD  1       // invert TX signal for phase changes > 180
 
 inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
@@ -1916,6 +1920,16 @@ inline int16_t ssb(int16_t in)
   dc = (in + dc) / 2;        // average
   int16_t ac = (in - dc);   // DC decoupling
   //v[15] = ac;// - z1;        // high-pass (emphasis) filter
+#define MORE_MIC_GAIN   1       // adds more microphone gain, improving overall SSB quality (when speaking further away from microphone)
+#ifdef MORE_MIC_GAIN
+  v[15] = (ac + z1) << 1;             // low-pass filter with notch at Fs/2
+  z1 = ac;
+
+  i = v[7] << 1;
+  q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 16) / 64 + (v[6] - v[8]); // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
+
+  uint16_t _amp = magn(i >> 2, q >> 2);
+#else  // MORE_MIC_GAIN
   v[15] = (ac + z1);// / 2;           // low-pass filter with notch at Fs/2
   z1 = ac;
 
@@ -1923,6 +1937,8 @@ inline int16_t ssb(int16_t in)
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
 
   uint16_t _amp = magn(i, q);
+#endif  // !MORE_MIC_GAIN
+
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
   _vox(_amp > vox_thresh);
 #else
@@ -2157,9 +2173,15 @@ volatile uint32_t _amp32 = 0;
 static char out[] = "                ";
 volatile uint8_t cw_event = false;
 
-void printsym(){
-  if(sym<128){ char ch=pgm_read_byte_near(m2c + sym); if(ch != '*'){ for(int i=0; i!=15;i++) out[i]=out[i+1]; out[15] = ch; cw_event = true; }  }   // update LCD
-  sym=1;
+void printsym(bool submit = true){
+  if(sym<128){ char ch=pgm_read_byte_near(m2c + sym); if(ch != '*'){
+#ifdef CW_INTERMEDIATE
+    out[15] = ch; cw_event = true; if(submit){ for(int i=0; i!=15;i++){ out[i]=out[i+1]; } out[15] = ' '; }   // update LCD, only shift when submit is true, otherwise update last char only
+#else
+    for(int i=0; i!=15;i++) out[i]=out[i+1]; out[15] = ch; cw_event = true;   // update LCD
+#endif
+  } }
+  if(submit) sym=1;
 }
 
 bool realstate = LOW;
@@ -2186,7 +2208,12 @@ inline void cw_decode()
   if(realstate != realstatebefore){
     laststarttime = millis();
   }
+//#define NB_SCALED_TO_WPM    1   // Scales noise-blanker timing the actual CW speed; this should reduce errors from noise at low speeds; this may have side-effect with fast speed changes that fast CW will be filtered out
+#ifdef NB_SCALED_TO_WPM
+  if((millis() - laststarttime) > min(1200/(20*2), max(1200/(40*2), hightimesavg/6))){
+#else
   if((millis() - laststarttime) > nbtime){
+#endif
     if(realstate != filteredstate){
       filteredstate = realstate;
       //dec2();
@@ -2226,10 +2253,19 @@ void dec2()
  // now we will check which kind of baud we have - dit or dah, and what kind of pause we do have 1 - 3 or 7 pause, we think that hightimeavg = 1 bit
  if(filteredstate != filteredstatebefore){
   if(filteredstate == LOW){  //// we did end a HIGH
+#define FAIR_WEIGHTING    1
+#ifdef FAIR_WEIGHTING
+    if(highduration < (hightimesavg + hightimesavg/2) && highduration > (hightimesavg*6/10)){ /// 0.6 filter out false dits
+#else
     if(highduration < (hightimesavg*2) && highduration > (hightimesavg*6/10)){ /// 0.6 filter out false dits
+#endif
       sym=(sym<<1)|(0);        // insert dit (0)
     }
-    if(highduration > (hightimesavg*2) && highduration < (hightimesavg*6)){ 
+#ifdef FAIR_WEIGHTING
+    if(highduration > (hightimesavg + hightimesavg/2) && highduration < (hightimesavg*6)){
+#else
+    if(highduration > (hightimesavg*2) && highduration < (hightimesavg*6)){
+#endif
       sym=(sym<<1)|(1);        // insert dah (1)
       wpm = (wpm + (1200/((highduration)/3) * 4/3))/2;
     }
@@ -2291,7 +2327,11 @@ void dec2()
       hightimesavg = highduration/3;     // if speed decrease fast ..      
       //hightimesavg = highduration+hightimesavg;     // if speed decrease fast ..
     }
-    if(highduration > (hightimesavg/2)) sym=(sym<<1)|(highduration > (hightimesavg*2));        // dit (0) or dash (1)
+    if(highduration > (hightimesavg/2)){ sym=(sym<<1)|(highduration > (hightimesavg*2));       // dit (0) or dash (1)
+#if defined(CW_INTERMEDIATE) && !defined(OLED) && (F_MCU >= 20000000)
+      printsym(false);
+#endif
+    }
   }
  }
  
@@ -4928,7 +4968,11 @@ void setup()
 #endif //TX_ENABLE
 #endif  // DIAG
 
+#ifdef MORE_MIC_GAIN
+  drive = 6;  // Init settings
+#else
   drive = 4;  // Init settings
+#endif
 #ifdef QCX
   if(!ssb_cap){ vfomode[0] = CW; vfomode[1] = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
@@ -4986,13 +5030,7 @@ void setup()
   loadWPM(keyer_speed);        // Fix speed at 15 WPM
 #endif //KEYER
 
-  for(; !_digitalRead(DIT) || ((mode == CW) && (!_digitalRead(DAH)));){ // wait until DIH/DAH/PTT is released to prevent TX on startup
-    lcd.setCursor(15, 1); lcd.print('T');
-    delay(1000);
-    lcd.setCursor(15, 1); lcd.print(' ');
-    delay(1000);
-    wdt_reset();
-  }
+  for(; !_digitalRead(DIT) || ((mode == CW && keyer_mode != SINGLE) && (!_digitalRead(DAH)));){ fatal(F("Check PTT/key")); }// wait until DIH/DAH/PTT is released to prevent TX on startup
 }
 
 static int32_t _step = 0;
@@ -5042,7 +5080,8 @@ void loop()
       lcd.noCursor();
 #ifdef OLED
       //cw_event = false; for(int i = 0; out[offset + i] != '\0'; i++){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); if((!tx) && (!semi_qsk_timeout)) cw_decode(); }   // like 'lcd.print(out + offset);' but then in parallel calling cw_decoding() to handle long OLED writes
-      uint8_t i = cw_event - 1; if(out[offset + i]){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); cw_event++; } else cw_event = false;  // since an oled string write would hold-up reliable decoding/keying, write only a single char each time and continue
+      //uint8_t i = cw_event - 1; if(out[offset + i]){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); cw_event++; } else cw_event = false;  // since an oled string write would hold-up reliable decoding/keying, write only a single char each time and continue
+      uint8_t i = cw_event - 1; if(offset - i + 1){ lcd.setCursor(offset - i, 0); lcd.print(out[15 - i]); cw_event++; } else cw_event = false;  // since an oled string write would hold-up reliable decoding/keying, write only a single char each time and continue
 #else
       cw_event = false;
       lcd.setCursor(0, 0); lcd.print(out + offset);
