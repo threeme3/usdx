@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02t"
+#define VERSION   "1.02u"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -21,14 +21,13 @@
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2_BETA    1   // Enable 5-band filter bank switching:     latching relays wired to a PCA9539PW   GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV1         1   // Enable 3-band filter bank switching:     latching relays wired to a PCA9536D    GPIO extender on the PC4/PC5 I2C bus; relays are using IO0 as common (ground), IO1-IO3 used by the individual latches K1-3 switching respectively LPFs for 20m, 40m, 80m
-//#define LPF_SWITCHING_WB2CBA_USDX_QUADBAND     1   // Enable 4-band filter bank switching: non-latching relays wired to a MCP23008    GPIO extender on the PC4/PC5 I2C bus; relays are using GND as common (ground), GP2..5 used by the individual latches K1-4 switching respectively LPFs for 40m, 30m, 20m, 17m
 //#define LPF_SWITCHING_WB2CBA_USDX_OCTOBAND     1   // Enable 8-band filter bank switching: non-latching relays wired to a MCP23008    GPIO extender on the PC4/PC5 I2C bus; relays are using GND as common (ground), GP0..7 used by the individual latches K1-8 switching respectively LPFs for 80m, 60m, 40m, 30m, 20m, 17m, 15m, 10m
 //#define LPF_SWITCHING_PE1DDA_USDXDUO           14  // Enable 2-band filter bank switching: non-latching relay  wired to pin PD5 (pin 11); specify as value the frequency in MHz for which (and above) the relay should be altered (e.g. put 14 to enable the relay at 14MHz and above to use the 20m LPF).
 #define SI5351_ADDR   0x60   // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT, MS5351M; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
 // Advanced configuration switches
 //#define CAT_EXT        1   // Extended CAT support: remote button and screen control commands over CAT
-//#define CAT_STREAMING  1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, 7.812ksps 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
+//#define CAT_STREAMING  1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, samplerate 7812Hz, 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
 #define CW_DECODER       1   // CW decoder
 #define TX_ENABLE        1   // Disable this for RX only (no transmit), e.g. to support uSDX for kids idea: https://groups.io/g/ucx/topic/81030243#6276
 #define KEY_CLICK        1   // Reduce key clicks by envelope shaping
@@ -36,7 +35,7 @@
 #define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
 #define VOX_ENABLE       1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
 //#define MOX_ENABLE     1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
-#define FAST_AGC         1   // Adds fast AGC option (good for CW)
+//#define FAST_AGC       1   // Adds fast AGC option (good for CW)
 //#define VSS_METER      1   // Supports Vss measurement (as s-meter option)
 //#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
 //#define ONEBUTTON      1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
@@ -51,7 +50,8 @@
 //#define NTX            11  // Enables LOW  on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define CLOCK          1   // Enables clock
-//#define TX_CLK0_CLK1   1   // Use CLK0, CLK1 for TX instead of CLK2 (enable this for uSDXDuO); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
+//#define TX_CLK0_CLK1   1   // Enable this for uSDXDuO, i.e. when PA is driven by CLK0, CLK1 (not CLK2); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
+//#define F_CLK2  12000000   // Enable this for uSDXDuO, enables a fixed CLK2 clock output (TX_CLK0_CLK1 must be enabled)
 #define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
 
 // QCX pin defintions
@@ -94,6 +94,29 @@
 #define LPF_SWITCHING_DL2MAN_USDX_REV3         1
 #endif
 
+#ifdef TX_CLK0_CLK1
+#ifdef F_CLK2
+#define TX1RX0  0b11111000
+#define TX1RX1  0b11111000
+#define TX0RX1  0b11111000
+#define TX0RX0  0b11111011
+#else //!F_CLK2
+#define TX1RX0  0b11111100
+#define TX1RX1  0b11111100
+#define TX0RX1  0b11111100
+#define TX0RX0  0b11111111
+#endif //F_CLK2
+#else  //!TX_CLK0_CLK1
+#define TX1RX0  0b11111011
+#define TX1RX1  0b11111000
+#define TX0RX1  0b11111100
+#define TX0RX0  0b11111111
+#endif //TX_CLK0_CLK1
+
+#if defined(F_CLK2) && !defined(TX_CLK0_CLK1)
+#error "TX_CLK0_CLK1 must be enabled in order to use F_CLK2."
+#endif
+
 #ifndef TX_ENABLE
 #undef KEYER
 #undef TX_DELAY
@@ -108,8 +131,8 @@ float FWD;
 float SWR;
 float ref_V = 5 * 1.15;
 static uint32_t stimer;
-#define vin_FWD  A6
-#define vin_REF  A7
+#define PIN_FWD  A6
+#define PIN_REF  A7
 #endif
 
 /*
@@ -1380,6 +1403,7 @@ public:
     msp3 = msc;
     uint8_t ms_reg2 = BB2(msp1) | (rdiv<<4) | ((msa == 4)*0x0C);
     uint8_t ms_regs[8] = { BB1(msp3), BB0(msp3), ms_reg2, BB1(msp1), BB0(msp1), BB2(((msp3 & 0x0F0000)<<4) | msp2), BB1(msp2), BB0(msp2) };
+
     SendRegister(n*8+42, ms_regs, 8); // Write to MSx
     if(n < 0){
       SendRegister(n+16+8, 0x80|(0x40*_int)); // MSNx PLLn: 0x40=FBA_INT; 0x80=CLKn_PDN
@@ -1412,7 +1436,11 @@ public:
       //ms(MSNB, fvcoa, fxtal);
       ms(MS0,  fvcoa, fout, PLLA, 0, i, rdiv);  // Multisynth stage with integer divider but in frac mode due to phase setting
       ms(MS1,  fvcoa, fout, PLLA, 0, q, rdiv);
+#ifdef F_CLK2
+      freqb(F_CLK2);
+#else
       ms(MS2,  fvcoa, fout, PLLA, 0, 0, rdiv);
+#endif
       if(iqmsa != (((int8_t)i-(int8_t)q)*((int16_t)(fvcoa/fout))/90)){ iqmsa = ((int8_t)i-(int8_t)q)*((int16_t)(fvcoa/fout))/90; reset(); }
       oe(0b00000011);  // output enable CLK0, CLK1
 
@@ -1808,7 +1836,7 @@ inline void set_lpf(uint8_t f){
 }
 #endif  //LPF_SWITCHING_DL2MAN_USDX_REV3 LPF_SWITCHING_DL2MAN_USDX_REV2 REV2_BETA
 
-#if defined(LPF_SWITCHING_WB2CBA_USDX_QUADBAND) || defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND)
+#ifdef LPF_SWITCHING_WB2CBA_USDX_OCTOBAND
 class MCP23008 {
 public:
 #define MCP23008_ADDR  0x20  // MCP23008 with A1..A0 set to 0   https://ww1.microchip.com/downloads/en/DeviceDoc/21919e.pdf
@@ -1824,7 +1852,7 @@ inline void set_lpf(uint8_t f){
   if(prev_lpf_io == 0xff){ ioext.init(); }
   if(prev_lpf_io != lpf_io){ ioext.write(1U << lpf_io); prev_lpf_io = lpf_io; };  // set relay (non-latched)
 }
-#endif  //LPF_SWITCHING_WB2CBA_USDX_QUADBAND, LPF_SWITCHING_WB2CBA_USDX_OCTOBAND
+#endif  //LPF_SWITCHING_WB2CBA_USDX_OCTOBAND
 
 #if defined(LPF_SWITCHING_PE1DDA_USDXDUO)
 inline void set_lpf(uint8_t f){
@@ -1833,7 +1861,7 @@ inline void set_lpf(uint8_t f){
 }
 #endif  //LPF_SWITCHING_PE1DDA_USDXDUO
 
-#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV3) && !defined(LPF_SWITCHING_WB2CBA_USDX_QUADBAND) && !defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND) && !defined(LPF_SWITCHING_PE1DDA_USDXDUO)
+#if !defined(LPF_SWITCHING_DL2MAN_USDX_REV1) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2_BETA) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV2) && !defined(LPF_SWITCHING_DL2MAN_USDX_REV3) && !defined(LPF_SWITCHING_WB2CBA_USDX_OCTOBAND) && !defined(LPF_SWITCHING_PE1DDA_USDXDUO)
 inline void set_lpf(uint8_t f){} // dummy
 #endif
 
@@ -1877,7 +1905,7 @@ const int16_t _F_SAMP_TX = (F_MCU * 4810LL / 20000000);  // Actual ADC sample-ra
 #else
 #define _F_SAMP_TX  F_SAMP_TX
 #endif
-#define _UA  (_F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
+#define _UA  601 //=(_FSAMP_TX)/8 //(_F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
 #define MAX_DP  ((filt == 0) ? _UA : (filt == 3) ? _UA/4 : _UA/2)     //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 #define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
@@ -1886,7 +1914,7 @@ const int16_t _F_SAMP_TX = (F_MCU * 4810LL / 20000000);  // Actual ADC sample-ra
 inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 { // source: [1] http://www-labs.iro.umontreal.ca/~mignotte/IFT2425/Documents/EfficientApproximationArctgFunction.pdf
 //#define _atan2(z)  (_UA/8  + _UA/22) * z  // very much of a simplification...not accurate at all, but fast
-#define _atan2(z)  (_UA/8 - _UA/22 * z + _UA/22) * z  //derived from (5) [1]
+#define _atan2(z)  (_UA/8 - _UA/22 * z + _UA/22) * z  //derived from (5) [1]   note that this can overflow easily so keep _UA low
   //#define _atan2(z)  (_UA/8 - _UA/24 * z + _UA/24) * z  //derived from (7) [1]
   int16_t r;
   if(abs(q) > abs(i))
@@ -1901,7 +1929,12 @@ inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 
 uint8_t lut[256];
 volatile uint8_t amp;
+#define MORE_MIC_GAIN   1       // adds more microphone gain, improving overall SSB quality (when speaking further away from microphone)
+#ifdef MORE_MIC_GAIN
+volatile uint8_t vox_thresh = (1 << 2);
+#else
 volatile uint8_t vox_thresh = (1 << 1); //(1 << 2);
+#endif
 volatile uint8_t drive = 2;   // hmm.. drive>2 impacts cpu load..why?
 
 volatile uint8_t quad = 0;
@@ -1913,23 +1946,29 @@ inline int16_t ssb(int16_t in)
   int16_t i, q;
   uint8_t j;
   static int16_t v[16];
-
   for(j = 0; j != 15; j++) v[j] = v[j + 1];
+#ifdef MORE_MIC_GAIN
+//#define DIG_MODE  // optimization for digital modes: for super flat TX spectrum, (only down < 100Hz to cut-off DC components)
+#ifdef DIG_MODE
+  int16_t ac = in;
+  dc = (ac + (7) * dc) / (7 + 1);  // hpf: slow average
+  v[15] = (ac - dc) / 2;           // hpf (dc decoupling)  (-6dB gain to compensate for DC-noise)
+#else
+  int16_t ac = in * 2;             //   6dB gain (justified since lpf/hpf is losing -3dB)
+  ac = ac + z1;                    // lpf
+  z1 = (in - (2) * z1) / (2 + 1);  // lpf: notch at Fs/2 (alias rejecting)
+  dc = (ac + (2) * dc) / (2 + 1);  // hpf: slow average
+  v[15] = (ac - dc);               // hpf (dc decoupling)
+#endif //DIG_MODE
+  i = v[7] * 2;  // 6dB gain for i, q  (to prevent quanitization issues in hilbert transformer and phase calculation, corrected for magnitude calc)
+  q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 16) / 64 + (v[6] - v[8]); // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
 
+  uint16_t _amp = magn(i / 2, q / 2);  // -6dB gain (correction)
+#else  // !MORE_MIC_GAIN
   //dc += (in - dc) / 2;       // fast moving average
   dc = (in + dc) / 2;        // average
   int16_t ac = (in - dc);   // DC decoupling
   //v[15] = ac;// - z1;        // high-pass (emphasis) filter
-#define MORE_MIC_GAIN   1       // adds more microphone gain, improving overall SSB quality (when speaking further away from microphone)
-#ifdef MORE_MIC_GAIN
-  v[15] = (ac + z1) << 1;             // low-pass filter with notch at Fs/2
-  z1 = ac;
-
-  i = v[7] << 1;
-  q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 16) / 64 + (v[6] - v[8]); // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
-
-  uint16_t _amp = magn(i >> 2, q >> 2);
-#else  // MORE_MIC_GAIN
   v[15] = (ac + z1);// / 2;           // low-pass filter with notch at Fs/2
   z1 = ac;
 
@@ -1937,7 +1976,7 @@ inline int16_t ssb(int16_t in)
   q = ((v[0] - v[14]) * 2 + (v[2] - v[12]) * 8 + (v[4] - v[10]) * 21 + (v[6] - v[8]) * 15) / 128 + (v[6] - v[8]) / 2; // Hilbert transform, 40dB side-band rejection in 400..1900Hz (@4kSPS) when used in image-rejection scenario; (Hilbert transform require 5 additional bits)
 
   uint16_t _amp = magn(i, q);
-#endif  // !MORE_MIC_GAIN
+#endif  // MORE_MIC_GAIN
 
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
   _vox(_amp > vox_thresh);
@@ -2021,12 +2060,8 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 #endif
 
 #ifdef CARRIER_COMPLETELY_OFF_ON_LOW
-  if(tx == 1){ OCR1BL = 0; si5351.SendRegister(SI_CLK_OE, 0b11111111); }   // disable carrier
-#ifdef TX_CLK0_CLK1
-  if(tx == 255){ si5351.SendRegister(SI_CLK_OE, 0b11111100); } // enable carrier
-#else //TX_CLK2
-  if(tx == 255){ si5351.SendRegister(SI_CLK_OE, 0b11111011); } // enable carrier
-#endif //TX_CLK0_CLK1
+  if(tx == 1){ OCR1BL = 0; si5351.SendRegister(SI_CLK_OE, TX0RX0); }   // disable carrier
+  if(tx == 255){ si5351.SendRegister(SI_CLK_OE, TX1RX0); } // enable carrier
 #endif
 
 #ifdef MOX_ENABLE
@@ -2277,8 +2312,12 @@ void dec2()
      if(wpm > 30)lacktime=12;
      if(wpm > 35)lacktime=15;
 
+#ifdef FAIR_WEIGHTING
+     if(lowduration > (hightimesavg*(lacktime*1/10)) && lowduration < hightimesavg*(lacktime*5/10)){ // letter space
+#else
      if(lowduration > (hightimesavg*(lacktime*7/80)) && lowduration < hightimesavg*(lacktime*5/10)){ // letter space
-     //if(lowduration > (hightimesavg*(2*lacktime/10)) && lowduration < hightimesavg*(5*lacktime/10)){ // letter space
+     //if(lowduration > (hightimesavg*(lacktime*2/10)) && lowduration < hightimesavg*(lacktime*5/10)){ // letter space
+#endif
        printsym();
    }
    if(lowduration >= hightimesavg*(lacktime*5/10)){ // word space
@@ -2544,7 +2583,8 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     //za0=(29*(za0-zz1)+50*za1)/64;                                //300-Hz
     zz2=zz1;
     zz1=za0;
-    za0=(30*(za0-zz2)+25*za1)/32;                                  //300-Hz
+    //za0=(30*(za0-zz2)+0*zz1)/32;                                 //300-Hz with very steep roll-off down to 0 Hz
+    za0=(30*(za0-zz2)+25*zz1)/32;                                  //300-Hz
 
     // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     switch(filt){
@@ -2664,15 +2704,17 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
   }
 }
 
+#define __UA   256
 inline int16_t _arctan3(int16_t q, int16_t i)
 {
-  #define __atan2(z)  (_UA/8  + _UA/22) * z  // very much of a simplification...not accurate at all, but fast
+  #define __atan2(z)  (__UA/8  + __UA/22) * z  // very much of a simplification...not accurate at all, but fast
+  //#define __atan2(z)  (__UA/8 - __UA/22 * z + __UA/22) * z  //derived from (5) [1]
   int16_t r;
   if(abs(q) > abs(i))
-    r = _UA / 4 - __atan2(abs(i) / abs(q));        // arctan(z) = 90-arctan(1/z)
+    r = __UA / 4 - __atan2(abs(i) / abs(q));        // arctan(z) = 90-arctan(1/z)
   else
-    r = (i == 0) ? 0 : _atan2(abs(q) / abs(i));   // arctan(z)
-  r = (i < 0) ? _UA / 2 - r : r;                  // arctan(-z) = -arctan(z)
+    r = (i == 0) ? 0 : __atan2(abs(q) / abs(i));   // arctan(z)
+  r = (i < 0) ? __UA / 2 - r : r;                  // arctan(-z) = -arctan(z)
   return (q < 0) ? -r : r;                        // arctan(-z) = -arctan(z)
 }
 
@@ -2687,17 +2729,21 @@ inline int16_t slow_dsp(int16_t ac)
 
   if(mode == AM) {
     ac = magn(i, q);
-    //static int16_t last_sample = 1;
-    //MLEA(last_sample,ac, 1, 2); // 1/2: alpha = 0.25, Lyons 13.33.2 p.763
-    /*{ static int16_t dc;
+    { static int16_t dc;   // DC decoupling
       dc += (ac - dc) / 2;
-      ac = ac - dc; }  // DC decoupling*/
+      ac = ac - dc; }
   } else if(mode == FM){
+    static int16_t zi;
+    ac = ((ac + i) * zi);  // -qh = ac + i
+    zi =i;
+    /*int16_t z0 = _arctan3(q, i);
     static int16_t z1;
-    int16_t z0 = _arctan3(q, i);
     ac = z0 - z1; // Differentiator
-    z1 = z0;
-    //ac = ac * (F_SAMP_RX/R) / _UA;  // =ac*3.5 -> skip
+    z1 = z0;*/
+    /*static int16_t _q;
+    _q = (_q + q) / 2;
+    ac = i * _q;  // quadrature detector */
+    //ac = ((q > 0) == !(i > 0)) ? 128 : -128; // XOR I/Q zero-cross detector
   }  // needs: p.12 https://www.veron.nl/wp-content/uploads/2014/01/FmDemodulator.pdf
   else { ; }  // USB, LSB, CW
 
@@ -3548,7 +3594,7 @@ uint16_t analogSampleMic()
   ADCSRA = (1 << ADEN) | (((uint8_t)log2((uint8_t)(F_CPU / 13 / (192307/1)))) & 0x07);  // hack: faster conversion rate necessary for VOX
 
   if((dsp_cap == SDR) && (vox_thresh >= 32)) digitalWrite(RX, LOW);  // disable RF input, only for SDR mod and with low VOX threshold
-  //si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN=0, CLK1_EN,CLK0_EN=0
+  //si5351.SendRegister(SI_CLK_OE, TX0RX0);
   uint8_t oldmux = ADMUX;
   for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
   ADMUX = admux[2];  // set MUX for next conversion
@@ -3556,7 +3602,7 @@ uint16_t analogSampleMic()
   for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
   ADMUX = oldmux;
   if((dsp_cap == SDR) && (vox_thresh >= 32)) digitalWrite(RX, HIGH);  // enable RF input, only for SDR mod and with low VOX threshold
-  //si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  //si5351.SendRegister(SI_CLK_OE, TX0RX1);
   adc = ADC;
   interrupts();
   return adc;
@@ -3727,7 +3773,7 @@ void switch_rxtx(uint8_t tx_enable){
     if(practice){
       digitalWrite(RX, LOW); // TX (disable RX)
       lcd.setCursor(15, 1); lcd.print('P');
-      si5351.SendRegister(SI_CLK_OE, 0b11111111); // CLK2_EN,CLK1_EN,CLK0_EN=0
+      si5351.SendRegister(SI_CLK_OE, TX0RX0);
       // Do not enable PWM (KEY_OUT), do not enble CLK2
     } else
     {
@@ -3743,11 +3789,7 @@ void switch_rxtx(uint8_t tx_enable){
 #ifdef RIT_ENABLE
       else if(rit){ si5351.freq_calc_fast(0); si5351.SendPLLRegisterBulk(); }
 #endif //RIT_ENABLE
-#ifdef TX_CLK0_CLK1
-      si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
-#else
-      si5351.SendRegister(SI_CLK_OE, 0b11111011); // CLK2_EN=1, CLK1_EN,CLK0_EN=0
-#endif  //TX_CLK0_CLK1
+      si5351.SendRegister(SI_CLK_OE, TX1RX0);
       OCR1AL = 0x80; // make sure SIDETONE is set at 2.5V
       if((!mox) && (mode != CW)) TCCR1A &= ~(1 << COM1A1); // disable SIDETONE, prevent interference during SSB TX
       TCCR1A |= (1 << COM1B1);  // enable KEY_OUT PWM
@@ -3775,7 +3817,7 @@ void switch_rxtx(uint8_t tx_enable){
       si5351.SendRegister(18, 0x0f);  // disable invert on CLK2
 #endif  //TX_CLK0_CLK1
 #endif //QUAD
-      si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+      si5351.SendRegister(SI_CLK_OE, TX0RX1);
 #ifdef SEMI_QSK
       if((!semi_qsk_timeout) || (!semi_qsk))   // enable RX when no longer in semi-qsk phase; so RX and NTX/PTX outputs are switching only when in RX mode
 #endif //SEMI_QSK
@@ -3818,7 +3860,7 @@ void calibrate_iq()
   lcd.setCursor(0, 0); lcd_blanks(); lcd_blanks();
   digitalWrite(SIG_OUT, true); // loopback on
   si5351.freq(freq, 0, 90);  // RX in USB  
-  si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  si5351.SendRegister(SI_CLK_OE, TX1RX1);
   float dbc;
   si5351.freqb(freq+700); delay(100);
   dbc = smeter();
@@ -3838,7 +3880,7 @@ void calibrate_iq()
 
   lcd.setCursor(9, 0); lcd_blanks();  // cleanup dbmeter
   digitalWrite(SIG_OUT, false); // loopback off
-  si5351.SendRegister(SI_CLK_OE, 0b11111100); // CLK2_EN=0, CLK1_EN,CLK0_EN=1
+  si5351.SendRegister(SI_CLK_OE, TX0RX1);
   change = true;  //restore original frequency setting
 }
 #endif
@@ -4283,8 +4325,8 @@ void initPins(){
   pinMode(PTX, OUTPUT);
 #endif //PTX
 #ifdef SWR_METER
-  pinMode(vin_FWD, INPUT);
-  pinMode(vin_REF, INPUT);
+  pinMode(PIN_FWD, INPUT);
+  pinMode(PIN_REF, INPUT);
 #endif
 #ifdef OLED  // assign unused LCD pins
   pinMode(PD4, OUTPUT);
@@ -4694,12 +4736,22 @@ void build_lut()
 void readSWR()
 // reads FWD / REF values from A6 and A7 and computes SWR
 // credit Duwayne, KV4QB
+/* This should similar as PE1DDA's (more direct) approach:
+    busvoltage = ina219.getBusVoltage_V();
+    current_mA = ina219.getCurrent_mA();
+    power_mW = ina219.getPower_mW();
+    Vinc = analogRead(3);
+    Vref = analogRead(2);
+    SWR = (Vinc + Vref) / (Vinc - Vref);
+    Vinc = ((Vinc * 5.0) / 1024.0) + 0.5;
+    pwr = ((((Vinc) * (Vinc)) - 0.25 ) * k);
+    Eff = (pwr) / ((power_mW) / 1000) * 100; */
 {
   float v_FWD = 0;
   float v_REF = 0;
   for (int i = 0; i <= 7; i++) {
-    v_FWD = v_FWD + (ref_V / 1023) * (int) analogRead(vin_FWD);
-    v_REF = v_REF + (ref_V / 1023) * (int) analogRead(vin_REF);
+    v_FWD = v_FWD + (ref_V / 1023) * (int) analogRead(PIN_FWD);
+    v_REF = v_REF + (ref_V / 1023) * (int) analogRead(PIN_REF);
     delay(5);
   }
   v_FWD = v_FWD / 8;
@@ -4795,7 +4847,7 @@ void setup()
 
 #ifdef QCX
   // Test if QCX has DSP/SDR capability: SIDETONE output disconnected from AUDIO2
-  si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0  
+  si5351.SendRegister(SI_CLK_OE, TX0RX0); // Mute QSD
   digitalWrite(RX, HIGH);  // generate pulse on SIDETONE and test if it can be seen on AUDIO2
   delay(1); // settle
   digitalWrite(SIDETONE, LOW);
@@ -4871,7 +4923,7 @@ void setup()
 
 #ifdef DIAG
   // Measure VDD (+5V); should be ~5V
-  si5351.SendRegister(SI_CLK_OE, 0b11111111); // Mute QSD: CLK2_EN=CLK1_EN,CLK0_EN=0
+  si5351.SendRegister(SI_CLK_OE, TX0RX0); // Mute QSD
   digitalWrite(KEY_OUT, LOW);
   digitalWrite(RX, LOW);  // mute RX
   delay(100); // settle
@@ -4968,11 +5020,7 @@ void setup()
 #endif //TX_ENABLE
 #endif  // DIAG
 
-#ifdef MORE_MIC_GAIN
-  drive = 6;  // Init settings
-#else
   drive = 4;  // Init settings
-#endif
 #ifdef QCX
   if(!ssb_cap){ vfomode[0] = CW; vfomode[1] = CW; filt = 4; stepsize = STEP_500; }
   if(dsp_cap != SDR) pwm_max = 255; // implies that key-shaping circuit is probably present, so use full-scale
@@ -5081,7 +5129,7 @@ void loop()
 #ifdef OLED
       //cw_event = false; for(int i = 0; out[offset + i] != '\0'; i++){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); if((!tx) && (!semi_qsk_timeout)) cw_decode(); }   // like 'lcd.print(out + offset);' but then in parallel calling cw_decoding() to handle long OLED writes
       //uint8_t i = cw_event - 1; if(out[offset + i]){ lcd.setCursor(i, 0); lcd.print(out[offset + i]); cw_event++; } else cw_event = false;  // since an oled string write would hold-up reliable decoding/keying, write only a single char each time and continue
-      uint8_t i = cw_event - 1; if(offset - i + 1){ lcd.setCursor(offset - i, 0); lcd.print(out[15 - i]); cw_event++; } else cw_event = false;  // since an oled string write would hold-up reliable decoding/keying, write only a single char each time and continue
+      uint8_t i = cw_event - 1; if(15 - offset - i + 1){ lcd.setCursor(15 - offset - i, 0); lcd.print(out[15 - i]); cw_event++; } else cw_event = false;  // since an oled string write would hold-up reliable decoding/keying, write only a single char each time and continue
 #else
       cw_event = false;
       lcd.setCursor(0, 0); lcd.print(out + offset);
@@ -5548,7 +5596,7 @@ void loop()
 #ifdef DEBUG
       if(menu == SR){          // measure sample-rate
         numSamples = 0;
-        delay(F_MCU * 500 / 16000000);   // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
+        delay(F_MCU * 500UL / 16000000);   // delay 0.5s (in reality because F_CPU=20M instead of 16M, delay() is running 1.25x faster therefore we need to multiply with 1.25)
         sr = numSamples * 2;   // samples per second
         paramAction(UPDATE_MENU, menu); // refresh
       }
@@ -5589,7 +5637,7 @@ void loop()
 
       // The following is a hack for SWR measurement:
       //si5351.alt_clk2(freq + 2400);
-      //si5351.SendRegister(SI_CLK_OE, 0b11111000); // CLK2_EN=1, CLK1_EN,CLK0_EN=1
+      //si5351.SendRegister(SI_CLK_OE, TX1RX1);
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
 
@@ -5634,29 +5682,21 @@ refactor main()
 agc based on rms256, agc/smeter after filter
 noisefree integrator (rx audio out) in lower range
 raised cosine tx amp for cw, 4ms tau seems enough: http://fermi.la.asu.edu/w9cf/articles/click/index.html
-cw tx message/cw encoder
 32 bin fft
 dynamic range cw
 att extended agc
-single ATT
-configurable F_CPU
-CW-L mode
 Split
 undersampling, IF-offset
 K2/TS480 CAT control
 faster RX-TX switch to support CW
-clock
-qcx API demo code
+usdx API demo code
 scan
 move last bit of arrays into flash? https://web.archive.org/web/20180324010832/https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_rom_array.html
-remove floats
 u-law in RX path?: http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
 Arduino library?
 1. RX bias offset correction by measurement avg, 2. charge decoupling cap. by resetting to 0V and setting 5V for a certain amount of (charge) time
 add 1K (500R?) to GND at TTL RF output to keep zero-level below BS170 threshold
 additional PWM output for potential BOOST conversion
-SWR measurement?
-CW decoder amp thrshld restriction and noise reduction (use of certain pause amounts)
 squelch gating
 more buttons
 s-meter offset vs DC bal.
@@ -5689,5 +5729,6 @@ block ptt while in vox mode
 adc bias error and potential error correction
 noise burst on tx
 https://groups.io/g/ucx/topic/81030243#6265
+git commit -a -m "Fix for SSB TX overload and BW equalised (better suitable for digital modes), add DIG_MODE config switch for additional flatness of SSB TX spectrum. Removed WB2CBA quad band config switch. Add support for fixed CLK2 output. Change RX filter response below 300Hz (less steep). Change to alternate FM demod. Fix aligment issue of CW text OLED. Fair character space weight. Minor changes."
 
 */
