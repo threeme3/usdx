@@ -1899,13 +1899,13 @@ inline void _vox(bool trigger)
   }
 }
 
-#define F_SAMP_TX 4810 //4805 // 4402 // (Design) ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
+#define F_SAMP_TX 4800 //4810 //4805 // 4402 // (Design) ADC sample-rate; is best a multiple of _UA and fits exactly in OCR2A = ((F_CPU / 64) / F_SAMP_TX) - 1 , should not exceed CPU utilization
 #if(F_MCU != 20000000)
-const int16_t _F_SAMP_TX = (F_MCU * 4810LL / 20000000);  // Actual ADC sample-rate; used for phase calculations
+const int16_t _F_SAMP_TX = (F_MCU * 4800LL / 20000000);  // Actual ADC sample-rate; used for phase calculations
 #else
 #define _F_SAMP_TX  F_SAMP_TX
 #endif
-#define _UA  601 //=(_FSAMP_TX)/8 //(_F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
+#define _UA  600 //=(_FSAMP_TX)/8 //(_F_SAMP_TX)      //360  // unit angle; integer representation of one full circle turn or 2pi radials or 360 degrees, should be a integer divider of F_SAMP_TX and maximized to have higest precision
 #define MAX_DP  ((filt == 0) ? _UA : (filt == 3) ? _UA/4 : _UA/2)     //(_UA/2) // the occupied SSB bandwidth can be further reduced by restricting the maximum phase change (set MAX_DP to _UA/2).
 #define CARRIER_COMPLETELY_OFF_ON_LOW  1    // disable oscillator on low amplitudes, to prevent potential unwanted biasing/leakage through PA circuit
 #define MULTI_ADC  1  // multiple ADC conversions for more sensitive (+12dB) microphone input
@@ -1913,9 +1913,9 @@ const int16_t _F_SAMP_TX = (F_MCU * 4810LL / 20000000);  // Actual ADC sample-ra
 
 inline int16_t arctan3(int16_t q, int16_t i)  // error ~ 0.8 degree
 { // source: [1] http://www-labs.iro.umontreal.ca/~mignotte/IFT2425/Documents/EfficientApproximationArctgFunction.pdf
-//#define _atan2(z)  (_UA/8  + _UA/22) * z  // very much of a simplification...not accurate at all, but fast
-#define _atan2(z)  (_UA/8 - _UA/22 * z + _UA/22) * z  //derived from (5) [1]   note that this can overflow easily so keep _UA low
-  //#define _atan2(z)  (_UA/8 - _UA/24 * z + _UA/24) * z  //derived from (7) [1]
+//#define _atan2(z)  (_UA/8 + _UA/44) * z  // very much of a simplification...not accurate at all, but fast
+#define _atan2(z)  (_UA/8 + _UA/22 - _UA/22 * z) * z  //derived from (5) [1]   note that atan2 can overflow easily so keep _UA low
+//#define _atan2(z)  (_UA/8 + _UA/24 - _UA/24 * z) * z  //derived from (7) [1]
   int16_t r;
   if(abs(q) > abs(i))
     r = _UA / 4 - _atan2(abs(i) / abs(q));        // arctan(z) = 90-arctan(1/z)
@@ -5729,6 +5729,5 @@ block ptt while in vox mode
 adc bias error and potential error correction
 noise burst on tx
 https://groups.io/g/ucx/topic/81030243#6265
-git commit -a -m "Fix for SSB TX overload and BW equalised (better suitable for digital modes), add DIG_MODE config switch for additional flatness of SSB TX spectrum. Removed WB2CBA quad band config switch. Add support for fixed CLK2 output. Change RX filter response below 300Hz (less steep). Change to alternate FM demod. Fix aligment issue of CW text OLED. Fair character space weight. Minor changes."
 
 */
