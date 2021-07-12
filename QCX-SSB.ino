@@ -3725,7 +3725,7 @@ void switch_rxtx(uint8_t tx_enable){
 #endif //PTX
       lcd.setCursor(15, 1); lcd.print('D');  // note that this enables interrupts again.
       interrupts();    //hack.. to allow delay()
-      delay(F_MCU * txdelay /16000000);
+      delay(F_MCU / 16000000 * txdelay);
       noInterrupts();  //end of hack
     }
 #endif //TX_DELAY
