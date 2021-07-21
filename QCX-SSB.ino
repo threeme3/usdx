@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02u"
+#define VERSION   "1.02v"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -1803,8 +1803,8 @@ public:
   #define IOEXP16_ADDR  0x20  // TCA/PCA9555 with A2=0 A1..A0=0   https://www.ti.com/lit/ds/symlink/tca9555.pdf
 #endif
   inline void SendRegister(uint8_t reg, uint8_t val){ i2c.begin(); i2c.beginTransmission(IOEXP16_ADDR); i2c.write(reg); i2c.write(val); i2c.endTransmission(); }
-  inline void init(){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, 0x00); SendRegister(0x06, 0x00); SendRegister(0x03, 0x00); SendRegister(0x07, 0x00); } //IO0, IO1 as input, IO0 to 0, IO0 as output, IO1 to 0, IO1 as output
-  inline void write(uint16_t data){ SendRegister(0x06, 0xff); SendRegister(0x07, 0xff); SendRegister(0x02, data); SendRegister(0x06, 0x00); SendRegister(0x03, data >> 8); SendRegister(0x07, 0x00); }  // output port cmd: write bits D15-D0 to IO1.7-0.0
+  inline void init(){ write(0U); } //IO0, IO1 as input, IO0 to 0, IO0 as output, IO1 to 0, IO1 as output
+  inline void write(uint16_t data){ SendRegister(0x07, 0xff);  SendRegister(0x06, 0xff);/*Common last!*/ SendRegister(0x02, data); SendRegister(0x06, 0x00);/*Common first!*/ SendRegister(0x03, data >> 8); SendRegister(0x07, 0x00); }  // output port cmd: write bits D15-D0 to IO1.7-0.0;
 };
 IOExpander16 ioext;
 enum gpioext_t { IO0_0, IO0_1, IO0_2, IO0_3, IO0_4, IO0_5, IO0_6, IO0_7, IO1_0, IO1_1, IO1_2, IO1_3, IO1_4, IO1_5, IO1_6, IO1_7 };
@@ -5641,11 +5641,11 @@ void loop()
       //digitalWrite(SIG_OUT, HIGH);  // inject CLK2 on antenna input via 120K
     }
 
+    //noInterrupts();
     uint8_t f = freq / 1000000UL;
     set_lpf(f);
     bandval = (f > 32) ? 10 : (f > 26) ? 9 : (f > 22) ? 8 : (f > 20) ? 7 : (f > 16) ? 6 : (f > 12) ? 5 : (f > 8) ? 4 : (f > 6) ? 3 : (f > 4) ? 2 : (f > 2) ? 1 : 0;  prev_bandval = bandval; // align bandval with freq
 
-    //noInterrupts();
     if(mode == CW){
       si5351.freq(freq + cw_offset, rx_ph_q, 0/*90, 0*/);  // RX in CW-R (=LSB), correct for CW-tone offset
     } else
