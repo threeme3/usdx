@@ -27,6 +27,7 @@
 #define SI5351_ADDR   0x60   // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT, MS5351M; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
 
 // Advanced configuration switches
+//#define CONDENSED      1   // Display in 4 line mode (for OLED and LCD2004 modules)
 //#define CAT_EXT        1   // Extended CAT support: remote button and screen control commands over CAT
 //#define CAT_STREAMING  1   // Extended CAT support: audio streaming over CAT, once enabled and triggered with CAT cmd, samplerate 7812Hz, 8-bit unsigned audio is sent over UART. The ";" is omited in the data-stream, and only sent to indicate the beginning and end of a CAT cmd.
 #define CW_DECODER       1   // CW decoder
@@ -908,107 +909,72 @@ const uint8_t font[]PROGMEM = {
 #define FONT_STRETCHH 0
 */
 
-//#define CONDENSED 1
 //#define INVERSE  1
-#ifdef OLED_SH1106
-static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence  https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
-  //0xAE,     // Display OFF (sleep mode)
-  0XB0 | 0x0,   // Sset page address
-  0x81, /*32*/ 0x80,   // Set contrast control register
-  0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
-#ifdef INVERSE
-  0xA7,     // Set display mode. A6=Normal; A7=Inverse
-#else
-  0xA6,     // Set display mode. A6=Normal; A7=Inverse
-#endif
+static const uint8_t oled_init_sequence [] PROGMEM = {  // Initialization Sequence  https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
+  //0xAE,       // Display OFF (sleep mode)
+  0xD5, 0x80,   // 0x01--set display clock divide ratio/oscillator frequency   OK? (0x80 (or >=0x10) needed when multiplex ration set to 0x3F)
 #ifdef CONDENSED
   0xA8, 0x3F,   // Set multiplex ratio(1 to 64)   128x64
 #else
   0xA8, 0x1F,   // Set multiplex ratio(1 to 64)   128x32
 #endif
-  0xAD, 0x8B,   // SH1106 Set pump mode, SH1106 pump ON
-  0x30 | 0x2,    // Pump voltage 8.0V
+  0xD3, 0x00,   // Set display offset. 00 = no offset
+#ifndef OLED_SH1106  // for SSD1306 only:
+  0x40,         // Set display start line address
+  0x8D, 0x14,   // Set charge pump, internal VCC
+  0x20, 0x02,   // Set Memory Addressing; 0=Horizontal Mode; 1=Vertical Mode; 2=Page Mode
+  0xA4,     // Output RAM to Display  (display all on resume)   0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
+#endif //!OLED_SH1106
+  0xA1,         // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
   0xC8,         // Set COM Output Scan Direction.  Flip Veritically.
-  0xD3, 0x00,   // Set display offset. 00 = no offset
-  0xD5, 0x80,   // 0x01--set display clock divide ratio/oscillator frequency   OK? (0x80 (or >=0x10) needed when multiplex ration set to 0x3F)
-  0xD9, 0x1F,   // SH1106:0x1F   //0xF1=brighter //0x22 Set pre-charge period
 #ifdef CONDENSED
   0xDA, 0x12,   // Set com pins hardware configuration  128x64
 #else
   0xDA, 0x02,   // Set com pins hardware configuration  128x32
 #endif
-  0xDB, 0x40, //0x05 --set vcomh 0x20 = 0.77xVcc    OK?
-/*  // only for SSD1306:
-  0x40,         // Set display start line address
-  0x8D, 0x14,    // Set charge pump, internal VCC
-  0x20, 0x02,   // Set Memory Addressing; 0=Horizontal Mode; 1=Vertical Mode; 2=Page Mode
-  0xA4,     // Output RAM to Display  (display all on resume)
-*/
-  //0xB0,     // Set Page Start Address for Page Addressing Mode, 0-7
-  //0x00,     // Set low nibble of column address
-  //0x10,     // Set high nibble of column address
-          // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
-  0xAF,     // Display ON
-};
-#else //SSD1306
-static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence  https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
-  //0xAE,     // Display OFF (sleep mode)
-  0xD5, 0x80,   // 0x01--set display clock divide ratio/oscillator frequency   OK? (0x80 (or >=0x10) needed when multiplex ration set to 0x3F)
-#ifdef CONDENSED
-  0xA8, 0x3F,   // Set multiplex ratio(1 to 64)   128x64
-#else
-  0xA8, 0x1F,   // Set multiplex ratio(1 to 64)   128x32
-#endif
-  0xD3, 0x00,   // Set display offset. 00 = no offset
-  0x40,         // Set display start line address
-  0x8D, 0x14,    // Set charge pump, internal VCC
-  0x20, 0x02,   // Set Memory Addressing; 0=Horizontal Mode; 1=Vertical Mode; 2=Page Mode
-  0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
-  0xC8,     // Set COM Output Scan Direction.  Flip Veritically.
-#ifdef CONDENSED
-  0xDA, 0x12,   // Set com pins hardware configuration  128x64
-#else
-  0xDA, 0x02,   // Set com pins hardware configuration  128x32
-#endif
-  0x81, /*32*/ 0x7F,   // Set contrast control register
-  0xD9, 0xF1, // 0xF1=brighter //0x22 Set pre-charge period
-  0xDB, 0x40, //0x05 --set vcomh 0x20 = 0.77xVcc    OK?
-  0xA4,     // Output RAM to Display  (display all on resume)
+  0x81, 0x80,   // Set contrast control register
+  0xD9, 0xF1,   // 0xF1=brighter //0x22 Set pre-charge period
+  0xDB, 0x40,   //0x05 --set vcomh 0x20 = 0.77xVcc    OK?
+  0xB0 | 0x0,   // Set page address, 0-7
+#ifdef OLED_SH1106
+  0xAD, 0x8B,   // SH1106 Set pump mode: pump ON
+  0x30 | 0x2,   // SH1106 Pump voltage 8.0V
+#endif //OLED_SH1106
 #ifdef INVERSE
-  0xA7,     // Set display mode. A6=Normal; A7=Inverse
+  0xA7,         // Set display mode: Inverse
 #else
-  0xA6,     // Set display mode. A6=Normal; A7=Inverse
+  0xA6,         // Set display mode: Normal
 #endif
-  //0xB0,     // Set Page Start Address for Page Addressing Mode, 0-7
-  //0x00,     // Set low nibble of column address
-  //0x10,     // Set high nibble of column address
-          // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
-  0xAF,     // Display ON
+  //0x00,       // Set low nibble of column address
+  //0x10,       // Set high nibble of column address
+  0xAF,         // Display ON
 };
-#endif
 
-class SSD1306Device: public Print {  // https://www.buydisplay.com/download/manual/ER-OLED0.91-3_Series_Datasheet.pdf
+class OLEDDevice: public Print {  // https://www.buydisplay.com/download/manual/ER-OLED0.91-3_Series_Datasheet.pdf
 public:
-  #define SSD1306_ADDR 0x3C  // Slave address  
-  #define SSD1306_PAGES 4
-  #define SSD1306_COMMAND 0x00
-  #define SSD1306_DATA 0x40
+  #define OLED_ADDR    0x3C  // Slave address
+  #define OLED_PAGES   4
+  #define OLED_COMMAND 0x00
+  #define OLED_DATA    0x40
   uint8_t oledX = 0, oledY = 0;
   uint8_t renderingFrame = 0xB0;
   bool wrap = false;
   void cmd(uint8_t b){
-    Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_COMMAND);
+    Wire.beginTransmission(OLED_ADDR); Wire.write(OLED_COMMAND);
     Wire.write(b);
     Wire.endTransmission();
   }
   void begin(uint8_t cols, uint8_t rows, uint8_t charsize = 0){
     Wire.begin();
-    Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_COMMAND);
-    for (uint8_t i = 0; i < sizeof(ssd1306_init_sequence); i++) {
-      Wire.write(pgm_read_byte(&ssd1306_init_sequence[i]));
+    Wire.beginTransmission(OLED_ADDR); Wire.write(OLED_COMMAND);
+    for (uint8_t i = 0; i < sizeof(oled_init_sequence); i++) {
+      Wire.write(pgm_read_byte(&oled_init_sequence[i]));
     }
     Wire.endTransmission();
     delayMicroseconds(100);
+#ifdef CONDENSED
+    for(uint8_t y = 0; y != rows; y++) for(uint8_t x = 0; x != cols; x++){ setCursor(x, y); write(' '); }  // clear
+#endif
   }
   bool curs = false;
   void noCursor(){ curs = false; }
@@ -1018,7 +984,7 @@ public:
 
   void _setCursor(uint8_t x, uint8_t y) {
     oledX = x; oledY = y;
-    Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_COMMAND);
+    Wire.beginTransmission(OLED_ADDR); Wire.write(OLED_COMMAND);
     Wire.write(renderingFrame | (oledY & 0x07));
     uint8_t _oledX = oledX;
 #ifdef OLED_SH1106
@@ -1030,7 +996,7 @@ public:
   }
   void drawCursor(bool en){
     //_setCursor(oledX, oledY + (FONT_W/(FONT_STRETCHH+1)));
-    Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_DATA);
+    Wire.beginTransmission(OLED_ADDR); Wire.write(OLED_DATA);
     Wire.write((en) ? 0xf0 : 0x00);  // horizontal line
     Wire.endTransmission();
   }
@@ -1040,8 +1006,8 @@ public:
     
   void newLine() {
     oledY+=FONT_H;
-    if(oledY > SSD1306_PAGES - FONT_H) {
-      oledY = SSD1306_PAGES - FONT_H;
+    if(oledY > OLED_PAGES - FONT_H) {
+      oledY = OLED_PAGES - FONT_H;
     }
     _setCursor(0, oledY);
   }
@@ -1051,7 +1017,7 @@ public:
       if(wrap)  newLine();
       return 1;
     }
-    //if(oledY > SSD1306_PAGES - FONT_H) return; //needed?
+    //if(oledY > OLED_PAGES - FONT_H) return; //needed?
     c = ((c < 9) ? (c + '~') : c) - ' ';
     
     uint16_t offset = ((uint16_t)c) * FONT_W/(FONT_STRETCHH+1) * FONT_H;
@@ -1059,7 +1025,7 @@ public:
     do
     {
       if(FONT_STRETCHV) offset = ((uint16_t)c) * FONT_W/(FONT_STRETCHH+1) * FONT_H/(2*FONT_STRETCHV);
-      Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_DATA);
+      Wire.beginTransmission(OLED_ADDR); Wire.write(OLED_DATA);
       for (uint8_t i = 0; i < (FONT_W/(FONT_STRETCHH+1)); i++) {
         uint8_t b = pgm_read_byte(&(font[offset++]));
         if(FONT_STRETCHV){
@@ -1091,7 +1057,7 @@ public:
     uint16_t j = 0;
     for (uint8_t y = y0; y < y1; y++) {
       _setCursor(x0, y);
-      Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_DATA);
+      Wire.beginTransmission(OLED_ADDR); Wire.write(OLED_DATA);
       for (uint8_t x = x0; x < x1; x++) {
         Wire.write(pgm_read_byte(&bitmap[j++]));
       }
@@ -1130,7 +1096,7 @@ public:
 Display<Blind> lcd;
 #else
 #ifdef OLED
-Display<SSD1306Device> lcd;
+Display<OLEDDevice> lcd;
 #else
 Display<LCD> lcd;     // highly-optimized LCD driver, OK for QCX supplied displays
 //LCD_ lcd;  // slower LCD, suitable for non-QCX supplied displays
@@ -4882,7 +4848,7 @@ void setup()
   initPins();
 
   delay(100);           // at least 40ms after power rises above 2.7V before sending commands
-  lcd.begin(16, 2);  // Init LCD
+  lcd.begin(16, 4);     // Init LCD
 #ifndef OLED
   for(i = 0; i != N_FONTS; i++){  // Init fonts
     pgm_cache_item(fonts[i], 8);
