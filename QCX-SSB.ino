@@ -5084,7 +5084,8 @@ void setup()
   
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
-  if((eeprom_version != get_version_id()) || _digitalRead(BUTTONS) ){  // EEPROM clean: if rotary-key pressed or version signature in EEPROM does NOT corresponds with this firmware
+  paramAction(LOAD, SIFXTAL);
+  if((eeprom_version != get_version_id()) || _digitalRead(BUTTONS) || (abs(F_XTAL - si5351.fxtal) > 50000) ){  // EEPROM clean: if rotary-key pressed or version signature in EEPROM does NOT corresponds with this firmware, or if F_XTAL frequency deviates too much
     eeprom_version = get_version_id();
     //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
     //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
