@@ -15,7 +15,8 @@
 //#define F_XTAL  25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
 //#define SWAP_ROTARY    1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX            1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
-//#define OLED           1   // OLED display, connect SDA (PD2), SCL (PD3)
+//#define OLED_SSD1306   1   // OLED display (SSD1306 128x32 or 128x64), connect SDA (PD2), SCL (PD3)
+//#define OLED_SH1106    1   // OLED display (SH1106 1.3" inch display), connect SDA (PD2), SCL (PD3), NOTE that this display is pretty slow
 #define LPF_SWITCHING_DL2MAN_USDX_REV3           1   // Enable 8-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH 1   // Enable 8-band filter bank switching: non-latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m. Enable this if you are using 8-band non-latching version for the relays, the radio will draw extra 15mA current but will work ity any relay (Tnx OH2UDS/TA7W Baris)
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
@@ -84,6 +85,10 @@
 #undef ROT_B
 #define ROT_A   7         //PD7    (pin 13)
 #define ROT_B   6         //PD6    (pin 12)
+#endif
+
+#if (defined(OLED_SSD1306) || defined(OLED_SH1106))
+#define OLED    1
 #endif
 
 #if (defined(CAT) || defined(TESTBENCH)) && !(OLED)
@@ -463,10 +468,18 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
 class I2C_ {
 public:
 #if(F_MCU > 20900000)
-  #define _DELAY() for(uint8_t i = 0; i != 6; i++) asm("nop");
-#else
-  #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
-#endif
+  #ifdef OLED_SH1106
+    #define _DELAY() for(uint8_t i = 0; i != 9; i++) asm("nop");
+  #else //OLED_SSD1306
+    #define _DELAY() for(uint8_t i = 0; i != 6; i++) asm("nop");
+  #endif //!OLED_SH1106
+#else // F_MCU
+  #ifdef OLED_SH1106
+    #define _DELAY() for(uint8_t i = 0; i != 8; i++) asm("nop");
+  #else //OLED_SSD1306
+    #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
+  #endif //!OLED_SH1106
+#endif // F_MCU
   #define _I2C_SDA (1<<2) // PD2
   #define _I2C_SCL (1<<3) // PD3
 #ifdef OLED_I2C_DIRECT_IO
@@ -895,49 +908,84 @@ const uint8_t font[]PROGMEM = {
 #define FONT_STRETCHH 0
 */
 
-#define BRIGHT  1
 //#define CONDENSED 1
 //#define INVERSE  1
-static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence
-//  0xAE,     // Display OFF (sleep mode)
-    0x20, 0b10,   // Set Memory Addressing Mode
-          // 00=Horizontal Addressing Mode; 01=Vertical Addressing Mode;
-          // 10=Page Addressing Mode (RESET); 11=Invalid
- 0xB0,     // Set Page Start Address for Page Addressing Mode, 0-7
-  0xC8,     // Set COM Output Scan Direction.  Flip Veritically.
- 0x00,     // Set low nibble of column address
- 0x10,     // Set high nibble of column address
-   0x40,     // Set display start line address
-#ifdef BRIGHT
-  0x81, /*32*/ 0x7F,   // Set contrast control register
-#else
-  0x81, 32,   // Set contrast control register
-#endif
+#ifdef OLED_SH1106
+static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence  https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
+  //0xAE,     // Display OFF (sleep mode)
+  0XB0 | 0x0,   // Sset page address
+  0x81, /*32*/ 0x80,   // Set contrast control register
   0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
 #ifdef INVERSE
-   0xA7,     // Set display mode. A6=Normal; A7=Inverse
+  0xA7,     // Set display mode. A6=Normal; A7=Inverse
 #else
-   0xA6,     // Set display mode. A6=Normal; A7=Inverse
-#endif
-  0xA8, 0x1F,   // Set multiplex ratio(1 to 64)
-   0xA4,     // Output RAM to Display
-          // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
-  0xD3, 0x00,   // Set display offset. 00 = no offset
-   0xD5, 0x01,   // 0x80--set display clock divide ratio/oscillator frequency
-#ifdef BRIGHT
-  0xD9, 0xF1, // 0xF1=brighter //0x22 Set pre-charge period
-#else
-  0xD9, 0x03,   // 0x22 Set pre-charge period
+  0xA6,     // Set display mode. A6=Normal; A7=Inverse
 #endif
 #ifdef CONDENSED
-  0xDA, 0x12,   // Set com pins hardware configuration
+  0xA8, 0x3F,   // Set multiplex ratio(1 to 64)   128x64
 #else
-  0xDA, 0x02,   // Set com pins hardware configuration
+  0xA8, 0x1F,   // Set multiplex ratio(1 to 64)   128x32
 #endif
-   0xDB, 0x05, //0x20, --set vcomh 0x20 = 0.77xVcc
-  0x8D, 0x14,    // Set DC-DC enable
+  0xAD, 0x8B,   // SH1106 Set pump mode, SH1106 pump ON
+  0x30 | 0x2,    // Pump voltage 8.0V
+  0xC8,         // Set COM Output Scan Direction.  Flip Veritically.
+  0xD3, 0x00,   // Set display offset. 00 = no offset
+  0xD5, 0x80,   // 0x01--set display clock divide ratio/oscillator frequency   OK? (0x80 (or >=0x10) needed when multiplex ration set to 0x3F)
+  0xD9, 0x1F,   // SH1106:0x1F   //0xF1=brighter //0x22 Set pre-charge period
+#ifdef CONDENSED
+  0xDA, 0x12,   // Set com pins hardware configuration  128x64
+#else
+  0xDA, 0x02,   // Set com pins hardware configuration  128x32
+#endif
+  0xDB, 0x40, //0x05 --set vcomh 0x20 = 0.77xVcc    OK?
+/*  // only for SSD1306:
+  0x40,         // Set display start line address
+  0x8D, 0x14,    // Set charge pump, internal VCC
+  0x20, 0x02,   // Set Memory Addressing; 0=Horizontal Mode; 1=Vertical Mode; 2=Page Mode
+  0xA4,     // Output RAM to Display  (display all on resume)
+*/
+  //0xB0,     // Set Page Start Address for Page Addressing Mode, 0-7
+  //0x00,     // Set low nibble of column address
+  //0x10,     // Set high nibble of column address
+          // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
   0xAF,     // Display ON
 };
+#else //SSD1306
+static const uint8_t ssd1306_init_sequence [] PROGMEM = {  // Initialization Sequence  https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
+  //0xAE,     // Display OFF (sleep mode)
+  0xD5, 0x80,   // 0x01--set display clock divide ratio/oscillator frequency   OK? (0x80 (or >=0x10) needed when multiplex ration set to 0x3F)
+#ifdef CONDENSED
+  0xA8, 0x3F,   // Set multiplex ratio(1 to 64)   128x64
+#else
+  0xA8, 0x1F,   // Set multiplex ratio(1 to 64)   128x32
+#endif
+  0xD3, 0x00,   // Set display offset. 00 = no offset
+  0x40,         // Set display start line address
+  0x8D, 0x14,    // Set charge pump, internal VCC
+  0x20, 0x02,   // Set Memory Addressing; 0=Horizontal Mode; 1=Vertical Mode; 2=Page Mode
+  0xA1,     // Set Segment Re-map. A0=column 0 mapped to SEG0; A1=column 127 mapped to SEG0. Flip Horizontally
+  0xC8,     // Set COM Output Scan Direction.  Flip Veritically.
+#ifdef CONDENSED
+  0xDA, 0x12,   // Set com pins hardware configuration  128x64
+#else
+  0xDA, 0x02,   // Set com pins hardware configuration  128x32
+#endif
+  0x81, /*32*/ 0x7F,   // Set contrast control register
+  0xD9, 0xF1, // 0xF1=brighter //0x22 Set pre-charge period
+  0xDB, 0x40, //0x05 --set vcomh 0x20 = 0.77xVcc    OK?
+  0xA4,     // Output RAM to Display  (display all on resume)
+#ifdef INVERSE
+  0xA7,     // Set display mode. A6=Normal; A7=Inverse
+#else
+  0xA6,     // Set display mode. A6=Normal; A7=Inverse
+#endif
+  //0xB0,     // Set Page Start Address for Page Addressing Mode, 0-7
+  //0x00,     // Set low nibble of column address
+  //0x10,     // Set high nibble of column address
+          // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
+  0xAF,     // Display ON
+};
+#endif
 
 class SSD1306Device: public Print {  // https://www.buydisplay.com/download/manual/ER-OLED0.91-3_Series_Datasheet.pdf
 public:
@@ -972,8 +1020,12 @@ public:
     oledX = x; oledY = y;
     Wire.beginTransmission(SSD1306_ADDR); Wire.write(SSD1306_COMMAND);
     Wire.write(renderingFrame | (oledY & 0x07));
-    Wire.write(0x10 | ((oledX & 0xf0) >> 4));
-    Wire.write(oledX & 0x0f);
+    uint8_t _oledX = oledX;
+#ifdef OLED_SH1106
+    _oledX += 2; // SH1106 is a 132x64 controller.  Use middle 128 columns.
+#endif
+    Wire.write(0x10 | ((_oledX & 0xf0) >> 4));
+    Wire.write(_oledX & 0x0f);
     Wire.endTransmission();
   }
   void drawCursor(bool en){
