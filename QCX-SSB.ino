@@ -37,7 +37,7 @@
 #define VOX_ENABLE       1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
 //#define MOX_ENABLE     1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
 //#define FAST_AGC       1   // Adds fast AGC option (good for CW)
-//#define VSS_METER      1   // Supports Vss measurement (as s-meter option)
+//#define VSS_METER      1   // Supports Vss measurement (as s-meter option), requires resistor of 1M between 12V and pin 26 (PC3)
 //#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
 //#define ONEBUTTON      1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
 //#define F_MCU   16000000   // 16MHz ATMEGA328P crystal (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal). You may change this value to any other crystal frequency (up to 28MHz may work)
@@ -3604,8 +3604,7 @@ const byte fonts[N_FONTS][8] PROGMEM = {
   0b00000 }
 };
 
-int analogSafeRead(uint8_t pin, bool ref1v1 = false)
-{  // performs classical analogRead with default Arduino sample-rate and analog reference setting; restores previous settings
+/*int analogSafeRead(uint8_t pin, bool ref1v1 = false){  // performs classical analogRead with default Arduino sample-rate and analog reference setting; restores previous settings
   noInterrupts();
   for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
   uint8_t adcsra = ADCSRA;
@@ -3620,24 +3619,21 @@ int analogSafeRead(uint8_t pin, bool ref1v1 = false)
   ADMUX = admux;
   interrupts();
   return val;
-}
-
-/*
-uint16_t analogSafeRead(uint8_t adcpin, bool ref1v1 = false)
-{
-  uint16_t adc;
-  noInterrupts();
-  uint8_t oldmux = ADMUX;
-  for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
-  ADMUX = (adcpin & 0x0f);    // set analog input pin
-  ADMUX |= ((ref1v1) ? (1 << REFS1) : 0) | (1 << REFS0);  // If reflvl == true, set AREF=1.1V (Internal ref); otherwise AREF=AVCC=(5V)
-  ADCSRA |= (1 << ADSC);    // start next ADC conversion
-  for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
-  ADMUX = oldmux;
-  adc = ADC;
-  interrupts();
-  return adc;
 }*/
+
+uint16_t analogSafeRead(uint8_t adcpin, bool ref1v1 = false){
+   noInterrupts();
+   uint8_t oldmux = ADMUX;
+   ADMUX = (3 & 0x0f) | ((ref1v1) ? (1 << REFS1) : 0) | (1 << REFS0);  // set MUX for next conversion   note: hardcoded for BUTTONS adcpin
+   for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
+   delayMicroseconds(16);  // settle
+   ADCSRA |= (1 << ADSC);    // start next ADC conversion
+   for(;!(ADCSRA & (1 << ADIF)););  // wait until ADC conversion is completed
+   ADMUX = oldmux;
+   uint16_t adc = ADC;
+   interrupts();
+   return adc;
+}
 
 uint16_t analogSampleMic()
 {
@@ -3707,11 +3703,11 @@ int16_t smeter(int16_t ref = 0)
     }
 #endif  //CW_DECODER
 #ifdef VSS_METER
-    if(smode == 5){ // Supply-voltage indicator; add resistor Rvss (see below) between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
-#define Rgnd 10   //kOhm (PC3 to GND)
-#define Rvss 1000 //kOhm (PC3 to VSS)
-      uint16_t vss = analogSafeRead(BUTTONS, true) * (Rvss+Rgnd) * 11 / (Rgnd * 1024);
-      lcd.setCursor(10, 0); lcd.print(vss/10); lcd.print('.'); lcd.print(vss%10); lcd.print("V ");
+    if(smode == 5){ // Supply-voltage indicator; add resistor of value R_VSS (see below) between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
+#define R_VSS   1000 //kOhm (PC3 to VSS)
+      uint8_t vss10 = (uint32_t)analogSafeRead(BUTTONS, true) * (R_VSS + 10) * 11 / (10 * 1024);  // for a 1.1V ADC range VSS measurement
+      //uint8_t vss10 = (uint32_t)analogSafeRead(BUTTONS, false) * (R_VSS + 10) * 50 / (10 * 1024);  // for a 5V ADC range VSS measurement
+      lcd.setCursor(10, 0); lcd.print(vss10/10); lcd.print('.'); lcd.print(vss10%10); lcd.print("V ");
     }
 #endif //VSS_METER
 #ifdef CLOCK
@@ -5314,7 +5310,7 @@ void loop()
 #endif
         wdt_reset();
       }  // Max. voltages at ADC3 for buttons L,R,E: 3.76V;4.55V;5V, thresholds are in center
-      event |= (v < (4.2 * 1024.0 / 5.0)) ? BL : (v < (4.8 * 1024.0 / 5.0)) ? BR : BE; // determine which button pressed based on threshold levels
+      event |= (v < (uint16_t)(4.2 * 1024.0 / 5.0)) ? BL : (v < (uint16_t)(4.8 * 1024.0 / 5.0)) ? BR : BE; // determine which button pressed based on threshold levels
     } else {  // hack: fast forward handling
       event = (event&0xf0) | ((encoder_val) ? PT : PLC/*PL*/);  // only alternate between push-long/turn when applicable
     }
@@ -5783,4 +5779,5 @@ adc bias error and potential error correction
 noise burst on tx
 https://groups.io/g/ucx/topic/81030243#6265
 
+for (size_t i = 0; i < 9; i++) id[i] = boot_signature_byte_get(0x0E + i + (UniqueIDsize == 9 && i > 5 ? 1 : 0));
 */
