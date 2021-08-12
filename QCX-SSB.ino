@@ -25,6 +25,7 @@
 //#define LPF_SWITCHING_WB2CBA_USDX_OCTOBAND     1   // Enable 8-band filter bank switching: non-latching relays wired to a MCP23008    GPIO extender on the PC4/PC5 I2C bus; relays are using GND as common (ground), GP0..7 used by the individual latches K1-8 switching respectively LPFs for 80m, 60m, 40m, 30m, 20m, 17m, 15m, 10m
 //#define LPF_SWITCHING_PE1DDA_USDXDUO           14  // Enable 2-band filter bank switching: non-latching relay  wired to pin PD5 (pin 11); specify as value the frequency in MHz for which (and above) the relay should be altered (e.g. put 14 to enable the relay at 14MHz and above to use the 20m LPF).
 #define SI5351_ADDR   0x60   // SI5351A I2C address: 0x60 for SI5351A-B-GT, Si5351A-B04771-GT, MS5351M; 0x62 for SI5351A-B-04486-GT; 0x6F for SI5351A-B02075-GT; see here for other variants: https://www.silabs.com/TimingUtility/timing-download-document.aspx?OPN=Si5351A-B02075-GT&OPNRevision=0&FileType=PublicAddendum
+//#define F_MCU   16000000   // 16MHz ATMEGA328P crystal (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal). You may change this value to any other crystal frequency (up to 28MHz may work)
 
 // Advanced configuration switches
 //#define CONDENSED      1   // Display in 4 line mode (for OLED and LCD2004 modules)
@@ -41,7 +42,6 @@
 //#define VSS_METER      1   // Supports Vss measurement (as s-meter option), requires resistor of 1M between 12V and pin 26 (PC3)
 //#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
 //#define ONEBUTTON      1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
-//#define F_MCU   16000000   // 16MHz ATMEGA328P crystal (enable for unmodified Arduino Uno/Nano boards with 16MHz crystal). You may change this value to any other crystal frequency (up to 28MHz may work)
 //#define DEBUG          1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH      1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
 //#define CW_FREQS_QRP   1   // Defaults to CW QRP   frequencies when changing bands
@@ -52,9 +52,10 @@
 //#define NTX            11  // Enables LOW  on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define CLOCK          1   // Enables clock
+#define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
 //#define TX_CLK0_CLK1   1   // Enable this for uSDXDuO, i.e. when PA is driven by CLK0, CLK1 (not CLK2); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
 //#define F_CLK2  12000000   // Enable this for uSDXDuO, enables a fixed CLK2 clock output (TX_CLK0_CLK1 must be enabled)
-#define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
+//#define F_XTAL  20000000   // Enable this for uSDXDuO, 20MHz SI5351 crystal
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -3570,7 +3571,8 @@ const byte fonts[N_FONTS][8] PROGMEM = {
   0b00000 }
 };
 
-/*int analogSafeRead(uint8_t pin, bool ref1v1 = false){  // performs classical analogRead with default Arduino sample-rate and analog reference setting; restores previous settings
+#ifndef VSS_METER
+int analogSafeRead(uint8_t pin, bool ref1v1 = false){  // performs classical analogRead with default Arduino sample-rate and analog reference setting; restores previous settings
   noInterrupts();
   for(;!(ADCSRA & (1 << ADIF)););  // wait until (a potential previous) ADC conversion is completed
   uint8_t adcsra = ADCSRA;
@@ -3585,8 +3587,8 @@ const byte fonts[N_FONTS][8] PROGMEM = {
   ADMUX = admux;
   interrupts();
   return val;
-}*/
-
+}
+#else //VSS_METER
 uint16_t analogSafeRead(uint8_t adcpin, bool ref1v1 = false){
    noInterrupts();
    uint8_t oldmux = ADMUX;
@@ -3600,6 +3602,7 @@ uint16_t analogSafeRead(uint8_t adcpin, bool ref1v1 = false){
    interrupts();
    return adc;
 }
+#endif
 
 uint16_t analogSampleMic()
 {
@@ -3670,9 +3673,9 @@ int16_t smeter(int16_t ref = 0)
 #endif  //CW_DECODER
 #ifdef VSS_METER
     if(smode == 5){ // Supply-voltage indicator; add resistor of value R_VSS (see below) between 12V supply input and pin 26 (PC3)   Contribution by Jeff WB4LCG: https://groups.io/g/ucx/message/4470
-#define R_VSS   1000 //kOhm (PC3 to VSS)
-      uint8_t vss10 = (uint32_t)analogSafeRead(BUTTONS, true) * (R_VSS + 10) * 11 / (10 * 1024);  // for a 1.1V ADC range VSS measurement
-      //uint8_t vss10 = (uint32_t)analogSafeRead(BUTTONS, false) * (R_VSS + 10) * 50 / (10 * 1024);  // for a 5V ADC range VSS measurement
+#define R_VSS   1000 // for 1000kOhm from VSS to PC3 (and 10kOhm to GND). Correct this value until VSS is matching
+      uint8_t vss10 = (uint32_t)analogSafeRead(BUTTONS, true) * (R_VSS + 10) * 11 / (10 * 1024);   // use for a 1.1V ADC range VSS measurement
+      //uint8_t vss10 = (uint32_t)analogSafeRead(BUTTONS, false) * (R_VSS + 10) * 50 / (10 * 1024);  // use for a 5V ADC range VSS measurement (use for 100k value of R_VSS)
       lcd.setCursor(10, 0); lcd.print(vss10/10); lcd.print('.'); lcd.print(vss10%10); lcd.print("V ");
     }
 #endif //VSS_METER
@@ -5046,8 +5049,7 @@ void setup()
   
   // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
   paramAction(LOAD, VERS);
-  paramAction(LOAD, SIFXTAL);
-  if((eeprom_version != get_version_id()) || _digitalRead(BUTTONS) || (abs(F_XTAL - si5351.fxtal) > 50000) ){  // EEPROM clean: if rotary-key pressed or version signature in EEPROM does NOT corresponds with this firmware, or if F_XTAL frequency deviates too much
+  if((eeprom_version != get_version_id()) || _digitalRead(BUTTONS)){  // EEPROM clean: if rotary-key pressed or version signature in EEPROM does NOT corresponds with this firmware
     eeprom_version = get_version_id();
     //for(int n = 0; n != 1024; n++){ eeprom_write_byte((uint8_t *) n, 0); wdt_reset(); } //clean EEPROM
     //eeprom_write_dword((uint32_t *)EEPROM_OFFSET/3, 0x000000);
@@ -5057,6 +5059,7 @@ void setup()
   } else {
     paramAction(LOAD);  // load all parameters
   }
+  if(abs((int32_t)F_XTAL - (int32_t)si5351.fxtal) > 50000){ si5351.fxtal = F_XTAL; }  // if F_XTAL frequency deviates too much with actual setting -> use default
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
@@ -5745,5 +5748,64 @@ adc bias error and potential error correction
 noise burst on tx
 https://groups.io/g/ucx/topic/81030243#6265
 
-for (size_t i = 0; i < 9; i++) id[i] = boot_signature_byte_get(0x0E + i + (UniqueIDsize == 9 && i > 5 ? 1 : 0));
+for (size_t i = 0; i < 9; i++) id[i] = boot_signature_byte_get(0x0E + i + (i > 5));
+
+// https://www.ti.com/lit/ds/symlink/ina226.pdf
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+#include <Adafruit_INA219.h>
+Adafruit_INA219 ina219;
+float pwr;
+float Eff;
+float Vinc, Vref = 0, SWR;
+float k = 0.85;
+float busvoltage = 0;
+float current_mA = 0;
+float power_mW = 0;
+
+void setup() {
+  ina219.begin();
+  lcd.init();
+  lcd.backlight();
+}
+void loop() {
+  busvoltage = ina219.getBusVoltage_V();
+  current_mA = ina219.getCurrent_mA();
+  power_mW = ina219.getPower_mW();
+  Vinc = analogRead(3);
+  Vref = analogRead(2);
+  SWR = (Vinc + Vref) / (Vinc - Vref);
+  Vinc = ((Vinc * 5.0) / 1024.0) + 0.5;
+  pwr = ((((Vinc) * (Vinc)) - 0.25 ) * k);
+  Eff = (pwr) / ((power_mW) / 1000) * 100;
+  if (pwr > 0 ) (pwr = pwr + 0.25);
+  lcd.setCursor(0, 0);
+  lcd.print("SWR     :1 / P     W");
+  lcd.setCursor(4, 0);
+  lcd.print(SWR);
+  lcd.setCursor(15, 0);
+  lcd.print(pwr);
+
+  lcd.setCursor (0, 2);
+  //lcd.print ("Vss = ");
+  lcd.print(busvoltage);
+  lcd.print("V  ");
+
+  lcd.setCursor(8, 2);
+  lcd.print (-((current_mA) / 1000));
+  lcd.print("A  ");
+
+  lcd.setCursor(15, 2);
+  lcd.print((power_mW) / 1000);
+  lcd.print("W   ");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Efficiency = ");
+  lcd.print(Eff);
+  lcd.setCursor(17, 1);
+  lcd.print("%   ");
+
+  delay(300);
+}
 */
