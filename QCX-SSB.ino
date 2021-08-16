@@ -4,7 +4,7 @@
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define VERSION   "1.02v"
+#define VERSION   "1.02w"
 
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
@@ -17,6 +17,7 @@
 //#define QCX            1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
 //#define OLED_SSD1306   1   // OLED display (SSD1306 128x32 or 128x64), connect SDA (PD2), SCL (PD3)
 //#define OLED_SH1106    1   // OLED display (SH1106 1.3" inch display), connect SDA (PD2), SCL (PD3), NOTE that this display is pretty slow
+//#define LCD_I2C        1   // LCD with I2C (PCF8574 module          ), connect SDA (PD2), SCL (PD3), NOTE that this display is pretty slow
 #define LPF_SWITCHING_DL2MAN_USDX_REV3           1   // Enable 8-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m
 //#define LPF_SWITCHING_DL2MAN_USDX_REV3_NOLATCH 1   // Enable 8-band filter bank switching: non-latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.0 as common (ground), IO1.0..7 used by the individual latches K0-7 switching respectively LPFs for 10m, 15m, 17m, 20m, 30m, 40m, 60m, 80m. Enable this if you are using 8-band non-latching version for the relays, the radio will draw extra 15mA current but will work ity any relay (Tnx OH2UDS/TA7W Baris)
 //#define LPF_SWITCHING_DL2MAN_USDX_REV2         1   // Enable 5-band filter bank switching:     latching relays wired to a TCA/PCA9555 GPIO extender on the PC4/PC5 I2C bus; relays are using IO0.1 as common (ground), IO0.3, IO0.5, IO0.7, IO1.1, IO1.3 used by the individual latches K1-5 switching respectively LPFs for 20m, 30m, 40m, 60m, 80m
@@ -52,7 +53,7 @@
 //#define NTX            11  // Enables LOW  on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define CLOCK          1   // Enables clock
-#define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
+#define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only available for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
 //#define TX_CLK0_CLK1   1   // Enable this for uSDXDuO, i.e. when PA is driven by CLK0, CLK1 (not CLK2); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
 //#define F_CLK2  12000000   // Enable this for uSDXDuO, enables a fixed CLK2 clock output (TX_CLK0_CLK1 must be enabled)
 //#define F_XTAL  20000000   // Enable this for uSDXDuO, 20MHz SI5351 crystal
@@ -262,6 +263,88 @@ volatile uint8_t vox = 0;
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
+//#define _I2C_DIRECT_IO    1 // Enables communications that is not using the standard I/O pull-down approach with pull-up resistors, instead I/O is directly driven with 0V/5V
+class I2C_ { // Secundairy I2C class used by I2C LCD/OLED, uses alternate pins: PD2 (SDA) and PD3 (SCL)
+public:
+#if(F_MCU > 20900000)
+  #ifdef OLED_SH1106
+    #define _DELAY() for(uint8_t i = 0; i != 9; i++) asm("nop");
+  #else
+  #ifdef OLED_SSD1306
+    #define _DELAY() for(uint8_t i = 0; i != 6; i++) asm("nop");
+  #else // other (I2C_LCD)
+    #define _DELAY() for(uint8_t i = 0; i != 7; i++) asm("nop");
+  #endif
+  #endif
+#else // slow F_MCU
+  #ifdef OLED_SH1106
+    #define _DELAY() for(uint8_t i = 0; i != 8; i++) asm("nop");
+  #else
+  #ifdef OLED_SSD1306
+    #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
+  #else // other (I2C_LCD)
+    #define _DELAY() for(uint8_t i = 0; i != 5; i++) asm("nop");
+  #endif
+  #endif
+#endif // F_MCU
+  #define _I2C_SDA (1<<2) // PD2
+  #define _I2C_SCL (1<<3) // PD3
+#ifdef _I2C_DIRECT_IO
+  #define _I2C_INIT() _I2C_SDA_HI(); _I2C_SCL_HI(); DDRD |= (_I2C_SDA | _I2C_SCL);  // direct I/O (no need for pull-ups)
+  #define _I2C_SDA_HI() PORTD |=  _I2C_SDA;
+  #define _I2C_SDA_LO() PORTD &= ~_I2C_SDA;
+  #define _I2C_SCL_HI() PORTD |=  _I2C_SCL; _DELAY();
+  #define _I2C_SCL_LO() PORTD &= ~_I2C_SCL; _DELAY();
+#else // !_I2C_DIRECT_IO
+  #define _I2C_INIT()   PORTD &= ~_I2C_SDA; PORTD &= ~_I2C_SCL; _I2C_SDA_HI(); _I2C_SCL_HI();  // open-drain
+  #define _I2C_SDA_HI() DDRD &= ~_I2C_SDA;
+  #define _I2C_SDA_LO() DDRD |=  _I2C_SDA;
+  #define _I2C_SCL_HI() DDRD &= ~_I2C_SCL; _DELAY();
+  #define _I2C_SCL_LO() DDRD |=  _I2C_SCL; _DELAY();
+#endif // !_I2C_DIRECT_IO
+  #define _I2C_START() _I2C_SDA_LO(); _DELAY(); _I2C_SCL_LO(); // _I2C_SDA_HI();
+  #define _I2C_STOP()  _I2C_SDA_LO(); _I2C_SCL_HI(); _I2C_SDA_HI();
+  #define _I2C_SUSPEND() //_I2C_SDA_LO(); // SDA_LO to allow re-use as output port
+  #define _SendBit(data, bit) \
+    if(data & 1 << bit){ \
+      _I2C_SDA_HI();  \
+    } else {         \
+      _I2C_SDA_LO();  \
+    }                \
+    _I2C_SCL_HI();    \
+    _I2C_SCL_LO();
+  inline void start(){ _I2C_INIT(); _I2C_START(); };
+  inline void stop() { _I2C_STOP(); _I2C_SUSPEND(); };
+  inline void SendByte(uint8_t data){
+    _SendBit(data, 7);
+    _SendBit(data, 6);
+    _SendBit(data, 5);
+    _SendBit(data, 4);
+    _SendBit(data, 3);
+    _SendBit(data, 2);
+    _SendBit(data, 1);
+    _SendBit(data, 0);
+    _I2C_SDA_HI();  // recv ACK
+    _DELAY(); //
+    _I2C_SCL_HI();
+    _I2C_SCL_LO();
+  }
+  void SendRegister(uint8_t addr, uint8_t* data, uint8_t n){
+    start();
+    SendByte(addr << 1);
+    while(n--) SendByte(*data++);
+    stop();
+  }
+  //void SendRegister(uint8_t addr, uint8_t val){ SendRegister(addr, &val, 1); }
+
+  void begin(){};
+  void beginTransmission(uint8_t addr){ start(); SendByte(addr << 1);  };
+  bool write(uint8_t byte){ SendByte(byte); return 1; };
+  uint8_t endTransmission(){ stop(); return 0; };
+};
+I2C_ Wire;
+//#include <Wire.h>
+
 uint8_t backlight = 8;
 //#define RS_HIGH_ON_IDLE   1   // Experimental LCD support where RS line is high on idle periods to comply with SDA I2C standard.
 
@@ -281,23 +364,56 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
   #define LCD_EN_LO() PORTD &= ~(1 << _en);        // EN low
   #define LCD_EN_HI() PORTD |= (1 << _en);         // EN high
   #define LCD_PREP_NIBBLE(b) (PORTD & ~(0xf << _dn)) | (b) << _dn | 1 << _en // Send data and enable high
+  uint8_t _cols;
   void begin(uint8_t x = 0, uint8_t y = 0){        // Send command , make sure at least 40ms after power-up before sending commands
-    bool reinit = (x == 0) && (y == 0);
+    //bool reinit = (x == 0) && (y == 0);
+#ifdef LCD_I2C
+#define PCF_ADDR  0x27                         // LCD I2C address where PCF8574 addess selection A0, A1, A2 are all open
+#define PCF_RS 0x01
+#define PCF_RW 0x02  // the 0xF0 bits are used for 4-bit data to the display.
+#define PCF_EN 0x04
+#define PCF_BACKLIGHT 0x08
+    Wire.beginTransmission(PCF_ADDR);
+    Wire.write(0);
+    Wire.endTransmission();
+    delayMicroseconds(50000);
+#else //!LCD_I2C
     DDRD |= 0xf << _dn | 1 << _en;                 // Make data, EN outputs
     DDRC |= 1 << _rs;
     //PORTC &= ~(1 << _rs);                          // Set RS low in case to support pull-down when DDRC is output
     delayMicroseconds(50000);                      // *
     LCD_RS_LO(); LCD_EN_LO();
+#endif //!LCD_I2C
     cmd(0x33);                                     // Ensures display is in 8-bit mode
     delayMicroseconds(4500); cmd(0x33); delayMicroseconds(4500); cmd(0x33); delayMicroseconds(150); // * Ensures display is in 8-bit mode
     cmd(0x32);                                     // Puts display in 4-bit mode
     cmd(0x28);                                     // * Function set: 2-line, 5x8 
     cmd(0x0c);                                     // Display on
-    if(reinit) return;
+    //if(reinit) return;
     cmd(0x01);                                     // Clear display
     delay(3);                                      // Allow to execute Clear on display [https://www.sparkfun.com/datasheets/LCD/HD44780.pdf, p.49, p58]
     cmd(0x06);                                     // * Entrymode: left, shift-dec
   }
+#ifdef LCD_I2C
+  void nib(uint8_t b, bool isData){                             // Send four bit nibble to display
+    b = (b << 4) | ((backlight) ? PCF_BACKLIGHT : 0) | ((isData) ?  PCF_RS : 0);
+    Wire.write(b | PCF_EN);  // write command EN HI
+    delayMicroseconds(4);    // enable pulse must be >450ns
+    Wire.write(b);           // write command EN LO
+    delayMicroseconds(60);   // commands need > 37us to settle
+    Wire.write(b);           // must write for some unknown reason
+  }
+  void cmd(uint8_t b){
+    Wire.beginTransmission(PCF_ADDR);
+    nib(b >> 4, false); nib(b, false);
+    Wire.endTransmission();
+  }
+  size_t write(uint8_t b){
+    Wire.beginTransmission(PCF_ADDR);
+    nib((b >> 4), true); nib((b), true);
+    Wire.endTransmission();
+  }
+#else //!LCD_I2C
   // Since LCD is using PD0(RXD), PD1(TXD) pins in the data-path, some co-existence feature is required when using the serial port.
   // The following functions are temporarily dsiabling the serial port when LCD writes happen, and make sure that serial transmission is ended.
   // To prevent that LCD writes are received by the serial receiver, PC2 is made HIGH during writes to pull-up TXD via a diode.
@@ -380,7 +496,12 @@ public:  // LCD1602 display in 4-bit mode, RS is pull-up and kept low when idle 
     return 1;
   }
 #endif // RS_HIGH_ON_IDLE
+#endif //!LCD_I2C
+#ifdef CONDENSED
+  void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + (uint8_t[]){0x00, 0x40, 0x00 + 20, 0x40 + 20}[y])); }  // ONLY for LCD2004 display
+#else
   void setCursor(uint8_t x, uint8_t y){ cmd(0x80 | (x + y * 0x40)); }
+#endif
   void cursor(){ cmd(0x0e); }
   void noCursor(){ cmd(0x0c); }
   void noDisplay(){ cmd(0x08); }
@@ -464,81 +585,6 @@ public: // QCXLiquidCrystal extends LiquidCrystal library for pull-up driven LCD
   };
 };
 */
-
-//#define OLED_I2C_DIRECT_IO    1 // Enables I2C OLED communications that is not using the standard I/O pull-down approach with pull-up resistors, instead I/O is directly driven with 0V/5V
-// I2C class used by SSD1306 driver; you may connect a SSD1306 (128x32) display on LCD header pins: 1 (GND); 2 (VCC); 13 (SDA); 14 (SCL)
-class I2C_ {
-public:
-#if(F_MCU > 20900000)
-  #ifdef OLED_SH1106
-    #define _DELAY() for(uint8_t i = 0; i != 9; i++) asm("nop");
-  #else //OLED_SSD1306
-    #define _DELAY() for(uint8_t i = 0; i != 6; i++) asm("nop");
-  #endif //!OLED_SH1106
-#else // F_MCU
-  #ifdef OLED_SH1106
-    #define _DELAY() for(uint8_t i = 0; i != 8; i++) asm("nop");
-  #else //OLED_SSD1306
-    #define _DELAY() for(uint8_t i = 0; i != 4; i++) asm("nop"); // 4=731kb/s
-  #endif //!OLED_SH1106
-#endif // F_MCU
-  #define _I2C_SDA (1<<2) // PD2
-  #define _I2C_SCL (1<<3) // PD3
-#ifdef OLED_I2C_DIRECT_IO
-  #define _I2C_INIT() _I2C_SDA_HI(); _I2C_SCL_HI(); DDRD |= (_I2C_SDA | _I2C_SCL);  // direct I/O (no need for pull-ups)
-  #define _I2C_SDA_HI() PORTD |=  _I2C_SDA; _DELAY();
-  #define _I2C_SDA_LO() PORTD &= ~_I2C_SDA; _DELAY();
-  #define _I2C_SCL_HI() PORTD |=  _I2C_SCL; _DELAY();
-  #define _I2C_SCL_LO() PORTD &= ~_I2C_SCL; _DELAY();
-#else // !OLED_I2C_DIRECT_IO
-  #define _I2C_INIT()   PORTD &= ~_I2C_SDA; PORTD &= ~_I2C_SCL; _I2C_SDA_HI(); _I2C_SCL_HI();  // open-drain
-  #define _I2C_SDA_HI() DDRD &= ~_I2C_SDA; _DELAY();
-  #define _I2C_SDA_LO() DDRD |=  _I2C_SDA; _DELAY();
-  #define _I2C_SCL_HI() DDRD &= ~_I2C_SCL; _DELAY();
-  #define _I2C_SCL_LO() DDRD |=  _I2C_SCL; _DELAY();
-#endif // !OLED_I2C_DIRECT_IO
-  #define _I2C_START() _I2C_SDA_LO(); _I2C_SCL_LO(); // _I2C_SDA_HI();
-  #define _I2C_STOP()  _I2C_SDA_LO(); _I2C_SCL_HI(); _I2C_SDA_HI();
-  #define _I2C_SUSPEND() //_I2C_SDA_LO(); // SDA_LO to allow re-use as output port
-  #define _SendBit(data, bit) \
-    if(data & 1 << bit){ \
-      _I2C_SDA_HI();  \
-    } else {         \
-      _I2C_SDA_LO();  \
-    }                \
-    _I2C_SCL_HI();    \
-    _I2C_SCL_LO();
-  inline void start(){ _I2C_INIT(); _I2C_START(); };
-  inline void stop() { _I2C_STOP(); _I2C_SUSPEND(); }; 
-  inline void SendByte(uint8_t data){
-    _SendBit(data, 7);
-    _SendBit(data, 6);
-    _SendBit(data, 5);
-    _SendBit(data, 4);
-    _SendBit(data, 3);
-    _SendBit(data, 2);
-    _SendBit(data, 1);
-    _SendBit(data, 0);
-    _I2C_SDA_HI();  // recv ACK
-    _DELAY(); //
-    _I2C_SCL_HI();
-    _I2C_SCL_LO();
-  }
-  void SendRegister(uint8_t addr, uint8_t* data, uint8_t n){
-    start();
-    SendByte(addr << 1);
-    while(n--) SendByte(*data++);
-    stop();      
-  }
-  //void SendRegister(uint8_t addr, uint8_t val){ SendRegister(addr, &val, 1); }
-
-  void begin(){};
-  void beginTransmission(uint8_t addr){ start(); SendByte(addr << 1);  };
-  bool write(uint8_t byte){ SendByte(byte); return 1; };
-  uint8_t endTransmission(){ stop(); return 0; };
-};
-I2C_ Wire;
-//#include <Wire.h>
 
 /* // 6x8 technoblogy font
 const uint8_t font[]PROGMEM = {
@@ -2386,7 +2432,7 @@ void dec2()
       //hightimesavg = highduration+hightimesavg;     // if speed decrease fast ..
     }
     if(highduration > (hightimesavg/2)){ sym=(sym<<1)|(highduration > (hightimesavg*2));       // dit (0) or dash (1)
-#if defined(CW_INTERMEDIATE) && !defined(OLED) && (F_MCU >= 20000000)
+#if defined(CW_INTERMEDIATE) && !defined(OLED) && !defined(LCD_I2C) && (F_MCU >= 20000000)
       printsym(false);
 #endif
     }
@@ -3501,7 +3547,7 @@ void timer2_stop()
 //
 // Feel free to replace it with your own custom radio implementation :-)
 
-void inline lcd_blanks(){ lcd.print(F("         ")); }
+void inline lcd_blanks(){ lcd.print(F("        ")); }
 
 #define N_FONTS  8
 const byte fonts[N_FONTS][8] PROGMEM = {
@@ -4106,6 +4152,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       else value = (int32_t)value + encoder_val;
       encoder_val = 0;
 
+      lcd.noCursor();
       printlabel(action, menuid, label);  // print normal/menu label
       if(enumArray == NULL){  // print value
         if((_min < 0) && (value >= 0)) lcd.print('+');  // add + sign for positive values, in case negative values are supported
@@ -4113,7 +4160,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       } else {
         lcd.print(enumArray[value]);
       }
-      lcd_blanks(); lcd_blanks();
+      lcd_blanks(); lcd_blanks(); //lcd.setCursor(0, 1);
       //if(action == UPDATE) paramAction(SAVE, value, menuid, label, enumArray, _min, _max, continuous, init_val);
       break;
     default:
