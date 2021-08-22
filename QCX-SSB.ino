@@ -54,9 +54,9 @@
 //#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define CLOCK          1   // Enables clock
 #define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only available for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
-//#define TX_CLK0_CLK1   1   // Enable this for uSDXDuO, i.e. when PA is driven by CLK0, CLK1 (not CLK2); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
-//#define F_CLK2  12000000   // Enable this for uSDXDuO, enables a fixed CLK2 clock output (TX_CLK0_CLK1 must be enabled)
 //#define F_XTAL  20000000   // Enable this for uSDXDuO, 20MHz SI5351 crystal
+//#define TX_CLK0_CLK1   1   // Enable this for uSDXDuO, i.e. when PA is driven by CLK0, CLK1 (not CLK2); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
+//#define F_CLK2  12000000   // Enables a fixed CLK2 clock output of choice (only applicable when TX_CLK0_CLK1 is enabled), e.g. for up-converter or to clock UART USB device
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -980,8 +980,8 @@ static const uint8_t oled_init_sequence [] PROGMEM = {  // Initialization Sequen
   0xDA, 0x02,   // Set com pins hardware configuration  128x32
 #endif
   0x81, 0x80,   // Set contrast control register
+  0xDB, 0x40,   // Set vcomh 0x20 = 0.77xVcc
   0xD9, 0xF1,   // 0xF1=brighter //0x22 Set pre-charge period
-  0xDB, 0x40,   //0x05 --set vcomh 0x20 = 0.77xVcc    OK?
   0xB0 | 0x0,   // Set page address, 0-7
 #ifdef OLED_SH1106
   0xAD, 0x8B,   // SH1106 Set pump mode: pump ON
@@ -5106,7 +5106,7 @@ void setup()
   } else {
     paramAction(LOAD);  // load all parameters
   }
-  if(abs((int32_t)F_XTAL - (int32_t)si5351.fxtal) > 50000){ si5351.fxtal = F_XTAL; }  // if F_XTAL frequency deviates too much with actual setting -> use default
+  //if(abs((int32_t)F_XTAL - (int32_t)si5351.fxtal) > 50000){ si5351.fxtal = F_XTAL; }  // if F_XTAL frequency deviates too much with actual setting -> use default
   si5351.iqmsa = 0;  // enforce PLL reset
   change = true;
   prev_bandval = bandval;
