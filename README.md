@@ -125,6 +125,7 @@ Currently, the following functions have been assigned to shortcut buttons (L=lef
 | 2.6 Keyer mode      | Type of keyer (Iambic-A, -B, Straight) | |
 | 2.7 Keyer swap      | to swap keyer DIH, DAH inputs (ON, OFF) | |
 | 2.8 Practice        | to disable TX for practice purposes (ON, OFF) | |
+| 2.9 Tone Vol        | CW Side-tone level (0..16) | |
 | 3.1 VOX             | Voice Operated Xmit (ON, OFF) | | |
 | 3.2 Noise Gate      | Audio threshold for SSB TX and VOX (0-255) | |
 | 3.3 TX Drive        | Transmit audio gain (0-8) in steps of 6dB, 8=constant amplitude for SSB | |
