@@ -2137,8 +2137,13 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 
 volatile uint16_t acc;
 volatile uint32_t cw_offset;
+volatile uint8_t tone_vol = 12;
 volatile uint8_t cw_tone = 1;
+#ifdef QCX
 const uint32_t tones[] = { F_MCU * 700ULL / 20000000, F_MCU * 600ULL / 20000000, F_MCU * 700ULL / 20000000};
+#else
+const uint32_t tones[] = { F_MCU * 700ULL / 20000000, F_MCU * 600ULL / 20000000 };
+#endif
 
 volatile int8_t p_sin = 0;     // initialized with A*sin(0) = 0
 volatile int8_t n_cos = 448/4; // initialized with A*cos(t) = A
@@ -2169,7 +2174,7 @@ void dsp_tx_cw()
   OCR1BL = lut[255];
   
   process_minsky();
-  OCR1AL = (p_sin >> (16 - volume)) + 128;
+  OCR1AL = ( tone_vol ? (p_sin >> (16 - tone_vol )) : 0 ) + 128;
 }
 
 void dsp_tx_am()
@@ -4247,11 +4252,11 @@ const char* agc_label[] = { "OFF", "Fast", "Slow" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 44  // number of (visible) parameters
+#define N_PARAMS 45  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, TONE_VOL, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -4303,6 +4308,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case KEY_PIN:  paramAction(action, keyer_swap,  0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
 #endif
     case KEY_TX:   paramAction(action, practice,    0x28, F("Practice"), offon_label, 0, 1, false); break;
+    case TONE_VOL:   paramAction(action, tone_vol,    0x29, F("Tone Vol"), NULL, 0, 16, false); break;
 #ifdef VOX_ENABLE
     case VOX:     paramAction(action, vox,        0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("Noise Gate"), NULL, 0, 255, false); break;
