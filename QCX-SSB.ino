@@ -4293,7 +4293,12 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
 #endif
 #ifdef FILTER_700HZ
-    case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
+    case CWTONE:  if(dsp_cap) {
+                    paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); 
+                    p_sin = 0;     // initialized with A*sin(0) = 0
+                    n_cos = 448/4; // initialized with A*cos(t) = A
+                  }
+                  break;
 #endif
 #ifdef QCX
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
