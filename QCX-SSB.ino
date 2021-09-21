@@ -137,7 +137,7 @@
 #ifdef SWR_METER
 float FWD;
 float SWR;
-float ref_V = 5 * 1.15;
+float ref_V = 6.0 * 1.15;
 static uint32_t stimer;
 #define PIN_FWD  A6
 #define PIN_REF  A7
