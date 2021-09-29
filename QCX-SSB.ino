@@ -1153,6 +1153,7 @@ Display<LCD> lcd;     // highly-optimized LCD driver, OK for QCX supplied displa
 #endif
 #endif
 
+int8_t  band_dir = 1;
 volatile int8_t encoder_val = 0;
 volatile int8_t encoder_step = 0;
 static uint8_t last_state;
@@ -1167,8 +1168,8 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
 #else
 //    case 0x31: case 0x10: case 0x02: case 0x23: if(encoder_step < 0) encoder_step = 0; encoder_step++; if(encoder_step >  3){ encoder_step = 0; encoder_val++; } break;  // encoder processing for additional immunity to weared-out rotary encoders
 //    case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;
-    case 0x23:  encoder_val++; break;
-    case 0x32:  encoder_val--; break;
+    case 0x23:  encoder_val++; band_dir = 1; break;
+    case 0x32:  encoder_val--; band_dir = -1; break;
 #endif
   }
   //PCMSK2 |= (1 << PCINT22) | (1 << PCINT23);  // allow ROT_A, ROT_B interrupts
@@ -5485,9 +5486,9 @@ void loop()
         break;
       case BE|DC:
         //delay(100);
-        bandval++;
+        bandval += band_dir;
         //if(bandval >= N_BANDS) bandval = 0;
-        if(bandval >= (N_BANDS-1)) bandval = 1;  // excludes 6m, 160m
+        if (bandval < 1) bandval = (N_BANDS-2); else if(bandval >= (N_BANDS-1)) bandval = 1; // excludes 6m, 160m
         stepsize = STEP_1k;
         change = true;
         break;
