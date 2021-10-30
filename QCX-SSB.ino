@@ -9,10 +9,10 @@
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
 #define KEYER            1   // CW keyer
-#define CAT              1   // CAT-interface
-#define F_XTAL    27005000   // 27MHz SI5351 crystal
+//#define CAT              1   // CAT-interface
+//#define F_XTAL    27005000   // 27MHz SI5351 crystal
 //#define F_XTAL  25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX, SI5351 break-out board or uSDXDuO)
-//#define F_XTAL  25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
+#define F_XTAL  25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
 //#define SWAP_ROTARY    1   // Swap rotary direction (enable for WB2CBA-uSDX)
 //#define QCX            1   // Supports older (non-SDR) QCX HW modifications (QCX, QCX-SSB, QCX-DSP with I/Q alignment-feature)
 //#define OLED_SSD1306   1   // OLED display (SSD1306 128x32 or 128x64), connect SDA (PD2), SCL (PD3)
@@ -39,9 +39,9 @@
 #define RIT_ENABLE       1   // Receive-In-Transit alternates the receiving frequency with an user-defined offset to compensate for any necessary tuning needed on receive
 #define VOX_ENABLE       1   // Voice-On-Xmit which is switching the transceiver into transmit as soon audio is detected (above noise gate level)
 //#define MOX_ENABLE     1   // Monitor-On-Xmit which is audio monitoring on speaker during transmit
-//#define FAST_AGC       1   // Adds fast AGC option (good for CW)
+#define FAST_AGC       1   // Adds fast AGC option (good for CW)
 //#define VSS_METER      1   // Supports Vss measurement (as s-meter option), requires resistor of 1M between 12V and pin 26 (PC3)
-//#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
+#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
 //#define ONEBUTTON      1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
 //#define DEBUG          1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH      1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
@@ -51,12 +51,13 @@
 //#define CW_MESSAGE_EXT 1   // Additional CW messages
 //#define TX_DELAY       1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied (see also NTX, PTX definitions below for GPIO that can switch relay/PA)
 //#define NTX            11  // Enables LOW  on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
-//#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
+#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define CLOCK          1   // Enables clock
 #define CW_INTERMEDIATE  1   // CW decoder shows intermediate characters (only available for LCD and F_MCU at 20M), sequences like:  EIS[HV] EIUF EAW[JP] EARL TMO TMG[ZQ] TND[BX] TNK[YC], may be good to learn CW; a full list of possible sequences:  EISH5 EISV3 EIUF EIUU2 EAWJ1 EAWP EARL TMOO0 TMOO9 TMOO8 TMGZ7 TMGQ TNDB6 TNDX TNKY TNKC
 //#define F_XTAL  20000000   // Enable this for uSDXDuO, 20MHz SI5351 crystal
 //#define TX_CLK0_CLK1   1   // Enable this for uSDXDuO, i.e. when PA is driven by CLK0, CLK1 (not CLK2); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
 //#define F_CLK2  12000000   // Enables a fixed CLK2 clock output of choice (only applicable when TX_CLK0_CLK1 is enabled), e.g. for up-converter or to clock UART USB device
+//#define BACKL_CTL 1
 
 // QCX pin defintions
 #define LCD_D4  0         //PD0    (pin 2)
@@ -137,7 +138,7 @@
 #ifdef SWR_METER
 float FWD;
 float SWR;
-float ref_V = 5 * 1.15;
+float ref_V = 6.0 * 1.15;
 static uint32_t stimer;
 #define PIN_FWD  A6
 #define PIN_REF  A7
@@ -1152,6 +1153,7 @@ Display<LCD> lcd;     // highly-optimized LCD driver, OK for QCX supplied displa
 #endif
 #endif
 
+int8_t  band_dir = 1;
 volatile int8_t encoder_val = 0;
 volatile int8_t encoder_step = 0;
 static uint8_t last_state;
@@ -1166,8 +1168,8 @@ ISR(PCINT2_vect){  // Interrupt on rotary encoder turn
 #else
 //    case 0x31: case 0x10: case 0x02: case 0x23: if(encoder_step < 0) encoder_step = 0; encoder_step++; if(encoder_step >  3){ encoder_step = 0; encoder_val++; } break;  // encoder processing for additional immunity to weared-out rotary encoders
 //    case 0x32: case 0x20: case 0x01: case 0x13: if(encoder_step > 0) encoder_step = 0; encoder_step--; if(encoder_step < -3){ encoder_step = 0; encoder_val--; } break;
-    case 0x23:  encoder_val++; break;
-    case 0x32:  encoder_val--; break;
+    case 0x23:  encoder_val++; band_dir = 1; break;
+    case 0x32:  encoder_val--; band_dir = -1; break;
 #endif
   }
   //PCMSK2 |= (1 << PCINT22) | (1 << PCINT23);  // allow ROT_A, ROT_B interrupts
@@ -2137,8 +2139,13 @@ ADCSRA |= (1 << ADSC);  // causes RFI on QCX-SSB units (not on units with direct
 
 volatile uint16_t acc;
 volatile uint32_t cw_offset;
+volatile uint8_t tone_vol = 12;
 volatile uint8_t cw_tone = 1;
+#ifdef QCX
 const uint32_t tones[] = { F_MCU * 700ULL / 20000000, F_MCU * 600ULL / 20000000, F_MCU * 700ULL / 20000000};
+#else
+const uint32_t tones[] = { F_MCU * 700ULL / 20000000, F_MCU * 600ULL / 20000000 };
+#endif
 
 volatile int8_t p_sin = 0;     // initialized with A*sin(0) = 0
 volatile int8_t n_cos = 448/4; // initialized with A*cos(t) = A
@@ -2169,7 +2176,7 @@ void dsp_tx_cw()
   OCR1BL = lut[255];
   
   process_minsky();
-  OCR1AL = (p_sin >> (16 - volume)) + 128;
+  OCR1AL = ( tone_vol ? (p_sin >> (16 - tone_vol )) : 0 ) + 128;
 }
 
 void dsp_tx_am()
@@ -2691,7 +2698,7 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     return zc0;
   } else { // for CW filters
     //   (2nd Order (SR=4465Hz) IIR in Direct Form I, 8x8:16), adding 64x front-gain (to deal with later division)
-//#define FILTER_700HZ   1
+#define FILTER_700HZ   1
 #ifdef FILTER_700HZ
     if(cw_tone == 0){
       switch(filt){
@@ -4251,7 +4258,7 @@ const char* agc_label[] = { "OFF", "Fast", "Slow" };
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, TONE_VOL, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -4287,7 +4294,12 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
 #endif
 #ifdef FILTER_700HZ
-    case CWTONE:  if(dsp_cap) paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); break;
+    case CWTONE:  if(dsp_cap) {
+                    paramAction(action, cw_tone, 0x22, F("CW Tone"), cw_tone_label, 0, 1, false); 
+                    p_sin = 0;     // initialized with A*sin(0) = 0
+                    n_cos = 448/4; // initialized with A*cos(t) = A
+                  }
+                  break;
 #endif
 #ifdef QCX
     case CWOFF:   paramAction(action, cw_offset, 0x23, F("CW Offset"), NULL, 300, 2000, false); break;
@@ -4303,6 +4315,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case KEY_PIN:  paramAction(action, keyer_swap,  0x27, F("Keyer Swap"), offon_label, 0, 1, false); break;
 #endif
     case KEY_TX:   paramAction(action, practice,    0x28, F("Practice"), offon_label, 0, 1, false); break;
+    case TONE_VOL:   paramAction(action, tone_vol,    0x29, F("Tone Vol"), NULL, 0, 16, false); break;
 #ifdef VOX_ENABLE
     case VOX:     paramAction(action, vox,        0x31, F("VOX"), offon_label, 0, 1, false); break;
     case VOXGAIN: paramAction(action, vox_thresh, 0x32, F("Noise Gate"), NULL, 0, 255, false); break;
@@ -4339,7 +4352,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case PARAM_B: paramAction(action, param_b, 0x94, F("Param B"), NULL, INT16_MIN, INT16_MAX, false); break;
     case PARAM_C: paramAction(action, param_c, 0x95, F("Param C"), NULL, INT16_MIN, INT16_MAX, false); break;
 #endif
+#ifdef BACKL_CTL
     case BACKL:   paramAction(action, backlight, 0xA1, F("Backlight"), offon_label, 0, 1, false); break;   // workaround for varying N_PARAM and not being able to overflowing default cases properly
+#endif
     // Invisible parameters
     case FREQA:   paramAction(action, vfo[VFOA], 0, NULL, NULL, 0, 0, false); break;
     case FREQB:   paramAction(action, vfo[VFOB], 0, NULL, NULL, 0, 0, false); break;
@@ -5154,12 +5169,11 @@ void loop()
   if((vox) && ((mode == LSB) || (mode == USB))){  // If VOX enabled (and in LSB/USB mode), then take mic samples and feed ssb processing function, to derive amplitude, and potentially detect cross vox_threshold to detect a TX or RX event: this is expressed in tx variable
     if(!vox_tx){ // VOX not active
 #ifdef MULTI_ADC
-      if(vox_sample++ == 16){  // take N sample, then process
+      vox_adc += analogSampleMic();
+      if(++vox_sample == 16){  // take N sample, then process
         ssb(((int16_t)(vox_adc/16) - (512 - AF_BIAS)) >> MIC_ATTEN);   // sampling mic
         vox_sample = 0;
         vox_adc = 0;
-      } else {
-        vox_adc += analogSampleMic();
       }
 #else
       ssb(((int16_t)(analogSampleMic()) - 512) >> MIC_ATTEN);   // sampling mic
@@ -5472,9 +5486,9 @@ void loop()
         break;
       case BE|DC:
         //delay(100);
-        bandval++;
+        bandval += band_dir;
         //if(bandval >= N_BANDS) bandval = 0;
-        if(bandval >= (N_BANDS-1)) bandval = 1;  // excludes 6m, 160m
+        if (bandval < 1) bandval = (N_BANDS-2); else if(bandval >= (N_BANDS-1)) bandval = 1; // excludes 6m, 160m
         stepsize = STEP_1k;
         change = true;
         break;
