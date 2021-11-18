@@ -1,11 +1,11 @@
-# uSDX: micro Software Defined Xceiver
+# uSDX: micro Software Defined Transceiver
 uSDX is a simple and experimental (Class-E driven) SSB and CW SDR transceiver. It can be used to make QRP SSB contacts, or (in combination with a PC) used for the digital modes such as FT8, JS8, FT4. It can be fully-continuous tuned through bands 80m-10m in the LSB/USB-modes with a 2400Hz bandwidth has up to 5W PEP SSB output and features a software-based full Break-In VOX for fast RX/TX switching in voice and digital operations.
 
 The SSB transmit-stage is implemented entirely in digital and software-based manner: at the heart the ATMEGA328P is sampling the input-audio and reconstructing a SSB-signal by controlling the SI5351 PLL phase (through tiny frequency changes over 800kbit/s I2C) and controlling the PA Power (through PWM on the key-shaping circuit). In this way a highly power-efficient class-E driven SSB-signal can be realized; a PWM driven class-E design keeps the SSB transceiver simple, tiny, cool, power-efficient and low-cost (ie. no need for power-inefficient and complex linear amplifier with bulky heat-sink as often is seen in SSB transceivers).
 
 For the receiver, most parts are implemented in digital manner (software): the ATMEGA328P is implementing a 90 degree phase shift circuit, the (CW/SSB) filter circuit and the audio amplifier circuit (now a class-D amplifier). This has simplifies the uSDX circuit a lot, and there are a number of advantages and features (compared to an analog approach): there is no longer a need for an I/Q alignment procedure due to the very accurate 90 degree Hilbert phase shifter; and there are now adjustable IF DSP filters for CW and SSB; and there is an AGC and there is a noise-reducing DSP signal conditioning function and there are three indepent built-in attenuators in the analog front-end which helps utilizing the full dynamic range. The speaker is directly connected and driven by the ATMEGA. A digital mixer with narrow low-pass window (2 kHz), steep roll-off (-45dB/decade) combined with an oversampling and decimating ADC are responsible for a processing gain, dynamic range and alias rejection sufficient to handle weak and strong signal conditions (e.g. contests or listening on 40m just next to broadcasting band).
 
-This experiment is created to try out what is can be achieved with minimal hardware while moving complexity towards software; here the approach followed is to simplify the design where possible while keep a reasonable performance. The result is a cheap, easy to build, versatile QRP SSB transceiver that actually is quite suitable for making QSOs (even in contest situations), however due to the experimental nature some parts are still in progress and hence limited. Feel free to try it out or to experiment with this sketch, let me know your thoughts or contribute here: https://github.com/threeme3/QCX-SSB
+This experiment is created to try out what is can be achieved with minimal hardware while moving complexity towards software; here the approach followed is to simplify the design where possible while keep a reasonable performance. The result is a cheap, easy to build, versatile QRP SSB transceiver that actually is quite suitable for making QSOs (even in contest situations), however due to the experimental nature some parts are still in progress and hence limited. Feel free to try it out or to experiment with this sketch, let me know your thoughts or contribute here: https://github.com/threeme3/usdx
 
 **Note: there is an active online forum discussing the uSDX here: [uSDX Forum].**
 
@@ -190,11 +190,11 @@ Linear Data Manual, 1988.
 -->
 [Simple, fun and versatile]: usdx.png
 
-[uSDX]: https://github.com/threeme3/QCX-SSB
+[uSDX]: https://github.com/threeme3/usdx
 
 [uSDX Sketch]: QCX-SSB.ino
 
-[hex file]: https://github.com/threeme3/QCX-SSB/releases
+[hex file]: https://github.com/threeme3/usdx/releases
 
 [firmware upload]: https://www.qrp-labs.com/qcx/qcxfirmware.html
 
@@ -278,22 +278,22 @@ Linear Data Manual, 1988.
 
 [QCX Mini with uSDX daughterboard]: https://dl2man.de/qcx-mini-usdx-mod/
 
-[QCX+ modification]: https://groups.io/g/ucx/files/QCX+%20SSB%20Mods/Modifying%20the%20QCX+%20for%20SSB%20v3.pdf
+[QCX+ modification]: https://groups.io/g/ucx/files/G8GYW/Modifying%20the%20QCX+%20for%20SSB%20v3.pdf
 
 [Ghetto-class-E]: https://www.ncqrpp.org/files/qrpp_volume_10.pdf
 
 [Ghetto-class-E-later-publication]: http://www.iw3sgt.it/IW3SGT_PRJ/IW3SGT_AMP_LF/ClassDEF1.pdf
 
-[QCX-SSB mod]: https://github.com/threeme3/QCX-SSB/tree/4fc60f5c8d74ba7364cf891e008b920ab5e5c82d
+[QCX-SSB mod]: https://github.com/threeme3/usdx/tree/4fc60f5c8d74ba7364cf891e008b920ab5e5c82d
 
-[latest]: https://github.com/threeme3/QCX-SSB
+[latest]: https://github.com/threeme3/usdx
 
-[R1.02w]: https://github.com/threeme3/QCX-SSB/tree/4fc60f5c8d74ba7364cf891e008b920ab5e5c82d
+[R1.02w]: https://github.com/threeme3/usdx/tree/4fc60f5c8d74ba7364cf891e008b920ab5e5c82d
 
-[R1.02j]: https://github.com/threeme3/QCX-SSB/tree/faa4447d61c32efebadd9413b78c4a0094815611
+[R1.02j]: https://github.com/threeme3/usdx/tree/faa4447d61c32efebadd9413b78c4a0094815611
 
-[R1.01d]: https://github.com/threeme3/QCX-SSB/tree/1d18d5ff7a503d0d80bca9fe106fd5fce5223542
+[R1.01d]: https://github.com/threeme3/usdx/tree/1d18d5ff7a503d0d80bca9fe106fd5fce5223542
 
-[R1.00]: https://github.com/threeme3/QCX-SSB/tree/0a90ce8afdbbcdafb89cc13261a38b9f99067a66
+[R1.00]: https://github.com/threeme3/usdx/tree/0a90ce8afdbbcdafb89cc13261a38b9f99067a66
 
 
