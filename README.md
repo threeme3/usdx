@@ -192,7 +192,7 @@ Linear Data Manual, 1988.
 
 [uSDX]: https://github.com/threeme3/usdx
 
-[uSDX Sketch]: QCX-SSB.ino
+[uSDX Sketch]: usdx.ino
 
 [hex file]: https://github.com/threeme3/usdx/releases
 
@@ -295,5 +295,4 @@ Linear Data Manual, 1988.
 [R1.01d]: https://github.com/threeme3/usdx/tree/1d18d5ff7a503d0d80bca9fe106fd5fce5223542
 
 [R1.00]: https://github.com/threeme3/usdx/tree/0a90ce8afdbbcdafb89cc13261a38b9f99067a66
-
 
