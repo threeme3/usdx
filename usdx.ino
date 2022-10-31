@@ -174,9 +174,9 @@ ssb_cap=1; dsp_cap=2;
 
 //FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be set at programming (Arduino IDE > Tools > Burn bootloader)
 
-#if(ARDUINO < 10810)
-   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.10 or later from https://www.arduino.cc/en/software"
-#endif
+//#if(ARDUINO < 10810)
+//   #error "Unsupported Arduino IDE version, use Arduino IDE 1.8.10 or later from https://www.arduino.cc/en/software"
+//#endif
 #if !(defined(ARDUINO_ARCH_AVR))
    #error "Unsupported architecture, select Arduino IDE > Tools > Board > Arduino AVR Boards > Arduino Uno."
 #endif
