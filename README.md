@@ -10,7 +10,7 @@ This experiment is created to try out what is can be achieved with minimal hardw
 **Note: there is an active online forum discussing the uSDX here: [uSDX Forum].**
 
 73, Guido
-pe1nnz@amsat.org
+pe1nnz@qsl.net
 
 ![](top.png)
 
