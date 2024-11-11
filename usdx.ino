@@ -1317,13 +1317,15 @@ public:
     data |= RecvBit(1 << 0);
     if(last){
       I2C_SDA_HI();  // NACK
+      DELAY(I2C_DELAY);
+      I2C_SCL_LO();
     } else {
       I2C_SDA_LO();  // ACK
+      I2C_SCL_HI();
+      DELAY(I2C_DELAY);
+      I2C_SCL_LO(); // DELAY(I2C_DELAY);
+      I2C_SDA_HI(); 
     }
-    DELAY(I2C_DELAY);
-    I2C_SCL_HI();
-    I2C_SDA_HI();    // restore SDA for read
-    I2C_SCL_LO();
     return data;
   }
   inline void resume(){
