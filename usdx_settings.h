@@ -2,7 +2,7 @@
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
 #define KEYER            1   // CW keyer
 #define CAT              1   // CAT-interface
-#define F_XTAL    27005000   // 27MHz SI5351 crystal
+#define F_XTAL    27000030   // 27MHz SI5351 crystal
 //#define F_XTAL  25004000   // 25MHz SI5351 crystal  (enable for WB2CBA-uSDX, SI5351 break-out board or uSDXDuO)
 //#define F_XTAL  25000000   // 25MHz SI5351 crystal  (enable for 25MHz TCXO)
 //#define SWAP_ROTARY    1   // Swap rotary direction (enable for WB2CBA-uSDX)
@@ -39,8 +39,23 @@
 //#define TESTBENCH      1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
 //#define CW_FREQS_QRP   1   // Defaults to CW QRP   frequencies when changing bands
 //#define CW_FREQS_FISTS 1   // Defaults to CW FISTS frequencies when changing bands
+
 #define CW_MESSAGE       1   // Transmits pre-defined CW messages on-demand (left-click menu item 4.2)
 //#define CW_MESSAGE_EXT 1   // Additional CW messages
+
+//put your call and name here, it will be used to generate the predefined messages
+#define MYCALL "PE1NNN"
+#define MYNAME "GUIDO"
+
+// predefined CW messages
+#define CW_MSG1 "CQ " MYCALL " +"
+// CW_MSG2-5 are used only when CW_MESSAGE_EXT is set
+#define CW_MSG2 "CQ CQ DE PE1NNN PE1NNN +"
+#define CW_MSG3 "GE TKS 5NN 5NN NAME IS " MYNAME " " MYNAME " HW?"
+#define CW_MSG4 "FB RPTR TX 5W 5W ANT INV V 73 CUAGN"
+#define CW_MSG5 "73 TU E E"
+#define CW_MSG6 MYCALL
+
 //#define TX_DELAY       1   // Enables a delay in the actual transmission to allow relay-switching to be completed before the power is applied (see also NTX, PTX definitions below for GPIO that can switch relay/PA)
 //#define NTX            11  // Enables LOW  on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
 //#define PTX            11  // Enables HIGH on TX, used as PTT out to enable external PAs (a value of 11 means PB3 is used)
@@ -49,5 +64,3 @@
 //#define F_XTAL  20000000   // Enable this for uSDXDuO, 20MHz SI5351 crystal
 //#define TX_CLK0_CLK1   1   // Enable this for uSDXDuO, i.e. when PA is driven by CLK0, CLK1 (not CLK2); NTX pin may be used for enabling the TX path (this is like RX pin, except that RX may also be used as attenuator)
 //#define F_CLK2  12000000   // Enables a fixed CLK2 clock output of choice (only applicable when TX_CLK0_CLK1 is enabled), e.g. for up-converter or to clock UART USB device
-
-
