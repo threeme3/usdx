@@ -2425,6 +2425,11 @@ volatile uint8_t agc = 1;
 volatile uint8_t nr = 0;
 volatile uint8_t att = 0;
 volatile uint8_t att2 = 2;  // Minimum att2 increased, to prevent numeric overflow on strong signals
+
+#ifdef SWR_METER
+volatile uint8_t calpwr = PWR_CALIBRATION_CONSTANT;
+#endif
+
 volatile uint8_t _init = 0;
 
 // Old AGC algorithm which only increases gain, but does not decrease it for very strong signals.
@@ -4201,11 +4206,11 @@ const char* agc_label[] = { "OFF", "Fast", "Slow" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 44  // number of (visible) parameters
+#define N_PARAMS 45  // number of (visible) parameters
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CALPWR, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -4236,6 +4241,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
     case SMETER:  paramAction(action, smode, 0x1C, F("S-meter"), smode_label, 0, _N(smode_label) - 1, false); break;
 #ifdef SWR_METER
     case SWRMETER:  paramAction(action, swrmeter, 0x1D, F("SWR Meter"), swr_label, 0, _N(swr_label) - 1, false); break;
+    case CALPWR:  paramAction(action, calpwr, 0x1E, F("Cal. power"), NULL, 1, 255, false); break;
 #endif
 #ifdef CW_DECODER
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
@@ -4765,16 +4771,24 @@ void readSWR()
     pwr = ((((Vinc) * (Vinc)) - 0.25 ) * k);
     Eff = (pwr) / ((power_mW) / 1000) * 100; */
 {
+#define SWR_AVERAGING_NUM 8 //how much measurements to average --sq5bpf  
+
   float v_FWD = 0;
   float v_REF = 0;
-  for (int i = 0; i <= 7; i++) {
+  for (int i = 0; i < SWR_AVERAGING_NUM ; i++) {
     v_FWD = v_FWD + (ref_V / 1023) * (int) analogRead(PIN_FWD);
     v_REF = v_REF + (ref_V / 1023) * (int) analogRead(PIN_REF);
     delay(5);
   }
-  v_FWD = v_FWD / 8;
-  v_REF = v_REF / 8;
+  v_FWD = v_FWD / SWR_AVERAGING_NUM;
+  v_REF = v_REF / SWR_AVERAGING_NUM;
 
+/* actually this seems a bit wrong, because we should take into account the 0.6V voltage drop accross the diode
+ * so for 0.6V voltage drop and 50 ohms load something like p_FWD=((v_FWD+0.6)/sqrt(2))^2/50.0; //P=V^2/R
+ * but we'll use the original code with a calibration coefficient for now until i get a better power meter --sq5bpf 
+ * 
+ * TODO: correct the p_FWD and P_REV calculation because it seems wrong or figure out what i'm missing --sq5bpf
+ */
   float p_FWD = sq(v_FWD);
   float p_REV = sq(v_REF);
 
@@ -4788,10 +4802,11 @@ void readSWR()
       lcd.setCursor(0,0);
       switch(swrmeter) {
         case 1:
-          lcd.print(" "); lcd.print(floor(100*p_FWD)/100); lcd.print("W  SWR:"); lcd.print(floor(100*VSWR)/100);
+        /* this used to be floor(100*p_FWD)/100, and i've just added a calibration coefficient, but it just seems wrong, see above comment --sq5bpf */
+          lcd.print(" "); lcd.print(floor(calpwr*p_FWD)/100); lcd.print("W  SWR:"); lcd.print(floor(100*VSWR)/100);
           break;
         case 2:
-          lcd.print(" F:"); lcd.print(floor(100*p_FWD)/100); lcd.print("W R:"); lcd.print(floor(100*p_REV)/100); lcd.print("W");
+          lcd.print(" F:"); lcd.print(floor(calpwr*p_FWD)/100); lcd.print("W R:"); lcd.print(floor(calpwr*p_REV)/100); lcd.print("W");
           break;
         case 3:
           lcd.print(" F:"); lcd.print(floor(100*v_FWD)/100); lcd.print("V R:"); lcd.print(floor(100*v_REF)/100); lcd.print("V");
