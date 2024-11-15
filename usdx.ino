@@ -5256,7 +5256,7 @@ void loop()
       wdt_reset();
       delay((mode == CW) ? 10 : 100);  // keep the tx keyed for a while before sensing (helps against RFI issues on DAH/DAH line)
 #ifdef SWR_METER
-      if(smeter > 0 && mode == CW && millis() >= stimer) { readSWR(); stimer = millis() + 500; }
+      if(swrmeter > 0 && mode == CW && millis() >= stimer) { readSWR(); stimer = millis() + 500; }
 #endif
       if(inv ^ _digitalRead(BUTTONS)) break;  // break if button is pressed (to prevent potential lock-up)
     } while(!_digitalRead(pin)); // until released
