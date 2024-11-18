@@ -37,6 +37,9 @@
 //#define SWR_METER      1   // Supports SWR meter with bridge on A6/A7 (LQPF ATMEGA328P) by Alain, K1FM, see: https://groups.io/g/ucx/message/6262 and https://groups.io/g/ucx/message/6361
 #define PWR_CALIBRATION_CONSTANT 67 // if SWR_METER is defined, this is the initial calibration value for the original code of the power meter. 67 is ok for the SWR bridge ripped from the trusdx schematics (ADC6 connected to forward power, ADC7 connected to reflected power) --sq5bpf
 
+//#define INA219_POWER_METER     1   // PA voltage/current/power monitoring using an addon INA219 board (adafruit etc). Also shows PA efficiency. Works only if SWR_METER is defined. Measurements are done only in CW --sq5bpf
+#define CURRENT_SHUNT_CALIBRATION_CONSTANT 4010 // default calibration constant for my INA219 board (same as Adafruit board but without the logo). This should be 4096 for a 0.1ohm resistor and the chosen configuration, so either the resistor is a bit off, or my meter is off --sq5bpf
+
 //#define ONEBUTTON      1   // Use single (encoder) button to control full the rig; optionally use L/R buttons to completely replace rotory encoder function
 //#define DEBUG          1   // for development purposes only (adds debugging features such as CPU, sample-rate measurement, additional parameters)
 //#define TESTBENCH      1   // Tests RX chain by injection of sine wave, measurements results are sent over serial
