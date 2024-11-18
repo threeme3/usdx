@@ -1,4 +1,16 @@
 // Configuration switches; remove/add a double-slash at line-start to enable/disable a feature; to save space disable e.g. CAT, DIAG, KEYER
+
+/* Very approximate firmware size of various functionality (using gcc 7.3.0):
+ * DIAG - 1308 bytes
+ * CAT - 4150 bytes
+ * CW_DECODER - 1468 bytes
+ * CW_INTERMEDIATE - 20 bytes
+ * FAST_AGC - 700 bytes
+ * SWR_METER - 1724 bytes
+ * SWR_METER + INA219_POWER_METER - 2580 bytes
+ * note: combinations of these are not additive, so don't assume that disabling DIAG and CAT will save exactly 4150+1308=5458 bytes
+ */
+
 #define DIAG             1   // Hardware diagnostics on startup (only disable when your rig is working)
 #define KEYER            1   // CW keyer
 #define CAT              1   // CAT-interface
