@@ -1,6 +1,6 @@
 //  QCX-SSB.ino - https://github.com/threeme3/QCX-SSB
 //
-//  Copyright 2019, 2020, 2021   Guido PE1NNZ <pe1nnz@qsl.net>
+//  Copyright 2019, 2020, 2021, 2022, 2023, 2024, 2025   Guido PE1NNZ <threeme3@hotmail.com>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
@@ -2428,6 +2428,9 @@ volatile uint8_t att2 = 2;  // Minimum att2 increased, to prevent numeric overfl
 
 #ifdef SWR_METER
 volatile uint8_t calpwr = PWR_CALIBRATION_CONSTANT;
+#ifdef INA219_POWER_METER
+volatile uint16_t calshunt = CURRENT_SHUNT_CALIBRATION_CONSTANT;
+#endif
 #endif
 
 volatile uint8_t _init = 0;
@@ -4196,7 +4199,11 @@ const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm" };
 #endif
 #endif
 #ifdef SWR_METER
+#ifdef INA219_POWER_METER
+const char* swr_label[] = { "OFF", "FWD-SWR", "FWD-REF", "VFWD-VREF", "PWR-EFF", "I-U-P" };
+#else
 const char* swr_label[] = { "OFF", "FWD-SWR", "FWD-REF", "VFWD-VREF" };
+#endif
 #endif
 const char* cw_tone_label[] = { "700", "600" };
 #ifdef KEYER
@@ -4206,11 +4213,12 @@ const char* agc_label[] = { "OFF", "Fast", "Slow" };
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-#define N_PARAMS 45  // number of (visible) parameters
+//#define N_PARAMS 44  // number of (visible) parameters
+#define N_PARAMS 46  // 2 added (power and current shunt calibration)
 
 #define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
 
-enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CALPWR, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {_NULL, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR, ATT, ATT2, SMETER, SWRMETER, CALPWR, CALSHUNT, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE, KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL, CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, IQ_ADJ, CALIB, SR, CPULOAD, PARAM_A, PARAM_B, PARAM_C, BACKL, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 
 int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 {
@@ -4242,6 +4250,9 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
 #ifdef SWR_METER
     case SWRMETER:  paramAction(action, swrmeter, 0x1D, F("SWR Meter"), swr_label, 0, _N(swr_label) - 1, false); break;
     case CALPWR:  paramAction(action, calpwr, 0x1E, F("Cal. power"), NULL, 1, 255, false); break;
+#ifdef INA219_POWER_METER
+    case CALSHUNT:  paramAction(action, calshunt, 0x1F, F("Cal Current"), NULL, 100, 16384, false); break;
+#endif
 #endif
 #ifdef CW_DECODER
     case CWDEC:   paramAction(action, cwdec, 0x21, F("CW Decoder"), offon_label, 0, 1, false); break;
@@ -4757,6 +4768,63 @@ void build_lut()
 }
 
 #ifdef SWR_METER
+
+#ifdef INA219_POWER_METER
+/* measurement using an addon INA219 board from Adafruit or one of very similar boards but without the Adafruit logo
+   all of these boards have a 0.1ohm resistor on board
+   the trace to the PA should be cut and the board shunt resistor inserted there
+   SCL/SDA go to the SCL/SDA pins on the atmega (same as SI5351, TCA9555 etc)
+   currently i've connected Vcc to the +5V trace, but it doesn't seem to do any harm to the i2c. will have to find a +3.3V trace on the board 
+
+   The current measurement can be calibrated using the "Cal Current" menu entry: 
+   - connect an ammeter in series with the PA
+   - change SWR meter to I-U-P, change mode to CW
+   - preferably transmit into a dummy load, not into an antenna
+   - press the key, change the "Cal Current" value so that the current value shown reflects the current shown by the meter
+   Ideally Cal Current should be 4096 for a 0.1ohm shunt resistor, however for mine 4010 gives same results as my meter
+   
+   later i will publish how i made this mod --sq5bpf */
+   
+#include "ina219.h"
+// TODO: try to move these into a separate library, not easy because i would also need to move the i2c stuff into a separate library too --sq5bpf 
+void ina219_write(uint8_t reg, uint16_t val) {
+  i2c.start(); 
+  i2c.SendByte(INA219_ADDR << 1);
+  i2c.SendByte(reg);
+  i2c.SendByte(val>>8);
+  i2c.SendByte(val&0xff);
+  i2c.stop();
+}
+
+uint16_t ina219_read(uint8_t reg) {
+uint16_t ret;
+   i2c.start();
+    i2c.SendByte(INA219_ADDR << 1);
+    i2c.SendByte(reg);
+    i2c.stop();
+    i2c.start(); 
+    i2c.SendByte((INA219_ADDR << 1) | 1);
+    ret = i2c.RecvByte(false)<<8;
+    ret |=  i2c.RecvByte(true);
+    i2c.stop();
+ return(ret);
+ }
+
+void ina219_init() {
+ina219_write(INA219_REG_CALIBRATION,calshunt); //actually the lowest bit is insignificant according to the INA219 docs, maybe i should &0xfffe --sq5bpf
+  /* nifty calculator in javascript here: https://forums.adafruit.com/download/file.php?id=84820 */
+ina219_write(INA219_REG_CONFIG,INA219_CONFIG_BVOLTAGERANGE_32V |
+                  INA219_CONFIG_GAIN_8_320MV |
+                  INA219_CONFIG_BADCRES_12BIT |
+                  INA219_CONFIG_SADCRES_12BIT_1S_532US |
+                  INA219_CONFIG_MODE_SANDBVOLT_CONTINUOUS); 
+
+//ina219_write(INA219_REG_CALIBRATION,4096);
+//ina219_write(INA219_REG_CALIBRATION,calshunt);
+}
+#endif //INA219_POWER_METER
+
+
 void readSWR()
 // reads FWD / REF values from A6 and A7 and computes SWR
 // credit Duwayne, KV4QB
@@ -4773,6 +4841,13 @@ void readSWR()
 {
 #define SWR_AVERAGING_NUM 8 //how much measurements to average --sq5bpf  
 
+#ifdef INA219_POWER_METER
+  float busvoltage=0;
+  float current_mA;
+  float power_mW;
+  ina219_init(); // comment in Adafruit library says to always initialize before measurement, because a current spike may reset the board --sq5bpf
+  #endif
+
   float v_FWD = 0;
   float v_REF = 0;
   for (int i = 0; i < SWR_AVERAGING_NUM ; i++) {
@@ -4784,7 +4859,7 @@ void readSWR()
   v_REF = v_REF / SWR_AVERAGING_NUM;
 
 /* actually this seems a bit wrong, because we should take into account the 0.6V voltage drop accross the diode
- * so for 0.6V voltage drop and 50 ohms load something like p_FWD=((v_FWD+0.6)/sqrt(2))^2/50.0; //P=V^2/R
+ * so for 0.6V voltage drop and 50 ohms load something like p_FWD=((v_FWD+0.6)/sqrt(2))^2 * some_calibration; //P=V^2/R
  * but we'll use the original code with a calibration coefficient for now until i get a better power meter --sq5bpf 
  * 
  * TODO: correct the p_FWD and P_REV calculation because it seems wrong or figure out what i'm missing --sq5bpf
@@ -4797,7 +4872,19 @@ void readSWR()
 
   if ((VSWR > 9.99) || (VSWR < 1) )VSWR = 9.99;
 
-  if (p_FWD != FWD || VSWR != SWR) {
+  #ifdef INA219_POWER_METER
+  busvoltage=(ina219_read(INA219_REG_BUSVOLTAGE)>>3)*0.004;
+  current_mA=(int16_t)ina219_read(INA219_REG_CURRENT)/10.0;
+  power_mW=ina219_read(INA219_REG_POWER)*2.0;
+// TODO: maybe we should disable TX when the current is over some limit or the swr is too high?
+  #endif
+
+#ifdef INA219_POWER_METER
+  if (p_FWD != FWD || VSWR != SWR || swrmeter==4 || swrmeter==5)
+#else
+  if (p_FWD != FWD || VSWR != SWR)
+#endif
+{
       lcd.noCursor();
       lcd.setCursor(0,0);
       switch(swrmeter) {
@@ -4811,6 +4898,23 @@ void readSWR()
         case 3:
           lcd.print(" F:"); lcd.print(floor(100*v_FWD)/100); lcd.print("V R:"); lcd.print(floor(100*v_REF)/100); lcd.print("V");
           break;
+#ifdef INA219_POWER_METER
+        case 4: //prints output power , efficiency, voltage. this just fits in 20 characters on the LCD, might have to modified for the OLED displays --sq5bpf
+        case 5: //prints output power , current, voltage. this just fits in 20 characters on the LCD, might have to modified for the OLED displays --sq5bpf
+          float eff=100.0*(calpwr*p_FWD*10.0)/power_mW;
+          lcd.print(floor(calpwr*p_FWD)/100);
+          lcd.print("W ");
+          if (swrmeter==4) {
+          lcd.print(uint8_t(eff));
+          lcd.print("% "); 
+          } else {
+          lcd.print(int16_t(current_mA));
+          lcd.print("mA"); // there is no space after mA, it looks ugly, but one more digit of voltage will fit, the V after the voltage won't fit
+          }
+          lcd.print(floor(busvoltage*100)/100); lcd.print("V "); 
+          break;
+          
+#endif
       }
     FWD = p_FWD;
     SWR = VSWR;
