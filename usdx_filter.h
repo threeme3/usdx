@@ -47,6 +47,9 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
   static int16_t za1,za2;
   static int16_t zb0,zb1,zb2;
   static int16_t zc0,zc1,zc2;
+/* i've changed some multiplication/division to bit shifts to save some space, so if you see x>>3 it was x/8 before.
+ * This saves 222 bytes if the 700Hz filter is not defined, will do the 700Hz filter later --sq5bpf 
+ */
   
   if(filt < 4)
   {  // for SSB filters
@@ -61,22 +64,22 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     zz2=zz1;
     zz1=za0;
     //za0=(30*(za0-zz2)+0*zz1)/32;                                 //300-Hz with very steep roll-off down to 0 Hz
-    za0=(30*(za0-zz2)+25*zz1)/32;                                  //300-Hz
+    za0=(30*(za0-zz2)+25*zz1)>>5;                                  //300-Hz
 
     // 4th Order (SR=8kHz) IIR in Direct Form I, 8x8:16
     switch(filt){
-      case 1: zb0=(za0+2*za1+za2)/2-(13*zb1+11*zb2)/16; break;   // 0-2900Hz filter, first biquad section
-      case 2: zb0=(za0+2*za1+za2)/2-(2*zb1+8*zb2)/16; break;     // 0-2400Hz filter, first biquad section
+      case 1: zb0=((za0+2*za1+za2)>>1)-((13*zb1+11*zb2)>>4); break;   // 0-2900Hz filter, first biquad section
+      case 2: zb0=((za0+2*za1+za2)>>1)-((2*zb1+8*zb2)>>4); break;     // 0-2400Hz filter, first biquad section
       //case 3: zb0=(za0+2*za1+za2)/2-(4*zb1+2*zb2)/16; break;     // 0-2400Hz filter, first biquad section
-      case 3: zb0=(za0+2*za1+za2)/2-(0*zb1+4*zb2)/16; break;     //0-1800Hz  elliptic
+      case 3: zb0=((za0+2*za1+za2)>>1)-((0*zb1+4*zb2)>>4); break;     //0-1800Hz  elliptic
       //case 3: zb0=(za0+7*za1+za2)/16-(-24*zb1+9*zb2)/16; break;  //0-1700Hz  elliptic with slope
     }
   
     switch(filt){
-      case 1: zc0=(zb0+2*zb1+zb2)/2-(18*zc1+11*zc2)/16; break;     // 0-2900Hz filter, second biquad section
-      case 2: zc0=(zb0+2*zb1+zb2)/4-(4*zc1+8*zc2)/16; break;       // 0-2400Hz filter, second biquad section
+      case 1: zc0=((zb0+2*zb1+zb2)>>1)-((18*zc1+11*zc2)>>4); break;     // 0-2900Hz filter, second biquad section
+      case 2: zc0=((zb0+2*zb1+zb2)>>2)-((4*zc1+8*zc2)>>4); break;       // 0-2400Hz filter, second biquad section
       //case 3: zc0=(zb0+2*zb1+zb2)/4-(1*zc1+9*zc2)/16; break;       // 0-2400Hz filter, second biquad section
-      case 3: zc0=(zb0+2*zb1+zb2)/4-(0*zc1+4*zc2)/16; break;       //0-1800Hz  elliptic
+      case 3: zc0=((zb0+2*zb1+zb2)>>2)-((0*zc1+4*zc2)>>4); break;       //0-1800Hz  elliptic
       //case 3: zc0=(zb0+zb1+zb2)/16-(-22*zc1+47*zc2)/64; break;   //0-1700Hz  elliptic with slope
     }
    /*switch(filt){
@@ -137,10 +140,10 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         //case 6: zb0=(1*za0+2*za1+1*za2)/2+(107L*zb1-57L*zb2)/64; break; //600Hz+-50Hz
         //case 7: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-61L*zb2)/64; break; //600Hz+-25Hz
         
-        case 4: zb0=(0*za0+1*za1+0*za2)+(114L*zb1-57L*zb2)/64; break; //600Hz+-250Hz
-        case 5: zb0=(0*za0+1*za1+0*za2)+(113L*zb1-60L*zb2)/64; break; //600Hz+-100Hz
-        case 6: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-62L*zb2)/64; break; //600Hz+-50Hz
-        case 7: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-61L*zb2)/64; break; //600Hz+-18Hz
+        case 4: zb0=(0*za0+1*za1+0*za2)+((114L*zb1-57L*zb2)>>6); break; //600Hz+-250Hz
+        case 5: zb0=(0*za0+1*za1+0*za2)+((113L*zb1-60L*zb2)>>6); break; //600Hz+-100Hz
+        case 6: zb0=(0*za0+1*za1+0*za2)+((110L*zb1-62L*zb2)>>6); break; //600Hz+-50Hz
+        case 7: zb0=(0*za0+1*za1+0*za2)+((110L*zb1-61L*zb2)>>6); break; //600Hz+-18Hz
         //case 8: zb0=(0*za0+1*za1+0*za2)+(110L*zb1-60L*zb2)/64; break; //591Hz+-12Hz
 
         /*case 4: zb0=(0*za0+1*za1+0*za2)+2*zb1-zb2+(-14L*zb1+7L*zb2)/64; break; //600Hz+-250Hz
@@ -155,10 +158,10 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
         //case 6: zc0=(zb0-2*zb1+zb2)/16+(106L*zc1-56L*zc2)/64; break; //600Hz+-50Hz
         //case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-62L*zc2)/64; break; //600Hz+-25Hz
         
-        case 4: zc0=(zb0-2*zb1+zb2)/1+(95L*zc1-52L*zc2)/64; break; //600Hz+-250Hz
-        case 5: zc0=(zb0-2*zb1+zb2)/4+(106L*zc1-59L*zc2)/64; break; //600Hz+-100Hz
-        case 6: zc0=(zb0-2*zb1+zb2)/16+(113L*zc1-62L*zc2)/64; break; //600Hz+-50Hz
-        case 7: zc0=(zb0-2*zb1+zb2)/32+(112L*zc1-62L*zc2)/64; break; //600Hz+-18Hz
+        case 4: zc0=(zb0-2*zb1+zb2)/1+((95L*zc1-52L*zc2)>>6); break; //600Hz+-250Hz
+        case 5: zc0=((zb0-2*zb1+zb2)>>2)+((106L*zc1-59L*zc2)>>6); break; //600Hz+-100Hz
+        case 6: zc0=((zb0-2*zb1+zb2)>>4)+((113L*zc1-62L*zc2)>>6); break; //600Hz+-50Hz
+        case 7: zc0=((zb0-2*zb1+zb2)>>5)+((112L*zc1-62L*zc2)>>6); break; //600Hz+-18Hz
         //case 8: zc0=(zb0-2*zb1+zb2)/64+(113L*zc1-63L*zc2)/64; break; //591Hz+-12Hz
         
         /*case 4: zc0=(zb0-2*zb1+zb2)/1+zc1-zc2+(31L*zc1+12L*zc2)/64; break; //600Hz+-250Hz
@@ -177,6 +180,6 @@ inline int16_t filt_var(int16_t za0)  //filters build with www.micromodeler.com
     za1=za0;
     
     //return zc0 / 64; // compensate the 64x front-end gain
-    return zc0 / 8; // compensate the front-end gain
+  return (zc0>>3); // compensate the front-end gain
   }
 }
